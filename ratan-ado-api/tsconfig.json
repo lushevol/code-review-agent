@@ -1,18 +1,7 @@
 {
+  "extends": "../../tsconfig.lib.json",
   "compilerOptions": {
-    "lib": ["ESNext", "DOM"],
-    "module": "ESNext",
-    "noEmit": true,
-    "skipLibCheck": true,
-    "isolatedModules": true,
-    "resolveJsonModule": true,
-    "moduleResolution": "bundler",
-    "useDefineForClassFields": true,
-    "allowImportingTsExtensions": true,
-    "strict": true,
-    "target": "ESNext",
-    "moduleDetection": "force",
-    "esModuleInterop": true
+    "strictNullChecks": false
   },
   "include": ["src"]
 }

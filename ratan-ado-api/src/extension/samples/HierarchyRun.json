@@ -1,0 +1,106 @@
+{
+  "stages": [
+    {
+      "id": "de00afe2-3b4b-5d17-8d57-d20dedd3fa47",
+      "name": "51358-Production",
+      "refName": "prod",
+      "state": 2,
+      "result": 0,
+      "startTime": "/Date(1758935935213)/",
+      "finishTime": "/Date(1758936240193)/",
+      "order": 12,
+      "parentId": null,
+      "checkpoint": {
+        "id": "9a77a093-22d2-5f7f-90d3-a6c285d08182",
+        "name": "Checkpoint",
+        "refName": "Checkpoint",
+        "state": 2,
+        "result": 0,
+        "startTime": "/Date(1758875621920)/",
+        "finishTime": "/Date(1758935922090)/",
+        "order": null,
+        "parentId": "de00afe2-3b4b-5d17-8d57-d20dedd3fa47",
+        "checkpoint": null,
+        "stateData": null
+      },
+      "stateData": {
+        "pendingDependencies": false,
+        "pendingChecks": false,
+        "ignoreDependencies": false
+      }
+    }
+  ],
+  "stageDependencies": {
+    "10196f49-09fc-5947-2194-0a0e90f51ece": ["CI"],
+    "58afb2fd-c3e4-5ab0-a051-122ddb1d9777": ["CI"],
+    "dcd98d8e-599f-5a29-3157-1b97f2abfd03": ["CI"],
+    "8d806912-ebd6-57b6-8e60-1c9bc1968d80": ["CI"],
+    "8b66ed65-25bc-5280-3c7b-27a8e21abd86": ["CI"],
+    "9c308f0a-6f2a-5745-0598-2a0c396da289": ["prod"],
+    "baca785f-9d68-51a7-c29c-3b528be20cf6": ["qa", "CI"],
+    "97a4fcff-5c2a-5d15-a7fb-5e83c6b1e90e": ["CI"],
+    "c3a6fd29-9a0a-56bb-951f-76640d1e4650": ["CI"],
+    "c3fcf85f-577d-5e17-eee8-b87fb40e1fa5": ["release_checks", "CI"],
+    "ae4f8708-9994-57d3-c2d7-b892156e7812": [],
+    "3afd6e7a-7ffb-5331-6588-ccfd3bdf91ab": ["CI"],
+    "de00afe2-3b4b-5d17-8d57-d20dedd3fa47": ["release", "CI"]
+  },
+  "run": {
+    "retentionLeases": [],
+    "id": 8315444,
+    "buildNumber": "20250922.6",
+    "sourceBranch": "refs/heads/main",
+    "sourceVersion": "0ec4cdbc6f7d4006bd5403baefce1771302c8f88",
+    "artifactName": null,
+    "artifactProducerId": null,
+    "repository": {
+      "id": "022df49f-6906-4549-ab9d-1d281d34660b",
+      "type": "TfsGit",
+      "name": "51358-ratanone-ansible",
+      "url": "https://dev.azure.com/sc-ado/FMQPR/_git/51358-ratanone-ansible",
+      "clean": null,
+      "checkoutSubmodules": false
+    },
+    "queueTime": "/Date(1758534366926)/",
+    "startTime": "/Date(1758692458792)/",
+    "finishTime": null,
+    "reason": 1,
+    "status": 32,
+    "result": null,
+    "definition": {
+      "drafts": [],
+      "id": 13920,
+      "name": "51358-ratanone-ansible_generic_pipeline",
+      "path": "\\",
+      "type": 2,
+      "queueStatus": 0,
+      "project": {
+        "id": "777f0ba6-cfdf-4f44-99dd-ae1dc434f5c5",
+        "state": -2,
+        "visibility": -1,
+        "lastUpdateTime": "/Date(-62135596800000)/"
+      }
+    },
+    "triggerInfo": {},
+    "requestedFor": {
+      "displayName": "Cai1, Jie",
+      "url": "https://spsprodsea2.vssps.visualstudio.com/A41487fd0-0082-4b29-8147-fdee03b18615/_apis/Identities/bcc195f9-c253-6466-a8ae-a0252e08b7af",
+      "_links": {
+        "avatar": {
+          "href": "https://dev.azure.com/sc-ado/_apis/GraphProfile/MemberAvatars/aad.YmNjMTk1ZjktYzI1My03NDY2LWE4YWUtYTAyNTJlMDhiN2Fm"
+        }
+      },
+      "id": "bcc195f9-c253-6466-a8ae-a0252e08b7af",
+      "uniqueName": "1604896@zone1.scb.net",
+      "imageUrl": "https://dev.azure.com/sc-ado/_apis/GraphProfile/MemberAvatars/aad.YmNjMTk1ZjktYzI1My03NDY2LWE4YWUtYTAyNTJlMDhiN2Fm",
+      "descriptor": "aad.YmNjMTk1ZjktYzI1My03NDY2LWE4YWUtYTAyNTJlMDhiN2Fm"
+    },
+    "requestedById": "bcc195f9-c253-6466-a8ae-a0252e08b7af",
+    "appendCommitMessageToRunName": true,
+    "triggeringRepository": null
+  },
+  "sourceVersionMessage": "Merged PR 2002915: purge-autoneting",
+  "linkProps": {
+    "href": "/sc-ado/FMQPR/_build/results?buildId=8315444"
+  }
+}

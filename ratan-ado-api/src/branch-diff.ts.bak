@@ -1,0 +1,94 @@
+import * as azdev from "azure-devops-node-api";
+import { createTwoFilesPatch } from "diff";
+import fs from "fs";
+
+// ==========================
+// CONFIGURATION
+// ==========================
+const ORG_URL = "https://dev.azure.com/<ORG>"; // e.g. https://dev.azure.com/myorg
+const PROJECT = "<PROJECT>"; // e.g. myproject
+const REPO_ID = "<REPO>"; // name or GUID
+const BRANCH_BASE = "refs/heads/branchA";
+const BRANCH_TARGET = "refs/heads/branchB";
+const EXT_WHITELIST = [".ts", ".tsx", ".js", ".jsx"]; // only these file extensions
+
+const TOKEN = process.env.ADO_PAT!;
+if (!TOKEN) throw new Error("❌ Please set ADO_PAT env variable");
+
+// ==========================
+// MAIN LOGIC
+// ==========================
+async function main() {
+  const authHandler = azdev.getPersonalAccessTokenHandler(TOKEN);
+  const connection = new azdev.WebApi(ORG_URL, authHandler);
+  const gitApi = await connection.getGitApi();
+
+  console.log("🔍 Fetching diff between branches with merge-base...");
+  const diffParams = {
+    baseVersionType: "branch",
+    baseVersion: BRANCH_BASE,
+    targetVersionType: "branch",
+    targetVersion: BRANCH_TARGET,
+    diffCommonCommit: true, // ensures merge-base diff (accurate)
+  };
+
+  const diffResult = await gitApi.getCommitDiffs(diffParams, PROJECT, REPO_ID);
+  const commonCommit = diffResult.commonCommit;
+  const changes = diffResult.changeEntries ?? diffResult.changes ?? [];
+
+  console.log(
+    `🧮 Found ${changes.length} changed items (merge base ${commonCommit.slice(0, 8)})`,
+  );
+
+  const allDiffs: string[] = [];
+
+  for (const ch of changes) {
+    const path = ch?.item?.path;
+    if (!path) continue;
+
+    // Skip folders or unwanted extensions
+    const isFolder = ch.item.gitObjectType === "tree" || path.endsWith("/");
+    const hasAllowedExt = EXT_WHITELIST.some((ext) => path.endsWith(ext));
+    if (isFolder || !hasAllowedExt) continue;
+
+    const changeType = (ch.changeType || "").toLowerCase();
+    const oldPath = ch.originalPath || path;
+
+    try {
+      const [baseItem, targetItem] = await Promise.all([
+        changeType !== "add"
+          ? gitApi.getItem(REPO_ID, oldPath, PROJECT, commonCommit, true)
+          : Promise.resolve(undefined),
+        changeType !== "delete"
+          ? gitApi.getItem(REPO_ID, path, PROJECT, undefined, true)
+          : Promise.resolve(undefined),
+      ]);
+
+      const baseText = baseItem?.content || "";
+      const targetText = targetItem?.content || "";
+
+      if (baseText === targetText) continue;
+
+      const patch = createTwoFilesPatch(
+        oldPath,
+        path,
+        baseText,
+        targetText,
+        commonCommit.slice(0, 8),
+        ch.item.commitId?.slice(0, 8) || "HEAD",
+        { context: 3 },
+      );
+
+      console.log(`\n📄 ${path}`);
+      console.log(patch);
+      allDiffs.push(patch);
+    } catch (err) {
+      console.warn(`⚠️  Skipped ${path}: ${err.message}`);
+    }
+  }
+
+  fs.writeFileSync("accurate_branch_diff.patch", allDiffs.join("\n"));
+  console.log("\n✅ Diff saved to accurate_branch_diff.patch");
+}
+
+main().catch(console.error);

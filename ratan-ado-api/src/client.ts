@@ -1,369 +1,226 @@
-import axios, { type AxiosInstance } from "axios";
-import type {
-  AddCommentThreadParams,
-  AdoPullRequest,
-  AzureDevOpsOptions,
-  CodeDiff,
-  IterationChangeFile,
-  PullRequestIteration,
-  PullRequestListItem,
-  Repository,
-} from "./interfaces";
-
-const AGENT_COMMENT_TAG = "CODE_REVIEW_AGENT";
-
+import * as vm from "azure-devops-node-api";
+import type { IRequestOptions } from "azure-devops-node-api/interfaces/common/VsoBaseInterfaces.js";
+import {
+  getArtifactsByBuildId,
+  getBuildAttachmentContent,
+  getBuildAttachments,
+  getBuildById,
+  getBuildChangesByBuildId,
+  getBuildLogsByBuildId,
+  getBuildPropertiesByBuildId,
+  getBuildReportByBuildId,
+} from "./build";
+import config from "./config.json" with { type: "json" };
+import { getCodeDiffFromHierarchyQuery } from "./extension/CodeDiff";
+import {
+  commitCompare,
+  getBranchLatestCommit,
+  getFileContent,
+  getReleaseDiffChecking,
+} from "./git";
+import type { AdoWebApi } from "./interfaces";
+import { getSubscriptions } from "./notification";
+import {
+  getPipelineByRepoName,
+  getPipelineRuns,
+  getReleasedPipelineRuns,
+} from "./pipeline";
+import {
+  getLatestPullRequestIterations,
+  getLatestPullRequestStatus,
+  getPullRequestById,
+  getPullRequestChangesFiles,
+  getPullRequestIterationChangesFiles,
+  getPullRequestIterations,
+  getPullRequestListByRepoName,
+  getPullRequestProperties,
+  getPullRequestsByBranchName,
+  hasAlreadyCommented,
+  isValidPullRequest,
+  setPullRequestProperties,
+} from "./pull-request";
+import {
+  addCommentForPR,
+  addCommentThreadForPRCode,
+  getCommentThreadById,
+  updateCommentThreadStatus,
+} from "./pull-request-comment";
+import { getReleaseWorkItems, queryRatanReleaseIds } from "./release";
+import { getRepos } from "./repo";
+import {
+  createTestCaseWorkItem,
+  getTestCaseWorkItems,
+  updateTestCaseWorkItem,
+} from "./testcase";
+import {
+  createBulkTestSuites,
+  createTestPlan,
+  createTestSuite,
+  getTestPlanById,
+  getTestPointList,
+  getTestSuite,
+  updateTestPlan,
+} from "./testplan";
+import {
+  createTestRun,
+  createTestRunResults,
+  createTestRunResultsAttachments,
+  getTestRun,
+  getTestRunResults,
+  queryTestRunResults,
+  updateTestRun,
+  updateTestRunResults,
+} from "./testrun";
+import {
+  addRelationsToWorkItem,
+  getCommonWorkItems,
+  getWorkitemsByFields,
+} from "./workitem";
+import {
+  queryWorkitemsByQueryId,
+  queryWorkitemsByWiql,
+} from "./workitem-query";
 export class AzureDevOps {
-  private client!: AxiosInstance;
-  private organization: string;
-  private project: string;
-  private baseUrl: string;
-  private apiVersion = "7.1";
+  private adoWebApi: AdoWebApi;
+  private API_URL = "https://dev.azure.com";
+  private API_ORGANIZATION = "sc-ado";
+  private API_PROJECT = "FMQPR";
+  private API_TOKEN = "";
+  private ADO_PROXY_URL = config.ADO_PROXY_URL || "";
 
-  constructor(options: AzureDevOpsOptions) {
-    this.organization = options.organization ?? "default";
-    this.project = options.project ?? "default";
-    this.baseUrl = `https://dev.azure.com/${this.organization}/${this.project}`;
-  }
-
-  public async connect(token: string): Promise<void> {
-    const auth = Buffer.from(`:${token}`).toString("base64");
-    this.client = axios.create({
-      baseURL: this.baseUrl,
-      headers: {
-        Authorization: `Basic ${auth}`,
-        "Content-Type": "application/json",
-      },
-      timeout: 30000,
-    });
-  }
-
-  public async getRepos(): Promise<Repository[]> {
-    const response = await this.client.get("/_apis/git/repositories", {
-      params: { apiVersion: this.apiVersion },
-    });
-    return response.data.value.map((repo: any) => ({
-      id: repo.id,
-      name: repo.name,
-      url: repo.url,
-    }));
-  }
-
-  public async getFileContent(
-    repoName: string,
-    path: string,
-    branch: string,
-  ): Promise<string> {
-    const encodedPath = path.replace(/\\/g, "/");
-    const response = await this.client.get(
-      `/_apis/git/repositories/${encodeURIComponent(repoName)}/items`,
-      {
-        params: {
-          path: encodedPath,
-          versionDescriptor: {
-            version: branch,
-            versionType: "branch",
-          },
-          includeContent: true,
-          apiVersion: this.apiVersion,
-        },
-      },
-    );
-    return response.data.content;
-  }
-
-  public async getPullRequestListByRepoName(
-    repoName: string,
-    top: number = 100,
-    createdDate?: string,
-  ): Promise<PullRequestListItem[]> {
-    const params: Record<string, any> = {
-      "searchCriteria.status": "active",
-      "$top": top,
-      apiVersion: this.apiVersion,
-    };
-    if (createdDate) {
-      params["searchCriteria.min_time"] = createdDate;
+  constructor({
+    proxy,
+    organization,
+    project,
+  }: {
+    proxy?: string;
+    organization?: string;
+    project?: string;
+  } = {}) {
+    if (proxy) {
+      this.ADO_PROXY_URL = proxy;
     }
-
-    const response = await this.client.get(
-      `/_apis/git/repositories/${encodeURIComponent(repoName)}/pullrequests`,
-      { params },
-    );
-    return response.data.value;
-  }
-
-  public async getPullRequestById(
-    prId: number,
-    includeComments: boolean = false,
-    includeWorkItemRefs: boolean = false,
-    includeDiffs: boolean = false,
-  ): Promise<AdoPullRequest> {
-    const params: Record<string, any> = {
-      apiVersion: this.apiVersion,
-    };
-
-    const repo = await this.getRepoByPRId(prId);
-
-    const response = await this.client.get(
-      `/_apis/git/repositories/${repo.id}/pullrequests/${prId}`,
-      { params },
-    );
-
-    const pr = response.data;
-
-    let codeDiffs = "";
-    let codeDiffsArray: CodeDiff[] = [];
-    let commentThreads: any[] = [];
-    let latestIterationId = 1;
-
-    if (includeDiffs) {
-      try {
-        const iterationsResp = await this.client.get(
-          `/_apis/git/repositories/${repo.id}/pullrequests/${prId}/iterations`,
-          { params },
-        );
-        if (iterationsResp.data.value?.length > 0) {
-          const iterations = iterationsResp.data.value;
-          const latestIteration = iterations[iterations.length - 1];
-          latestIterationId = latestIteration.id;
-
-          const diffResp = await this.client.get(
-            `/_apis/git/repositories/${repo.id}/pullrequests/${prId}/iterations/${latestIterationId}/changes`,
-            { params },
-          );
-
-          if (diffResp.data.changeEntries) {
-            for (const entry of diffResp.data.changeEntries) {
-              const item = entry.item;
-              const changeType = entry.changeType || "edit";
-              const newFilePath = item?.path || "";
-              const oldFilePath =
-                entry.sourceServerItem ||
-                (changeType === "add" ? "" : newFilePath);
-
-              const fileContentResp = await this.getFileContent(
-                repo.name,
-                newFilePath,
-                pr.sourceRefName?.replace("refs/heads/", "") || "HEAD",
-              ).catch(() => "");
-
-              codeDiffsArray.push({
-                changes: `diff --git a/${oldFilePath} b/${newFilePath}\n--- a/${oldFilePath}\n+++ b/${newFilePath}\n@@ -1 +1 @@\n${fileContentResp ? `+${fileContentResp}` : ""}`,
-                newFilePath,
-                oldFilePath,
-                changeType,
-              });
-            }
-            codeDiffs = codeDiffsArray.map((c) => c.changes).join("\n");
-          }
-        }
-      } catch {
-        // diffs are best-effort
-      }
+    if (organization) {
+      this.API_ORGANIZATION = organization;
     }
-
-    if (includeComments) {
-      try {
-        const threadsResp = await this.client.get(
-          `/_apis/git/repositories/${repo.id}/pullrequests/${prId}/threads`,
-          { params },
-        );
-        commentThreads = threadsResp.data.value || [];
-      } catch {
-        // comments are best-effort
-      }
+    if (project) {
+      this.API_PROJECT = project;
     }
-
-    return {
-      pullRequestId: pr.pullRequestId,
-      repoName: repo.name,
-      repoId: repo.id,
-      codeDiffs,
-      codeDiffsArray,
-      commentThreads,
-      latestIterationId,
-      title: pr.title,
-      description: pr.description,
-      createdBy: pr.createdBy?.displayName,
-      status: pr.status,
-    };
   }
 
-  public isValidPullRequest(pr: PullRequestListItem): boolean {
-    return (
-      pr.pullRequestId != null &&
-      pr.status === "active" &&
-      pr.sourceRefName != null &&
-      pr.targetRefName != null
-    );
-  }
-
-  public hasAlreadyCommented(threads: any[]): boolean {
-    return threads.some((thread) => {
-      if (!thread.comments) return false;
-      return thread.comments.some(
-        (comment: any) =>
-          comment.content?.includes(AGENT_COMMENT_TAG) ||
-          comment.content?.includes("CODE_REVIEW_AGENT"),
-      );
-    });
-  }
-
-  public async addCommentThreadForPRCode(
-    params: AddCommentThreadParams,
-  ): Promise<{ id: number }> {
-    const body: Record<string, any> = {
-      comments: [{ content: params.comment, commentType: 1 }],
-      status: 1, // active
-    };
-
-    if (params.filePath) {
-      body.threadContext = {
-        filePath: params.filePath,
-        rightFileStart: {
-          line: params.fileStartLine ?? 1,
-          offset: params.fileStartOffset ?? 1,
+  async connect(token: string) {
+    if (!token) {
+      console.error("ADO token is required for authentication.");
+      throw new Error("ADO token is required for authentication.");
+    }
+    try {
+      this.API_TOKEN = token;
+      const authHandler = vm.getPersonalAccessTokenHandler(this.API_TOKEN);
+      const option: IRequestOptions = {
+        proxy: {
+          proxyUrl: this.ADO_PROXY_URL,
         },
-        rightFileEnd: {
-          line: params.fileEndLine ?? 1,
-          offset: params.fileEndOffset ?? 1,
-        },
+        ignoreSslError: true,
       };
+
+      const vsts: vm.WebApi = new vm.WebApi(
+        this.getServerUrl(),
+        authHandler,
+        option,
+      );
+      const connData = await vsts.connect();
+      const currentUserName =
+        connData.authenticatedUser?.providerDisplayName || "UNKNOWN_USER";
+      console.log(`${currentUserName} ADO Login Successfully`);
+      this.adoWebApi = vsts;
+      return connData;
+    } catch (err) {
+      console.error("Error connecting to Azure DevOps:", err);
+      throw err;
     }
-
-    const response = await this.client.post(
-      `/_apis/git/repositories/${params.repoId}/pullrequests/${params.pullRequestId}/threads`,
-      body,
-      { params: { apiVersion: this.apiVersion } },
-    );
-
-    return { id: response.data.id };
   }
 
-  public async addCommentForPR(
-    repoName: string,
-    prId: number,
-    options: {
-      approve: boolean;
-      errors: any[];
-    },
-    summary: string,
-    _tags: string[],
-    _measures: any,
-  ): Promise<{ id: number }> {
-    const content = [
-      `## Code Review${options.approve ? " ✅" : " ❌"}`,
-      "",
-      `${AGENT_COMMENT_TAG}`,
-      "",
-      "### Summary",
-      "",
-      summary,
-      "",
-      options.errors.length > 0
-        ? `### Issues Found: ${options.errors.length}`
-        : "No issues found.",
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    const response = await this.client.post(
-      `/_apis/git/repositories/${encodeURIComponent(repoName)}/pullrequests/${prId}/threads`,
-      {
-        comments: [{ content, commentType: 1 }],
-        status: 4, // closed
-      },
-      { params: { apiVersion: this.apiVersion } },
-    );
-
-    return { id: response.data.id };
+  getServerUrl() {
+    return `${this.API_URL}/${this.API_ORGANIZATION}`;
   }
 
-  public async setPullRequestProperties(
-    repoName: string,
-    prId: number,
-    properties: Record<string, string>,
-  ): Promise<void> {
-    const patches = Object.entries(properties).map(([key, value]) => ({
-      op: "add",
-      path: key,
-      value,
-    }));
-
-    await this.client.patch(
-      `/_apis/git/repositories/${encodeURIComponent(repoName)}/pullrequests/${prId}/properties`,
-      patches,
-      {
-        headers: { "Content-Type": "application/json-patch+json" },
-        params: { apiVersion: this.apiVersion },
-      },
-    );
+  getOrganization() {
+    return this.API_ORGANIZATION;
   }
 
-  public async getLatestPullRequestIterations(
-    repoId: string,
-    prId: number,
-  ): Promise<PullRequestIteration> {
-    const response = await this.client.get(
-      `/_apis/git/repositories/${repoId}/pullrequests/${prId}/iterations`,
-      { params: { apiVersion: this.apiVersion } },
-    );
-    const iterations = response.data.value;
-    if (!iterations?.length) {
-      return { id: 1 };
-    }
-    return iterations[iterations.length - 1];
+  getProjectName() {
+    return this.API_PROJECT;
   }
 
-  public async getPullRequestProperties(
-    repoName: string,
-    prId: number,
-  ): Promise<{ value: Record<string, any> }> {
-    const response = await this.client.get(
-      `/_apis/git/repositories/${encodeURIComponent(repoName)}/pullrequests/${prId}/properties`,
-      { params: { apiVersion: this.apiVersion } },
-    );
-    return { value: response.data.value || {} };
+  getAdoToken() {
+    return this.API_TOKEN;
   }
 
-  public async getPullRequestIterationChangesFiles(params: {
-    repoId: string;
-    prId: number;
-    iterationId: number;
-    compareToIterationId?: number;
-  }): Promise<IterationChangeFile[]> {
-    const response = await this.client.get(
-      `/_apis/git/repositories/${params.repoId}/pullrequests/${params.prId}/iterations/${params.iterationId}/changes`,
-      {
-        params: {
-          ...(params.compareToIterationId
-            ? { compareTo: params.compareToIterationId }
-            : {}),
-          apiVersion: this.apiVersion,
-        },
-      },
-    );
-
-    return (response.data.changeEntries || []).map((entry: any) => ({
-      newFilePath: entry.item?.path || "",
-      oldFilePath: entry.sourceServerItem || entry.item?.path || "",
-      changeType: entry.changeType,
-    }));
+  getProxyUrl() {
+    return this.ADO_PROXY_URL;
   }
 
-  private async getRepoByPRId(prId: number): Promise<{ id: string; name: string }> {
-    const repos = await this.getRepos();
-    // try to find the repo that has this PR
-    for (const repo of repos) {
-      try {
-        const prs = await this.getPullRequestListByRepoName(repo.name!, 1);
-        if (prs.some((pr) => pr.pullRequestId === prId)) {
-          return { id: repo.id!, name: repo.name! };
-        }
-      } catch {
-        continue;
-      }
-    }
-    throw new Error(`Pull request ${prId} not found in any repository`);
+  getAdoClient() {
+    return this.adoWebApi;
   }
+
+  getPullRequestListByRepoName = getPullRequestListByRepoName;
+  getPullRequestById = getPullRequestById;
+  getRepos = getRepos;
+  getBranchLatestCommit = getBranchLatestCommit;
+  commitCompare = commitCompare;
+  getReleaseDiffChecking = getReleaseDiffChecking;
+  getPipelineRuns = getPipelineRuns;
+  getReleasedPipelineRuns = getReleasedPipelineRuns;
+  getPipelineByRepoName = getPipelineByRepoName;
+  getPullRequestsByBranchName = getPullRequestsByBranchName;
+  getPullRequestIterations = getPullRequestIterations;
+  getLatestPullRequestIterations = getLatestPullRequestIterations;
+  getPullRequestIterationChangesFiles = getPullRequestIterationChangesFiles;
+  getPullRequestProperties = getPullRequestProperties;
+  setPullRequestProperties = setPullRequestProperties;
+  getPullRequestChangesFiles = getPullRequestChangesFiles;
+  getCodeDiffFromHierarchyQuery = getCodeDiffFromHierarchyQuery;
+  isValidPullRequest = isValidPullRequest;
+  hasAlreadyCommented = hasAlreadyCommented;
+  getLatestPullRequestStatus = getLatestPullRequestStatus;
+  getWorkitemsByFields = getWorkitemsByFields;
+  getCommonWorkItems = getCommonWorkItems;
+  getReleaseWorkItems = getReleaseWorkItems;
+  getTestCaseWorkItems = getTestCaseWorkItems;
+  addRelationsToWorkItem = addRelationsToWorkItem;
+  queryRatanReleaseIds = queryRatanReleaseIds;
+  createTestCaseWorkItem = createTestCaseWorkItem;
+  updateTestCaseWorkItem = updateTestCaseWorkItem;
+  addCommentForPR = addCommentForPR;
+  addCommentThreadForPRCode = addCommentThreadForPRCode;
+  getCommentThreadById = getCommentThreadById;
+  updateCommentThreadStatus = updateCommentThreadStatus;
+  getSubscriptions = getSubscriptions;
+  getBuildById = getBuildById;
+  getBuildAttachmentContent = getBuildAttachmentContent;
+  getBuildAttachments = getBuildAttachments;
+  getArtifactsByBuildId = getArtifactsByBuildId;
+  getBuildChangesByBuildId = getBuildChangesByBuildId;
+  getBuildLogsByBuildId = getBuildLogsByBuildId;
+  getBuildPropertiesByBuildId = getBuildPropertiesByBuildId;
+  getBuildReportByBuildId = getBuildReportByBuildId;
+  queryWorkitemsByQueryId = queryWorkitemsByQueryId;
+  queryWorkitemsByWiql = queryWorkitemsByWiql;
+  createTestRun = createTestRun;
+  getTestRunResults = getTestRunResults;
+  queryTestRunResults = queryTestRunResults;
+  createTestRunResults = createTestRunResults;
+  updateTestRunResults = updateTestRunResults;
+  createTestRunResultsAttachments = createTestRunResultsAttachments;
+  getTestPlanById = getTestPlanById;
+  createTestPlan = createTestPlan;
+  updateTestPlan = updateTestPlan;
+  getTestSuite = getTestSuite;
+  createTestSuite = createTestSuite;
+  createBulkTestSuites = createBulkTestSuites;
+  getTestRun = getTestRun;
+  updateTestRun = updateTestRun;
+  getTestPointList = getTestPointList;
+  getFileContent = getFileContent;
 }
