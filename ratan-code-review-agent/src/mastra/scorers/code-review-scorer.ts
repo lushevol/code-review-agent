@@ -23,5 +23,7 @@ const codeReviewScorer = createScorer({
       return ``;
     },
   })
+  // @ts-expect-error - placeholder for future implementation
   .generateScore({})
+  // @ts-expect-error - placeholder for future implementation
   .generateReason({});

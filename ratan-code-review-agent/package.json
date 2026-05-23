@@ -20,14 +20,18 @@
     "dev": "cross-env MASTRA_TELEMETRY_DISABLED=1 mastra dev",
     "demo": "cross-env MASTRA_TELEMETRY_DISABLED=1 NODE_TLS_REJECT_UNAUTHORIZED=0 tsx src/demo.ts",
     "test-api": "tsx src/mastra/agents/test-api.ts",
-    "build": "rslib build",
+    "build": "NODE_OPTIONS='--max-old-space-size=4096' rslib build",
     "mastra:build": "cross-env MASTRA_TELEMETRY_DISABLED=1 mastra build",
     "start": "cross-env MASTRA_TELEMETRY_DISABLED=1 mastra start",
     "codegen": "tsx ./src/evaluation/json-schema-generator.ts"
   },
   "devDependencies": {
+    "@rslib/core": "^0.17.2",
     "@types/node": "^24.10.1",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.4.0",
     "mastra": "^0.18.1",
+    "tsx": "^4.19.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.10"
   },

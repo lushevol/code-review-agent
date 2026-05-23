@@ -232,6 +232,7 @@ export class AgentConfigClient {
     } catch (error: any) {
       const msg = error.message;
       console.error(`[AgentConfig] ADO Fetch Error (${path}): ${msg}`);
+      throw new Error(`Failed to fetch file: ${path}. ${msg}`);
     }
   }
 

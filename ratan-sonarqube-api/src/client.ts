@@ -9,7 +9,7 @@ import { MeasuresAdditionalFields } from "sonarqube-webapis/dist/src/resources";
 import type { MeasuresComponent, ParsedMeasuresComponent } from "./interfaces";
 
 export class SonarQubeClient {
-  private sonar: Sonar;
+  private sonar!: Sonar;
 
   // response indecate whether login is successful or not.
   public async connect(token: string): Promise<boolean> {
@@ -43,6 +43,7 @@ export class SonarQubeClient {
     } catch (error) {
       // This is to show error messages from sonar.
       console.error("Errors: ", (error as AxiosError).response?.data);
+      return false;
     }
   }
 
@@ -135,10 +136,10 @@ export class SonarQubeClient {
         prId,
       )) as AxiosResponse<MeasuresComponent>;
 
-      const result = resp.data.component.measures.reduce((acc, measure) => {
+      const result = resp.data.component.measures.reduce((acc: Record<string, unknown>, measure) => {
         acc[measure.metric] = Number(measure.value ?? measure.period.value);
         return acc;
-      }, {} as ParsedMeasuresComponent);
+      }, {} as ParsedMeasuresComponent) as ParsedMeasuresComponent;
 
       return result;
     } catch (error) {

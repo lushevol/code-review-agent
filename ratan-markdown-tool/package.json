@@ -22,8 +22,11 @@
     "demo": "cross-env tsx src/demo"
   },
   "devDependencies": {
+    "@rslib/core": "^0.17.2",
     "@types/json2md": "^1.5.4",
-    "@types/turndown": "^5.0.5"
+    "@types/node": "^24.10.0",
+    "@types/turndown": "^5.0.5",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "json2md": "^2.0.3",

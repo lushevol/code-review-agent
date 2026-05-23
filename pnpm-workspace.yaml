@@ -1,0 +1,7 @@
+packages:
+  - "agent-config-manager"
+  - "ratan-ado-api"
+  - "ratan-code-review-agent"
+  - "ratan-code-review-agent-orm"
+  - "ratan-markdown-tool"
+  - "ratan-sonarqube-api"
