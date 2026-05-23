@@ -1,0 +1,54 @@
+{
+  "$schema": "../full-agent-config.schema.json",
+  "scanRepoNames": ["51358-ratan*", "51358-mfe*", "51358-single-ui-bff"],
+  "scanPRCreatedDaysAgo": 7,
+  "filePathsAllowlist": [
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.js",
+    "**/*.jsx",
+    "**/*.java",
+    "**/*.sql"
+  ],
+  "filePathsBlocklist": [
+    "**/*.test.js",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.js",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "/src/test/java/**/*",
+    "/src/test/resources/**/*",
+    "/src/__tests__/**/*",
+    "/src/generated/**/*",
+    "/src/__generated__/**/*",
+    "/src/main/java/com/scb/ratan/fmrep/model/v1/**/*"
+  ],
+  "defaultAgentConfig": {
+    "model": "gpt-5-mini"
+  },
+  "agents": {
+    "review": {
+      "temperature": 0.2,
+      "prompts": [
+        "prompts/review/principles.md",
+        "prompts/review/project.md",
+        "prompts/review/repo/{{repo}}.md",
+        "prompts/review/extension/{{extension}}.md",
+        "prompts/review/historical-issues.md"
+      ]
+    },
+    "issue-classification": {
+      "temperature": 0.3,
+      "prompts": ["prompts/review/issue-classification.md"]
+    },
+    "review-rescore": {
+      "temperature": 0.2,
+      "prompts": ["prompts/review/principles.md", "prompts/review/project.md"]
+    },
+    "summary": {
+      "temperature": 0.3,
+      "prompts": ["prompts/summary/instructions.md"]
+    }
+  }
+}

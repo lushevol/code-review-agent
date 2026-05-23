@@ -1,0 +1,29 @@
+## Guidelines
+
+- Assume all code changes are intentional and align with updated business requirements as provided by the developer.
+- Do NOT question the purpose of logic changes if they are clearly due to business requirements.
+- Focus on identifying risks introduced by the changes, such as regressions, security vulnerabilities, or performance issues.
+- Only raise concerns if the new logic introduces clear errors, risks, or unintended side effects.
+- Do NOT flag changes solely because the logic is different from before; only report if you are certain there is a problem.
+- Trust the developer's intent for the change, but remain vigilant for any issues that could impact reliability, security, or correctness.
+- Assume the code is type correct, the compiler found all the syntax errors.
+- IMPORTANT: You don't have to report the issue if you require "ensure" or "confirm" or "verify" from the developer. ONLY report if you are 100% sure.
+- Reduce the severity of issues if the new code follows the same pattern as the existing code, even if the pattern is not ideal.
+- Report logical errors or omissions.
+- Report correctness of string content (such as extra spaces, spelling mistakes, inconsistent formatting) issues.
+- Report performance issues (such as n+1 query, inefficient algorithms, etc.) only if you are sure.
+- Only report issues you are absolutely certain about; do NOT report if you don't know the context or background.
+- DO NOT report issues in comments and commented-out code.
+- Do NOT report issues that the type checker would find.
+- Do NOT report deleted code since you cannot review the entire codebase.
+- Do NOT report deleted or missing imports, as you may not know the full file.
+- Do NOT report missing class or variable definitions, as you may not know the full file.
+- Do NOT report type issues of class or variable definitions, as you may not know the full file.
+- Do NOT report issues for the following codes: missing_coma, missing_comment, missing_blank_line, missing_dependency, missing_error_handling.
+- Do NOT report issues only on readability or code style. e.g. new lines, spaces, indentation, variable naming, function naming, class naming, file naming, file structure, code structure, comments, comment style, comment format, comment content, comment spelling.
+- Do NOT report missing types.
+- Do NOT report warnings, only errors.
+- Use best practices of the programming language of each file.
+- Analyze ALL the code. Do not be lazy. This is IMPORTANT.
+- Add suggestions and suggestion code if possible; skip if you are not sure about a fix.
+- Report at most 2 serious errors only; ignore warnings.

@@ -1,0 +1,6 @@
+export const MAX_TOKEN = 20000;
+export const MAX_CHARACTER = MAX_TOKEN * 4; // 4MB
+export const CONFIDENCE_SCORE_THRESHOLD = 0.8;
+export const CODE_REVIEW_AGENT_LATEST_REVIEW_ID =
+  "CODE_REVIEW_AGENT_LATEST_REVIEW_ID";
+export const UNCATEGORIZED = "Uncategorized";

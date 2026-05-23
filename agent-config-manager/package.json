@@ -1,0 +1,45 @@
+{
+  "name": "agent-config-manager",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rslib build & npm run codegen",
+    "dev": "rslib build --watch",
+    "clear": "rimraf node_modules",
+    "codegen": "tsx ./src/json-schema-generator.ts",
+    "test": "vitest run"
+  },
+  "author": "Shuai,Lu(shuai.lu@sc.com)",
+  "dependencies": {
+    "ratan-ado-api": "workspace:*",
+    "uuid": "^11.1.0",
+    "ratan-code-review-agent-orm": "workspace:*",
+    "ratan-sonarqube-api": "workspace:*",
+    "handlebars": "^4.7.8"
+  },
+  "devDependencies": {
+    "@rslib/core": "^0.17.2",
+    "@types/node": "^24.10.0",
+    "@types/pg": "^8.15.4",
+    "pg": "^8.16.3",
+    "drizzle-orm": "^0.44.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
+  },
+  "peerDependencies": {
+    "dayjs": "^1.11.13",
+    "zod": "^4.1.12"
+  }
+}
