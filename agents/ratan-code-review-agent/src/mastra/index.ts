@@ -18,7 +18,7 @@ export const mastra = new Mastra({
     codeReviewEvaluationJudgeAgent,
   },
   storage: new LibSQLStore({
-    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    id: "code-review-storage",
     url: ":memory:",
   }),
   logger: new PinoLogger({
@@ -30,12 +30,12 @@ export const mastra = new Mastra({
       enabled: false, // enable or disable all telemetry by default
     },
   },
-  telemetry: { enabled: false }, // disable telemetry
   bundler: {
     externals: [
       "sonarqube-webapis",
       "sonarqube-webapis/dist/src/enums",
       "sonarqube-webapis/dist/src/resources",
+      "azure-devops-node-api",
       "readable-stream",
       "request",
       "protobufjs",

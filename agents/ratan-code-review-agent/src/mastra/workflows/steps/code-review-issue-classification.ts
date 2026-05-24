@@ -1,11 +1,11 @@
-import { createStep } from "@mastra/core";
+import { createStep } from "@mastra/core/workflows";
 import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
 import {
   type CodeReviewIssueClassification,
   CodeReviewIssueSchema,
   CodeReviewIssueWithCategorySchema,
-  type CommonRuntimeContext,
+  type CommonRequestContext,
 } from "../../types";
 import { UNCATEGORIZED } from "../../utils/const";
 
@@ -22,7 +22,7 @@ export const CodeReviewIssueClassificationStep = createStep({
   description: "Classify code review issues",
   inputSchema: CodeReviewIssueClassificationInputSchema,
   outputSchema: CodeReviewIssueClassificationResultSchema,
-  execute: async ({ inputData, mastra, runtimeContext }) => {
+  execute: async ({ inputData, mastra, requestContext }) => {
     if (!inputData) {
       throw new Error("Input data not found");
     }
@@ -36,7 +36,7 @@ export const CodeReviewIssueClassificationStep = createStep({
     }
 
     const agentConfig = extractAgentConfig(
-      runtimeContext as unknown as CommonRuntimeContext,
+      requestContext as unknown as CommonRequestContext,
     );
 
     const instructionsPrompt = await agentConfig.buildPrompt(
@@ -61,10 +61,10 @@ export const CodeReviewIssueClassificationStep = createStep({
       "codeReviewIssueClassificationAgent",
     );
     const output =
-      await codeReviewIssueClassificationAgent.generateLegacy(prompt);
+      await codeReviewIssueClassificationAgent.generate(prompt);
 
     const classificationResults =
-      output.object as CodeReviewIssueClassification[];
+      output.result as CodeReviewIssueClassification[];
     return {
       issues: issues.map((e, idx) => {
         const classificationResult = classificationResults.find(

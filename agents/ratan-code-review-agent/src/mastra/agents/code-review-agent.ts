@@ -18,7 +18,8 @@ export const codeReviewAgent = new Agent({
 `,
   model: openai("gpt-5-mini"),
   defaultGenerateOptions: {
-    // @ts-expect-error
-    experimental_output: CodeReviewIssueSchema,
+    structuredOutput: {
+      schema: CodeReviewIssueSchema,
+    },
   },
 });

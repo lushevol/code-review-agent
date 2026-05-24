@@ -3,6 +3,7 @@ import { openai } from "../agents/openai-client";
 import { CodeReviewRescoreSchema } from "../types";
 
 const codeReviewScorer = createScorer({
+  id: "code-review-scorer",
   name: "Code Review Scorer",
   description: "Scores code review issues based on relation to prompts.",
   judge: {

@@ -1,7 +1,7 @@
 import { minimatch } from "minimatch";
 import { Observable } from "rxjs";
 import z from "zod";
-import type { CommonRuntimeContextSchema } from "../mastra/types";
+import type { CommonRequestContextSchema } from "../mastra/types";
 import { extractAgentConfig } from "./session";
 
 const PendingPRSchema = z.object({
@@ -12,13 +12,13 @@ const PendingPRSchema = z.object({
 type PendingPR = z.infer<typeof PendingPRSchema>;
 
 export const scanPRs = ({
-  runtimeContext,
+  requestContext,
 }: {
-  runtimeContext: z.infer<typeof CommonRuntimeContextSchema>;
+  requestContext: z.infer<typeof CommonRequestContextSchema>;
 }) => {
   return new Observable<PendingPR>((subscriber) => {
     (async () => {
-      const configSessionId = runtimeContext.configSessionId;
+      const configSessionId = requestContext.configSessionId;
       if (!configSessionId) {
         console.error(
           "[scanPRs] Config session ID not found in runtime context",
@@ -27,7 +27,7 @@ export const scanPRs = ({
       }
       console.log(`[scanPRs] Using configSessionId: ${configSessionId}`);
 
-      const agentConfig = extractAgentConfig(runtimeContext);
+      const agentConfig = extractAgentConfig(requestContext);
 
       const rootConfig = await agentConfig.getRootConfig();
       const repoNamePatterns = rootConfig.scanRepoNames ?? [];

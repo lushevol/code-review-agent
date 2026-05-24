@@ -1,9 +1,9 @@
-import { createStep } from "@mastra/core";
+import { createStep } from "@mastra/core/workflows";
 import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
 import {
   CodeReviewIssueWithCategorySchema,
-  type CommonRuntimeContext,
+  type CommonRequestContext,
 } from "../../types";
 import { codeCommentHelper } from "../../utils/code-comment";
 import { CODE_REVIEW_AGENT_LATEST_REVIEW_ID } from "../../utils/const";
@@ -35,7 +35,7 @@ export const comment = createStep({
   description: "Reviews code changes and provides feedback",
   inputSchema: CommentInputSchema,
   outputSchema: CodeReviewResultSchema,
-  execute: async ({ inputData, runtimeContext, getStepResult }) => {
+  execute: async ({ inputData, requestContext, getStepResult }) => {
     if (!inputData) {
       throw new Error("Input data not found");
     }
@@ -49,7 +49,7 @@ export const comment = createStep({
     const { prDetails } = getStepResult("fetch-pr-details") as PRDetailsResult;
 
     const agentConfig = extractAgentConfig(
-      runtimeContext as unknown as CommonRuntimeContext,
+      requestContext as unknown as CommonRequestContext,
     );
 
     const adoClient = agentConfig.getAdoClient();

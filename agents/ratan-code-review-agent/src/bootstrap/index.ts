@@ -1,7 +1,7 @@
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request";
 import type { AgentConfigCreationOptions } from "agent-config-manager";
 import { mastra } from "../mastra";
-import type { CommonRuntimeContext } from "../mastra/types";
+import type { CommonRequestContext } from "../mastra/types";
 import { scanPRs } from "./pr-scan";
 import { getAgentConfigSessions } from "./session";
 
@@ -14,7 +14,7 @@ export const startup = async (startupOptions: AgentConfigCreationOptions) => {
   console.log("[startup] Agent config session created:", agentConfig.id);
 
   const pendingPR$ = scanPRs({
-    runtimeContext: { configSessionId: agentConfig.id },
+    requestContext: { configSessionId: agentConfig.id },
   });
 
   console.log("[startup] Subscribing to pending PRs stream...");
@@ -22,17 +22,17 @@ export const startup = async (startupOptions: AgentConfigCreationOptions) => {
   pendingPR$.subscribe(async ({ prId }) => {
     console.log(`[startup] Received pending PR: ${prId}`);
     const prReviewWorkflow = mastra.getWorkflow("prReviewWorkflow");
-    const run = await prReviewWorkflow.createRunAsync();
+    const run = prReviewWorkflow.createRun();
 
     console.log(`[startup] Running prReviewWorkflow for PR: ${prId}`);
 
-    const runtimeContext: CommonRuntimeContext = new RuntimeContext();
-    runtimeContext.set("configSessionId", agentConfig.id);
+    const requestContext: CommonRequestContext = new RequestContext();
+    requestContext.set("configSessionId", agentConfig.id);
     const result = run.stream({
       inputData: {
         prId,
       },
-      runtimeContext: runtimeContext as RuntimeContext,
+      requestContext: requestContext as RequestContext,
     });
 
     for await (const output of result.fullStream) {

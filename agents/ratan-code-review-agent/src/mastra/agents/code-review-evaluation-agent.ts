@@ -1,14 +1,14 @@
 import { Agent } from "@mastra/core/agent";
-import type { RuntimeContext } from "@mastra/core/runtime-context";
+import type { RequestContext } from "@mastra/core/request";
 import { type AIJudgeInput, aiJudgeOutputSchema } from "../../evaluation/type";
 import { structureOutputPrompt } from "../utils/structure-output-prompt";
 import { openai } from "./openai-client";
 
-type EvaluationRuntimeContext = RuntimeContext<AIJudgeInput>;
+type EvaluationRequestContext = RequestContext<AIJudgeInput>;
 
 export const codeReviewEvaluationJudgeAgent = new Agent({
   name: "Code Review Evaluation Judge Agent",
-  instructions: ({ runtimeContext }) => `
+  instructions: ({ requestContext }) => `
   You are an expert Senior Software Engineer acting as a QA Judge for an AI Code Reviewer.
   
   CONTEXT:
@@ -17,17 +17,17 @@ export const codeReviewEvaluationJudgeAgent = new Agent({
   
   CODE SNIPPET:
   \`\`\`
-  ${(<EvaluationRuntimeContext>runtimeContext).get("input").codeChange.changes}
+  ${(<EvaluationRequestContext>requestContext).get("input").codeChange.changes}
   \`\`\`
   
   GROUND TRUTH ISSUES: 
-  ${JSON.stringify((<EvaluationRuntimeContext>runtimeContext).get("expectedOutput").issues, null, 2)}
+  ${JSON.stringify((<EvaluationRequestContext>requestContext).get("expectedOutput").issues, null, 2)}
   
   ISSUE FOUND BY AI:
-  ${JSON.stringify((<EvaluationRuntimeContext>runtimeContext).get("actualIssue"), null, 2)}
+  ${JSON.stringify((<EvaluationRequestContext>requestContext).get("actualIssue"), null, 2)}
   
   METADATA:
-  Did this issue fuzzy-match a location in the Ground Truth? ${(<EvaluationRuntimeContext>runtimeContext).get("isMatchedExpectation") ? "YES" : "NO"}
+  Did this issue fuzzy-match a location in the Ground Truth? ${(<EvaluationRequestContext>requestContext).get("isMatchedExpectation") ? "YES" : "NO"}
   
   YOUR TASK:
   1. **False Positive Check**: 
@@ -43,7 +43,8 @@ export const codeReviewEvaluationJudgeAgent = new Agent({
 `,
   model: openai("gpt-5-mini"),
   defaultGenerateOptions: {
-    // @ts-expect-error
-    experimental_output: aiJudgeOutputSchema,
+    structuredOutput: {
+      schema: aiJudgeOutputSchema,
+    },
   },
 });

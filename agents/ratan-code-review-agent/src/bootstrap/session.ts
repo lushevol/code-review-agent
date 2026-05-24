@@ -1,9 +1,9 @@
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request";
 import { AgentConfigSession } from "agent-config-manager";
 import type z from "zod";
 import type {
-  CommonRuntimeContext,
-  CommonRuntimeContextSchema,
+  CommonRequestContext,
+  CommonRequestContextSchema,
 } from "../mastra/types";
 
 const agentConfigSessions = new AgentConfigSession();
@@ -13,14 +13,14 @@ export const getAgentConfigSessions = () => {
 };
 
 export const extractAgentConfig = (
-  runtimeContext:
-    | z.infer<typeof CommonRuntimeContextSchema>
-    | CommonRuntimeContext,
+  requestContext:
+    | z.infer<typeof CommonRequestContextSchema>
+    | CommonRequestContext,
 ) => {
   const configSessionId =
-    runtimeContext instanceof RuntimeContext
-      ? runtimeContext.get("configSessionId")
-      : runtimeContext.configSessionId;
+    requestContext instanceof RequestContext
+      ? requestContext.get("configSessionId")
+      : requestContext.configSessionId;
 
   const agentConfig =
     agentConfigSessions.getAgentConfigSession(configSessionId);

@@ -1,10 +1,10 @@
-import { createStep } from "@mastra/core";
+import { createStep } from "@mastra/core/workflows";
 import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
 import {
   type CodeReviewIssue,
   CodeReviewIssueSchema,
-  type CommonRuntimeContext,
+  type CommonRequestContext,
   PullRequestSchema,
 } from "../../types";
 import { chunkContent } from "../../utils/chunk-content";
@@ -25,7 +25,7 @@ export const codeReview = createStep({
   description: "Reviews code changes and provides feedback",
   inputSchema: CodeReviewInputSchema,
   outputSchema: CodeReviewResultSchema,
-  execute: async ({ inputData, runtimeContext, mastra }) => {
+  execute: async ({ inputData, requestContext, mastra }) => {
     if (!inputData) {
       throw new Error("Input data not found");
     }
@@ -34,7 +34,7 @@ export const codeReview = createStep({
       prDetails: { codeDiffsArray, repoName },
     } = inputData;
     const agentConfig = extractAgentConfig(
-      runtimeContext as unknown as CommonRuntimeContext,
+      requestContext as unknown as CommonRequestContext,
     );
     const issues: CodeReviewIssue[] = [];
 
@@ -62,11 +62,11 @@ export const codeReview = createStep({
           </CODE_CHANGES>
         `;
 
-        const output = await codeReviewAgent.generateLegacy(prompt);
-        (output.object as CodeReviewIssue[]).forEach(
+        const output = await codeReviewAgent.generate(prompt);
+        (output.result as CodeReviewIssue[]).forEach(
           (i) => (i.file = change.newFilePath ?? change.oldFilePath ?? i.file),
         );
-        issues.push(...(output.object as CodeReviewIssue[]));
+        issues.push(...(output.result as CodeReviewIssue[]));
       }
     }
 

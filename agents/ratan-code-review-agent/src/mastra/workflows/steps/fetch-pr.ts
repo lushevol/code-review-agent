@@ -1,7 +1,7 @@
-import { createStep } from "@mastra/core";
+import { createStep } from "@mastra/core/workflows";
 import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
-import { type CommonRuntimeContext, PullRequestSchema } from "../../types";
+import { type CommonRequestContext, PullRequestSchema } from "../../types";
 
 const PRDetailsInputSchema = z.object({
   prId: z.number().describe("The ID of the pull request"),
@@ -18,13 +18,13 @@ export const fetchPR = createStep({
   description: "Fetches pull request details",
   inputSchema: PRDetailsInputSchema,
   outputSchema: PRDetailsResultSchema,
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     if (!inputData) {
       throw new Error("Input data not found");
     }
 
     const agentConfig = extractAgentConfig(
-      runtimeContext as unknown as CommonRuntimeContext,
+      requestContext as unknown as CommonRequestContext,
     );
 
     const adoClient = agentConfig.getAdoClient();

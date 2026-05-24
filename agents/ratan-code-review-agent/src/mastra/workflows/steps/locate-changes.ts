@@ -1,7 +1,7 @@
-import { createStep } from "@mastra/core";
+import { createStep } from "@mastra/core/workflows";
 import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
-import { type CommonRuntimeContext, PullRequestSchema } from "../../types";
+import { type CommonRequestContext, PullRequestSchema } from "../../types";
 import { CODE_REVIEW_AGENT_LATEST_REVIEW_ID } from "../../utils/const";
 import { filterReviewableFiles } from "../../utils/file-filter";
 import { maskSensitiveData } from "../../utils/sensitive-data-mask";
@@ -19,13 +19,13 @@ export const locateChanges = createStep({
   description: "Locates pull request changes",
   inputSchema: LocateChangesInputSchema,
   outputSchema: LocateChangesResultSchema,
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     if (!inputData) {
       throw new Error("Input data not found");
     }
 
     const agentConfig = extractAgentConfig(
-      runtimeContext as unknown as CommonRuntimeContext,
+      requestContext as unknown as CommonRequestContext,
     );
 
     const adoClient = agentConfig.getAdoClient();

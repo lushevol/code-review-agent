@@ -1,8 +1,8 @@
-import { createStep } from "@mastra/core";
+import { createStep } from "@mastra/core/workflows";
 import { ParsedMeasuresComponentSchema } from "ratan-sonarqube-api";
 import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
-import { type CommonRuntimeContext, PullRequestSchema } from "../../types";
+import { type CommonRequestContext, PullRequestSchema } from "../../types";
 
 const PRDetailsInputSchema = z.object({
   prDetails: PullRequestSchema,
@@ -19,7 +19,7 @@ export const sonarqubeMeasures = createStep({
   description: "Fetches SonarQube measures for a pull request",
   inputSchema: PRDetailsInputSchema,
   outputSchema: PRDetailsResultSchema,
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     if (!inputData) {
       throw new Error("Input data not found");
     }
@@ -29,7 +29,7 @@ export const sonarqubeMeasures = createStep({
     } = inputData;
 
     const agentConfig = extractAgentConfig(
-      runtimeContext as unknown as CommonRuntimeContext,
+      requestContext as unknown as CommonRequestContext,
     );
 
     const sonarQubeClient = agentConfig.getSonarQubeClient();

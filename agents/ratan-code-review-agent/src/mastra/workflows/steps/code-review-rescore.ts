@@ -1,10 +1,10 @@
-import { createStep } from "@mastra/core";
+import { createStep } from "@mastra/core/workflows";
 import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
 import {
   CodeReviewIssueSchema,
   type CodeReviewRescore,
-  type CommonRuntimeContext,
+  type CommonRequestContext,
 } from "../../types";
 
 const CodeReviewRescoreInputSchema = z.object({
@@ -20,7 +20,7 @@ export const codeReviewRescore = createStep({
   description: "Rescore code review issues based on confidence score",
   inputSchema: CodeReviewRescoreInputSchema,
   outputSchema: CodeReviewRescoreResultSchema,
-  execute: async ({ inputData, mastra, runtimeContext }) => {
+  execute: async ({ inputData, mastra, requestContext }) => {
     if (!inputData) {
       throw new Error("Input data not found");
     }
@@ -34,7 +34,7 @@ export const codeReviewRescore = createStep({
     }
 
     const agentConfig = extractAgentConfig(
-      runtimeContext as unknown as CommonRuntimeContext,
+      requestContext as unknown as CommonRequestContext,
     );
 
     const instructionsPrompt = await agentConfig.buildPrompt("review-rescore");
@@ -55,9 +55,9 @@ export const codeReviewRescore = createStep({
     `;
 
     const codeReviewRescoreAgent = mastra.getAgent("codeReviewRescoreAgent");
-    const output = await codeReviewRescoreAgent.generateLegacy(prompt);
+    const output = await codeReviewRescoreAgent.generate(prompt);
 
-    const rerankResults = output.object as CodeReviewRescore[];
+    const rerankResults = output.result as CodeReviewRescore[];
     return {
       issues: issues.map((e, idx) => {
         const rerankResult = rerankResults.find((r) => r.index === idx);

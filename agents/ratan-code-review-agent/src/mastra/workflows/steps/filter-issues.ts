@@ -1,4 +1,4 @@
-import { createStep } from "@mastra/core";
+import { createStep } from "@mastra/core/workflows";
 import z from "zod";
 import { CodeReviewIssueSchema } from "../../types";
 import { applyConfidenceScoreFilter } from "../../utils/confidence-score-filter";

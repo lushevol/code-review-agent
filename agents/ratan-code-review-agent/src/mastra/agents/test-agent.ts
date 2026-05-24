@@ -14,7 +14,8 @@ export const testAgent = new Agent({
   ${JSON.stringify(z.toJSONSchema(testSchema), null, 4)}`,
   model: openai("gpt-5-mini"),
   defaultGenerateOptions: {
-    // @ts-expect-error
-    experimental_output: testSchema,
+    structuredOutput: {
+      schema: testSchema,
+    },
   },
 });

@@ -1,7 +1,7 @@
-import { createStep } from "@mastra/core";
+import { createStep } from "@mastra/core/workflows";
 import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
-import { type CommonRuntimeContext, PullRequestSchema } from "../../types";
+import { type CommonRequestContext, PullRequestSchema } from "../../types";
 import { MAX_CHARACTER } from "../../utils/const";
 
 const CodeSummaryInputSchema = z.object({
@@ -17,7 +17,7 @@ export const codeSummary = createStep({
   description: "Summarizes code changes",
   inputSchema: CodeSummaryInputSchema,
   outputSchema: CodeSummaryResultSchema,
-  execute: async ({ inputData, mastra, runtimeContext }) => {
+  execute: async ({ inputData, mastra, requestContext }) => {
     if (!inputData) {
       throw new Error("Input data not found");
     }
@@ -38,7 +38,7 @@ export const codeSummary = createStep({
     }
 
     const agentConfig = extractAgentConfig(
-      runtimeContext as unknown as CommonRuntimeContext,
+      requestContext as unknown as CommonRequestContext,
     );
 
     const instructionsPrompt = await agentConfig.buildPrompt("summary");
@@ -54,7 +54,7 @@ export const codeSummary = createStep({
     `;
 
     const codeChangeSummaryAgent = mastra.getAgent("codeChangeSummaryAgent");
-    const output = await codeChangeSummaryAgent.generateLegacy(prompt);
+    const output = await codeChangeSummaryAgent.generate(prompt);
 
     return {
       codeChangeSummary: warning ? `${warning}\n${output.text}` : output.text,

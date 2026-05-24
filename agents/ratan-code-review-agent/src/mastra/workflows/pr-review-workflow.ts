@@ -1,4 +1,4 @@
-import { createWorkflow } from "@mastra/core";
+import { createWorkflow } from "@mastra/core/workflows";
 import z from "zod";
 import { prReviewIssuesWorkflow } from "./pr-review-issues-workflow";
 import { codeSummary } from "./steps/code-summary";

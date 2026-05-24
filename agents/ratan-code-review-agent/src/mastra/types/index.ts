@@ -1,13 +1,13 @@
-import type { RuntimeContext } from "@mastra/core/runtime-context";
+import type { RequestContext } from "@mastra/core/request";
 import { type AdoPullRequest, AdoPullRequestSchema } from "ratan-ado-api";
 import z from "zod";
 
-export const CommonRuntimeContextSchema = z.object({
+export const CommonRequestContextSchema = z.object({
   configSessionId: z.string().describe("Agent Config Session Id"),
 });
 
-export type CommonRuntimeContext = RuntimeContext<
-  z.infer<typeof CommonRuntimeContextSchema>
+export type CommonRequestContext = RequestContext<
+  z.infer<typeof CommonRequestContextSchema>
 >;
 
 export const CodeChangeSchema = z.object({
