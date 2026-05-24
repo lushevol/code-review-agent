@@ -1,7 +1,7 @@
 import {
   Operation,
   type ResourceRef,
-} from "azure-devops-node-api/interfaces/common/VSSInterfaces";
+} from "azure-devops-node-api/interfaces/common/VSSInterfaces.js";
 import {
   type GitPullRequest,
   type GitPullRequestSearchCriteria,

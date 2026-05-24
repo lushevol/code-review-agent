@@ -25,11 +25,6 @@ export const mastra = new Mastra({
     name: "Mastra",
     level: "info",
   }),
-  observability: {
-    default: {
-      enabled: false, // enable or disable all telemetry by default
-    },
-  },
   bundler: {
     externals: [
       "sonarqube-webapis",

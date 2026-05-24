@@ -1,4 +1,4 @@
-import * as httpm from "typed-rest-client/HttpClient";
+import * as httpm from "typed-rest-client/HttpClient.js";
 import config from "../config.json" with { type: "json" };
 
 const getHeaders = (pat: string) => {

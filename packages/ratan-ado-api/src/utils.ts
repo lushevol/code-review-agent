@@ -1,7 +1,7 @@
 import type {
   JsonPatchOperation,
   Operation,
-} from "azure-devops-node-api/interfaces/common/VSSInterfaces";
+} from "azure-devops-node-api/interfaces/common/VSSInterfaces.js";
 import { html2markdown, jsonToMarkdown, p } from "ratan-markdown-tool";
 
 const AGENT_VERSION = "v0.9";

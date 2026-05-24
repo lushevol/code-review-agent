@@ -1,4 +1,4 @@
-import type { WorkItem } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces";
+import type { WorkItem } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
 import type { TestCaseWorkItemType } from "./interfaces";
 
 export const testCaseWorkItemMapping = {

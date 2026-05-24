@@ -1,4 +1,4 @@
-import type { LineDiffBlockChangeType } from "azure-devops-node-api/interfaces/GitInterfaces";
+import type { LineDiffBlockChangeType } from "azure-devops-node-api/interfaces/GitInterfaces.js";
 
 export type ChangeJson = {
   newFilePath: string;

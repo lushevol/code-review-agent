@@ -1,5 +1,5 @@
-import { Operation } from "azure-devops-node-api/interfaces/common/VSSInterfaces";
-import { WorkItem } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces";
+import { Operation } from "azure-devops-node-api/interfaces/common/VSSInterfaces.js";
+import { WorkItem } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
 import { html2markdown } from "ratan-markdown-tool";
 import type {
   AdoWebApi,

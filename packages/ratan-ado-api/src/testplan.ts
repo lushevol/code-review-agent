@@ -2,7 +2,7 @@ import type {
   TestPlanCreateParams,
   TestPlanUpdateParams,
   TestSuiteCreateParams,
-} from "azure-devops-node-api/interfaces/TestPlanInterfaces";
+} from "azure-devops-node-api/interfaces/TestPlanInterfaces.js";
 import type {
   AdoWebApi,
   TestPlanType,

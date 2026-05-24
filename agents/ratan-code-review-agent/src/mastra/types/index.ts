@@ -1,4 +1,4 @@
-import type { RequestContext } from "@mastra/core/request";
+import type { RequestContext } from "@mastra/core/request-context";
 import { type AdoPullRequest, AdoPullRequestSchema } from "ratan-ado-api";
 import z from "zod";
 

@@ -1,4 +1,4 @@
-import { RequestContext } from "@mastra/core/request";
+import { RequestContext } from "@mastra/core/request-context";
 import type { AgentConfigCreationOptions } from "agent-config-manager";
 import { mastra } from "../mastra";
 import type { CommonRequestContext } from "../mastra/types";

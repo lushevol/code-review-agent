@@ -1,4 +1,4 @@
-import { WorkItemExpand } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces";
+import { WorkItemExpand } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
 import type { AdoWebApi, ReleaseWorkItemType } from "./interfaces";
 import {
   extractWorkitemIdFromUrl,

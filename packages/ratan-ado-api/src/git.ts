@@ -1,7 +1,7 @@
 import {
   type GitCommitDiffs,
   GitVersionType,
-} from "azure-devops-node-api/interfaces/GitInterfaces";
+} from "azure-devops-node-api/interfaces/GitInterfaces.js";
 import type { AdoWebApi } from "./interfaces";
 import { getReleasedPipelineRuns } from "./pipeline";
 

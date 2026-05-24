@@ -5,7 +5,7 @@ import {
   type GitPullRequest,
   LineDiffBlockChangeType,
   VersionControlChangeType,
-} from "azure-devops-node-api/interfaces/GitInterfaces";
+} from "azure-devops-node-api/interfaces/GitInterfaces.js";
 import { hierarchyQueryRequest } from "./HierarchyQuery";
 import type {
   ChangeJson,

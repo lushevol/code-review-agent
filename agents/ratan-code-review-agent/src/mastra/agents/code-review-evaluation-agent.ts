@@ -1,5 +1,5 @@
 import { Agent } from "@mastra/core/agent";
-import type { RequestContext } from "@mastra/core/request";
+import type { RequestContext } from "@mastra/core/request-context";
 import { type AIJudgeInput, aiJudgeOutputSchema } from "../../evaluation/type";
 import { structureOutputPrompt } from "../utils/structure-output-prompt";
 import { openai } from "./openai-client";

@@ -1,5 +1,5 @@
-import { Operation } from "azure-devops-node-api/interfaces/common/VSSInterfaces";
-import { WorkItemExpand } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces";
+import { Operation } from "azure-devops-node-api/interfaces/common/VSSInterfaces.js";
+import { WorkItemExpand } from "azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js";
 import type { AdoWebApi, TestCaseWorkItemType } from "./interfaces";
 import { plainWorkItemPayload2JsonPatchDocument } from "./utils";
 import { testCaseAdo2Payload, testCasePayload2ADO } from "./wokitem-mapping";

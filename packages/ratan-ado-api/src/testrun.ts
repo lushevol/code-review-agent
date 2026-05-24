@@ -4,7 +4,7 @@ import type {
   RunUpdateModel,
   TestAttachmentRequestModel,
   TestCaseResult,
-} from "azure-devops-node-api/interfaces/TestInterfaces";
+} from "azure-devops-node-api/interfaces/TestInterfaces.js";
 import type {
   AdoWebApi,
   TestAttachmentReferenceType,
