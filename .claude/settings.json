@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "imessage@claude-plugins-official": true,
+    "remember@claude-plugins-official": true
+  }
+}

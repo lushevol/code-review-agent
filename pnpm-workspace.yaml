@@ -1,7 +1,10 @@
 packages:
-  - "agent-config-manager"
-  - "ratan-ado-api"
-  - "ratan-code-review-agent"
-  - "ratan-code-review-agent-orm"
-  - "ratan-markdown-tool"
-  - "ratan-sonarqube-api"
+  - "agents/*"
+  - "packages/*"
+
+allowBuilds:
+  core-js: true
+  esbuild: true
+  protobufjs: true
+
+minimumReleaseAge: 0
