@@ -52,4 +52,94 @@ describe("LocalConfigClient", () => {
     });
     expect(await client.getOrmClient()).toBeNull();
   });
+
+  it("throws on getAgentConfig for nonexistent agent", async () => {
+    const client = new LocalConfigClient({
+      configDir: FIXTURES_DIR,
+      config: { agents: { review: {} } },
+      ado: { organization: "o", project: "p" },
+      adoToken: "t",
+    });
+    await expect(client.getAgentConfig("nonexistent")).rejects.toThrow(
+      'Agent "nonexistent" not found in local configuration.',
+    );
+  });
+
+  it("throws on buildPrompt for nonexistent prompt key", async () => {
+    const client = new LocalConfigClient({
+      configDir: "/tmp",
+      config: { agents: { nonexistent: {} } },
+      ado: { organization: "o", project: "p" },
+      adoToken: "t",
+    });
+    await expect(client.buildPrompt("nonexistent")).rejects.toThrow(
+      'Prompt key "nonexistent" not found for agent.',
+    );
+  });
+
+  it("throws on getAdoClient before connect", () => {
+    const client = new LocalConfigClient({
+      configDir: FIXTURES_DIR,
+      config: { agents: { review: {} } },
+      ado: { organization: "o", project: "p" },
+      adoToken: "t",
+    });
+    expect(() => client.getAdoClient()).toThrow(
+      "ADO client not connected. Call connect() first.",
+    );
+  });
+
+  it("throws on getSonarQubeClient before connect", () => {
+    const client = new LocalConfigClient({
+      configDir: FIXTURES_DIR,
+      config: { agents: { review: {} } },
+      ado: { organization: "o", project: "p" },
+      adoToken: "t",
+    });
+    expect(() => client.getSonarQubeClient()).toThrow(
+      "SonarQube client not connected. Call connect() first.",
+    );
+  });
+
+  it("merges defaultAgentConfig with agent config", async () => {
+    const client = new LocalConfigClient({
+      configDir: FIXTURES_DIR,
+      config: {
+        defaultAgentConfig: { model: "gpt-4", temperature: 0.1 },
+        agents: {
+          review: { temperature: 0.5, prompts: ["prompts/review.md"] },
+        },
+      },
+      ado: { organization: "o", project: "p" },
+      adoToken: "t",
+    });
+    const config = await client.getAgentConfig("review");
+    expect(config.model).toBe("gpt-4"); // from default
+    expect(config.temperature).toBe(0.5); // overridden by agent
+    expect(config.prompts).toEqual(["prompts/review.md"]); // from agent
+  });
+
+  it("throws when configDir is missing in constructor", () => {
+    expect(
+      () =>
+        new LocalConfigClient({
+          configDir: "",
+          config: { agents: { review: {} } },
+          ado: { organization: "o", project: "p" },
+          adoToken: "t",
+        }),
+    ).toThrow("configDir is required");
+  });
+
+  it("throws when ado.organization is missing in constructor", () => {
+    expect(
+      () =>
+        new LocalConfigClient({
+          configDir: "/tmp",
+          config: { agents: { review: {} } },
+          ado: { organization: "", project: "p" },
+          adoToken: "t",
+        }),
+    ).toThrow("ado.organization is required");
+  });
 });

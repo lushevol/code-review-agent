@@ -17,6 +17,7 @@ export interface LocalConfigOptions {
   ado: { organization: string; project: string };
   adoToken?: string;
   sonarQubeToken?: string;
+  /** Reserved for future ORM support. Not currently used. */
   databaseUrl?: string;
 }
 
@@ -27,6 +28,15 @@ export class LocalConfigClient implements ConfigProvider {
   private sonarQubeClient: SonarQubeClient | null = null;
 
   constructor(options: LocalConfigOptions) {
+    if (!options.configDir) {
+      throw new Error("configDir is required");
+    }
+    if (!options.ado?.organization) {
+      throw new Error("ado.organization is required");
+    }
+    if (!options.ado?.project) {
+      throw new Error("ado.project is required");
+    }
     this.options = options;
     this.id = randomUUID();
   }
