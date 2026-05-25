@@ -95,25 +95,29 @@ If the harness needs to run agents against another endpoint, change this through
 Use these commands when dependencies are installed:
 
 ```bash
+# Build all packages
 pnpm build
+
+# Run tests
 pnpm test
-pnpm agent:mastra:build
-pnpm --filter ratan-code-review-agent codegen
+
+# Build Mastra artifacts
+pnpm mastra:build
+
+# Regenerate evaluation JSON schema
+pnpm codegen
+
+# CLI usage (after build)
+node bin/ratan-code-review.js --help
+node bin/ratan-code-review.js init  # scaffold config
+node bin/ratan-code-review.js scan  # one-shot PR scan
+
+# Live side-effectful commands (not safe default)
+pnpm dev
+pnpm demo
 ```
 
-CLI/package validation without posting comments:
-
-```bash
-pnpm --filter ratan-code-review-agent build
-node agents/ratan-code-review-agent/dist/cli.js --help
-node agents/ratan-code-review-agent/dist/cli.js doctor
-pnpm -r pack --pack-destination /tmp/code-review-agent-packs
-npm publish --dry-run /tmp/code-review-agent-packs/ratan-code-review-agent-0.0.1.tgz
-```
-
-`pnpm agent:dev`, `pnpm agent:demo`, and `ratan-code-review-agent run` are not safe defaults because they can start live PR scanning and comment posting.
-
-Use `ratan-code-review-agent doctor` as the first live ADO check. It connects to ADO and loads the external `config.json`, but it does not scan PRs or post comments.
+`pnpm demo` is not a safe default because it starts the live PR scanning flow from `src/demo.ts`. The `scan` CLI command also has external side effects (ADO calls) and requires a valid config.
 
 ## Suggested Harness Test Strategy
 

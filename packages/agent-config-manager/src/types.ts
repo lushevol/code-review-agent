@@ -1,3 +1,8 @@
+import type { AzureDevOps } from "ratan-ado-api";
+import type { SonarQubeClient } from "ratan-sonarqube-api";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { Pool } from "pg";
+import type { schema } from "ratan-code-review-agent-orm";
 import { z } from "zod";
 
 export const AgentConfigCreationOptionsSchema = z.object({
@@ -69,3 +74,14 @@ export const PromptContextSchema = z.object({
 });
 
 export type PromptContext = z.infer<typeof PromptContextSchema>;
+
+export interface ConfigProvider {
+  id: string;
+  connect(): Promise<void>;
+  getRootConfig(): Promise<RootAgentConfig>;
+  getAgentConfig(agentName: string): Promise<AgentConfig>;
+  buildPrompt(promptKey: string, context?: PromptContext): Promise<string>;
+  getAdoClient(): AzureDevOps;
+  getSonarQubeClient(): SonarQubeClient;
+  getOrmClient(): Promise<NodePgDatabase<typeof schema> & { $client: Pool } | null>;
+}

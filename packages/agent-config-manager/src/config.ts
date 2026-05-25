@@ -11,6 +11,7 @@ import {
   type AgentConfig,
   type AgentConfigCreationOptions,
   AgentConfigCreationOptionsSchema,
+  type ConfigProvider,
   type PromptContext,
   type RootAgentConfig,
   type Variables,
@@ -24,7 +25,7 @@ const REFRESH_INTERVAL_MS_DEFAULT = 5 * 60 * 1000; // 5 minutes
  * AgentConfigClient is responsible for fetching, caching, and resolving agent configuration
  * and prompt files from Azure DevOps repositories.
  */
-export class AgentConfigClient {
+export class AgentConfigClient implements ConfigProvider {
   public id: string;
   private adoClient: AzureDevOps;
   private sonarQubeClient: SonarQubeClient;

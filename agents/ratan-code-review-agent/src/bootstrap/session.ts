@@ -1,5 +1,6 @@
 import { RequestContext } from "@mastra/core/request-context";
 import { AgentConfigSession } from "agent-config-manager";
+import type { ConfigProvider } from "agent-config-manager";
 import type z from "zod";
 import type {
   CommonRequestContext,
@@ -16,7 +17,7 @@ export const extractAgentConfig = (
   requestContext:
     | z.infer<typeof CommonRequestContextSchema>
     | CommonRequestContext,
-) => {
+): ConfigProvider => {
   const configSessionId =
     requestContext instanceof RequestContext
       ? requestContext.get("configSessionId")

@@ -2,12 +2,12 @@
   "private": true,
   "scripts": {
     "build": "pnpm -r build",
-    "test": "pnpm --filter ratan-code-review-agent exec vitest run",
-    "agent:build": "pnpm --filter ratan-code-review-agent build",
-    "agent:mastra:build": "pnpm --filter ratan-code-review-agent mastra:build",
-    "agent:start": "pnpm --filter ratan-code-review-agent start",
-    "agent:dev": "pnpm --filter ratan-code-review-agent dev",
-    "agent:demo": "pnpm --filter ratan-code-review-agent demo",
+    "test": "pnpm --filter ratan-code-review exec vitest run",
+    "agent:build": "pnpm --filter ratan-code-review build",
+    "agent:mastra:build": "pnpm --filter ratan-code-review mastra:build",
+    "agent:start": "pnpm --filter ratan-code-review start",
+    "agent:dev": "pnpm --filter ratan-code-review dev",
+    "agent:demo": "pnpm --filter ratan-code-review demo",
     "clean": "pnpm -r exec sh -c 'rm -rf dist'"
   },
   "devDependencies": {

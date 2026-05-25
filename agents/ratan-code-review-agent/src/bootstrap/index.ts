@@ -1,16 +1,30 @@
 import { RequestContext } from "@mastra/core/request-context";
-import type { AgentConfigCreationOptions } from "agent-config-manager";
+import type { AgentConfigCreationOptions, ConfigProvider } from "agent-config-manager";
 import { mastra } from "../mastra";
 import type { CommonRequestContext } from "../mastra/types";
 import { scanPRs } from "./pr-scan";
 import { getAgentConfigSessions } from "./session";
 
+// Keep the original startup for backwards compat (demo.ts, evaluation)
 export const startup = async (startupOptions: AgentConfigCreationOptions) => {
   console.log("[startup] Starting up agent ...");
 
   const agentConfig =
     await getAgentConfigSessions().createAgentConfigSession(startupOptions);
 
+  await runScanLoop(agentConfig);
+};
+
+// New function for CLI — accepts a pre-created ConfigProvider
+export const startScanWithProvider = async (provider: ConfigProvider) => {
+  console.log("[startScanWithProvider] Starting scan with provider ...");
+
+  const registered = getAgentConfigSessions().registerProvider(provider);
+
+  await runScanLoop(registered);
+};
+
+async function runScanLoop(agentConfig: ConfigProvider) {
   console.log("[startup] Agent config session created:", agentConfig.id);
 
   const pendingPR$ = scanPRs({
@@ -40,7 +54,7 @@ export const startup = async (startupOptions: AgentConfigCreationOptions) => {
     }
     console.log(`[startup] Finished processing PR: ${prId}`);
   });
-};
+}
 
 export const startupEvaluation = async (
   startupOptions: AgentConfigCreationOptions,

@@ -19,6 +19,12 @@ export default defineConfig({
     },
   ],
   output: {
-    minify: true,
+    minify: false, // Better stack traces for CLI users
+  },
+  source: {
+    entry: {
+      index: "./src/index.ts",
+      "cli/index": "./src/cli/index.ts",
+    },
   },
 });
