@@ -28,7 +28,15 @@ flowchart TD
 
 ## Startup Flow
 
-`startup(startupOptions)` accepts `AgentConfigCreationOptions`. It creates a config session, then calls `scanPRs` with:
+Two entry points exist:
+
+**1. `startup(startupOptions)`** (backwards compat for demo.ts, evaluation)
+Accepts `AgentConfigCreationOptions`. Creates a config session via `AgentConfigSession.createAgentConfigSession()`, then calls `runScanLoop()`.
+
+**2. `startScanWithProvider(provider)`** (used by CLI)
+Accepts a pre-created `ConfigProvider`. Registers it via `AgentConfigSession.registerProvider()`, then calls `runScanLoop()`.
+
+Both converge on `runScanLoop(agentConfig: ConfigProvider)`, which calls `scanPRs` with:
 
 ```ts
 {
@@ -38,14 +46,14 @@ flowchart TD
 }
 ```
 
-`scanPRs` returns an RxJS `Observable` of pending pull requests. For every pending PR, `startup` creates a Mastra workflow run, sets `configSessionId` in `RuntimeContext`, streams the workflow, and logs every full-stream output.
+`scanPRs` returns an RxJS `Observable` of pending pull requests. For every pending PR, `runScanLoop` creates a Mastra workflow run, sets `configSessionId` in `RuntimeContext`, streams the workflow, and logs every full-stream output.
 
 ## PR Scan Flow
 
 `scanPRs`:
 
 1. Reads `scanRepoNames` and `scanPRCreatedDaysAgo` from root config.
-2. Gets repositories from the ADO client.
+2. Gets repositories from the ADO client (cached for 24 hours via module-level cache).
 3. Applies repository name glob patterns through `minimatch`.
 4. Fetches active PRs created within the configured time window.
 5. Skips PRs without ids.
