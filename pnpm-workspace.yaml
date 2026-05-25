@@ -1,6 +1,6 @@
 packages:
-  - "agents/*"
-  - "packages/*"
+  - agents/*
+  - packages/*
 
 allowBuilds:
   core-js: true
@@ -8,3 +8,7 @@ allowBuilds:
   protobufjs: true
 
 minimumReleaseAge: 0
+
+onlyBuiltDependencies:
+  - esbuild
+  - protobufjs
