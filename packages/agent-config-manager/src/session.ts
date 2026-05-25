@@ -1,13 +1,9 @@
-import { type AgentConfigClient, createAgentConfigClient } from "./config";
-import type { AgentConfigCreationOptions } from "./types";
+import { createAgentConfigClient } from "./config";
+import type { AgentConfigCreationOptions, ConfigProvider } from "./types";
 
-type AgentSession = {
+export type AgentSession = {
   id: string;
-  options: Omit<
-    AgentConfigCreationOptions,
-    "adoToken" | "sonarQubeToken" | "ormConnectionUrl"
-  >;
-  config: AgentConfigClient;
+  config: ConfigProvider;
 };
 
 export class AgentConfigSession {
@@ -17,36 +13,27 @@ export class AgentConfigSession {
 
   public async createAgentConfigSession(
     agentConfigCreationOptions: AgentConfigCreationOptions,
-  ) {
+  ): Promise<ConfigProvider> {
     const agentConfigClient = await createAgentConfigClient(
       agentConfigCreationOptions,
     );
-    const { adoToken, sonarQubeToken, ormConnectionUrl, ...restConfig } =
-      agentConfigCreationOptions;
     this.agentConfigSessions.set(agentConfigClient.id, {
       config: agentConfigClient,
-      options: restConfig,
       id: agentConfigClient.id,
     });
     return agentConfigClient;
   }
 
-  public getAgentConfigSession(id: string): AgentSession | undefined {
-    return this.agentConfigSessions.get(id);
+  public registerProvider(provider: ConfigProvider): ConfigProvider {
+    this.agentConfigSessions.set(provider.id, {
+      config: provider,
+      id: provider.id,
+    });
+    return provider;
   }
 
-  public findOrCreateAgentConfigSession(
-    agentConfigCreationOptions: AgentConfigCreationOptions,
-  ) {
-    for (const session of this.agentConfigSessions.values()) {
-      if (
-        JSON.stringify(session.options) ===
-        JSON.stringify(agentConfigCreationOptions)
-      ) {
-        return session.config;
-      }
-    }
-    return this.createAgentConfigSession(agentConfigCreationOptions);
+  public getAgentConfigSession(id: string): AgentSession | undefined {
+    return this.agentConfigSessions.get(id);
   }
 
   public clearSessions() {
