@@ -1,9 +1,12 @@
 {
-  "name": "ratan-code-review-agent",
-  "version": "0.0.1",
-  "private": true,
+  "name": "ratan-code-review",
+  "version": "0.1.0",
+  "private": false,
   "license": "ISC",
   "type": "module",
+  "bin": {
+    "ratan-code-review": "./bin/ratan-code-review.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -14,7 +17,9 @@
   "main": "./dist/index.cjs",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "bin",
+    ".mastra"
   ],
   "scripts": {
     "dev": "cross-env MASTRA_TELEMETRY_DISABLED=1 mastra dev",
@@ -23,7 +28,11 @@
     "build": "NODE_OPTIONS='--max-old-space-size=4096' rslib build",
     "mastra:build": "cross-env MASTRA_TELEMETRY_DISABLED=1 PNPM_CONFIG_DANGEROUSLY_ALLOW_ALL_BUILDS=true mastra build",
     "start": "cross-env MASTRA_TELEMETRY_DISABLED=1 node --loader=./scripts/protobufjs-esm-loader.mjs --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs",
-    "codegen": "tsx ./src/evaluation/json-schema-generator.ts"
+    "codegen": "tsx ./src/evaluation/json-schema-generator.ts",
+    "prepublish": "pnpm build && pnpm mastra:build"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "devDependencies": {
     "@rslib/core": "^0.18.6",
@@ -35,7 +44,6 @@
     "typescript": "^5.9.3",
     "vitest": "^4.0.10"
   },
-  "author": "Shuai,Lu (shuai.lu@sc.com)",
   "dependencies": {
     "@ai-sdk/openai": "^3.0.65",
     "@mastra/core": "^1.36.0",
@@ -44,6 +52,7 @@
     "@mastra/memory": "^1.19.0",
     "agent-config-manager": "workspace:*",
     "ai": "^6.0.191",
+    "commander": "^13.0.0",
     "handlebars": "^4.7.8",
     "minimatch": "^10.1.1",
     "openai": "^6.9.0",
@@ -57,5 +66,6 @@
     "talisman": "^1.1.4",
     "zod": "^4.1.12"
   },
+  "author": "Shuai,Lu (shuai.lu@sc.com)",
   "keywords": []
 }
