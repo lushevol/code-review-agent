@@ -53,10 +53,33 @@ Expected environment:
 
 ```env
 ADO_TOKEN=...
+ADO_CONFIG_REPO=...
+ADO_CONFIG_BRANCH=...
+ADO_ORGANIZATION=...
+ADO_PROJECT=...
+ADO_CONFIG_BASE_PATH=...
+ADO_PROXY_URL=none
 SONARQUBE_TOKEN=...
 DATABASE_URL=...
 GENAISCRIPT_MODEL_LARGE=github_copilot_chat:gpt-4.1
 ```
+
+Use `ADO_PROXY_URL=none` when the host can reach Azure DevOps directly. Omit it or set a proxy URL when the host must use a corporate proxy.
+
+## Azure DevOps MCP Access
+
+Codex has a global Azure DevOps MCP server registered as `azure-devops`.
+The server launcher is `scripts/ado-mcp.sh`. It reads the project `.env`,
+derives the MCP `PERSONAL_ACCESS_TOKEN` from `ADO_TOKEN` at runtime, and runs:
+
+```bash
+npx -y @azure-devops/mcp "$ADO_ORGANIZATION" --authentication pat
+```
+
+The launcher has been smoke-tested with newline-delimited JSON-RPC and exposes
+Azure DevOps MCP tools for organization `lushe`. If tools are not visible in a
+running Codex session, restart Codex or open a new session so the newly
+registered MCP server is loaded.
 
 The LLM client is currently configured in `src/mastra/agents/openai-client.ts`:
 
@@ -73,15 +96,24 @@ Use these commands when dependencies are installed:
 
 ```bash
 pnpm build
-pnpm mastra:build
-pnpm codegen
-pnpm dev
-pnpm demo
+pnpm test
+pnpm agent:mastra:build
+pnpm --filter ratan-code-review-agent codegen
 ```
 
-`pnpm demo` is not a safe default because it starts the live PR scanning flow from `src/demo.ts`.
+CLI/package validation without posting comments:
 
-There is a Vitest config, but `package.json` does not currently define a `test` script. Add one before expecting `pnpm test` to work.
+```bash
+pnpm --filter ratan-code-review-agent build
+node agents/ratan-code-review-agent/dist/cli.js --help
+node agents/ratan-code-review-agent/dist/cli.js doctor
+pnpm -r pack --pack-destination /tmp/code-review-agent-packs
+npm publish --dry-run /tmp/code-review-agent-packs/ratan-code-review-agent-0.0.1.tgz
+```
+
+`pnpm agent:dev`, `pnpm agent:demo`, and `ratan-code-review-agent run` are not safe defaults because they can start live PR scanning and comment posting.
+
+Use `ratan-code-review-agent doctor` as the first live ADO check. It connects to ADO and loads the external `config.json`, but it does not scan PRs or post comments.
 
 ## Suggested Harness Test Strategy
 
@@ -173,6 +205,7 @@ Harness tests should verify prompt inputs, but should not assume prompt text is 
 
 Before allowing live PR review:
 
+- Run `ratan-code-review-agent doctor` successfully against the intended `ADO_CONFIG_REPO`, `ADO_CONFIG_BRANCH`, and `ADO_CONFIG_BASE_PATH`.
 - Confirm the target repositories and PR age window in root config.
 - Confirm `ADO_TOKEN` and `SONARQUBE_TOKEN` are scoped correctly.
 - Confirm the model endpoint at `http://localhost:1218/v1` is running and compatible with the AI SDK.
@@ -180,6 +213,8 @@ Before allowing live PR review:
 - Confirm allowlist/blocklist patterns.
 - Confirm whether the `locate-pr-changes` return value should use filtered `codeChangesArray`.
 - Run against a dedicated test PR before enabling broad scanning.
+
+Current status: local build/test/package checks pass, the installed CLI can authenticate to ADO, the Azure DevOps MCP server is registered and smoke-tested, `ratan-code-review-agent doctor` passes, and the configured prompt files load through `agent-config-manager`. The config repo currently has starter prompt content and `scanRepoNames` is intentionally set to `__replace_with_target_repo_name__`; do not claim end-to-end ADO review operation until the target repo is configured and a dedicated live test PR review has been completed.
 
 ## Recommended Improvements
 

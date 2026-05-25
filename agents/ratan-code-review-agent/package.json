@@ -1,18 +1,18 @@
 {
   "name": "ratan-code-review-agent",
   "version": "0.0.1",
-  "private": true,
   "license": "ISC",
   "type": "module",
+  "bin": {
+    "ratan-code-review-agent": "./dist/cli.js"
+  },
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     }
   },
   "main": "./dist/index.cjs",
-  "types": "./dist/index.d.ts",
   "files": [
     "dist"
   ],
@@ -20,9 +20,9 @@
     "dev": "cross-env MASTRA_TELEMETRY_DISABLED=1 mastra dev",
     "demo": "cross-env MASTRA_TELEMETRY_DISABLED=1 NODE_TLS_REJECT_UNAUTHORIZED=0 tsx src/demo.ts",
     "test-api": "tsx src/mastra/agents/test-api.ts",
-    "build": "NODE_OPTIONS='--max-old-space-size=4096' rslib build",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 rslib build",
     "mastra:build": "cross-env MASTRA_TELEMETRY_DISABLED=1 PNPM_CONFIG_DANGEROUSLY_ALLOW_ALL_BUILDS=true mastra build",
-    "start": "cross-env MASTRA_TELEMETRY_DISABLED=1 node --loader=./scripts/protobufjs-esm-loader.mjs --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs",
+    "start": "cross-env MASTRA_TELEMETRY_DISABLED=1 node --loader=./scripts/protobufjs-esm-loader.mjs .mastra/output/index.mjs",
     "codegen": "tsx ./src/evaluation/json-schema-generator.ts"
   },
   "devDependencies": {

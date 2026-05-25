@@ -1,6 +1,7 @@
 import {
   type GitCommitDiffs,
   GitVersionType,
+  VersionControlRecursionType,
 } from "azure-devops-node-api/interfaces/GitInterfaces.js";
 import type { AdoWebApi } from "./interfaces";
 import { getReleasedPipelineRuns } from "./pipeline";
@@ -13,19 +14,38 @@ export async function getFileContent(
   const webApi = this.adoWebApi as AdoWebApi;
   const projectName = this.getProjectName();
   const gitApi = await webApi.getGitApi();
+  const normalizedFilePath = filePath.startsWith("/")
+    ? filePath
+    : `/${filePath}`;
 
-  const res = await gitApi.getItemContent(
+  const items = await gitApi.getItemsBatch(
+    {
+      includeContentMetadata: true,
+      latestProcessedChange: true,
+      itemDescriptors: [
+        {
+          path: normalizedFilePath,
+          recursionLevel: VersionControlRecursionType.None,
+          version: branch,
+          versionOptions: 0,
+          versionType: GitVersionType.Branch,
+        },
+      ],
+    },
     repo,
-    filePath,
     projectName,
-    undefined,
-    0,
-    true,
-    true,
+  );
+  const item = items?.[0]?.[0];
+  if (!item?.objectId) {
+    throw new Error(`File not found: ${normalizedFilePath}`);
+  }
+
+  const res = await gitApi.getBlobContent(
+    repo,
+    item.objectId,
+    projectName,
     false,
-    { version: branch, versionOptions: 0, versionType: 0 },
-    true,
-    true,
+    undefined,
     true,
   );
 

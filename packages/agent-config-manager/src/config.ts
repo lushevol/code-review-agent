@@ -51,6 +51,7 @@ export class AgentConfigClient {
     this.adoClient = new AzureDevOps({
       organization: validOptions.organization,
       project: validOptions.project,
+      proxy: validOptions.adoProxyUrl,
     });
     this.sonarQubeClient = new SonarQubeClient();
     this.id = v4();

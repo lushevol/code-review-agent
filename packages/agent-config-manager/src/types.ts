@@ -6,6 +6,7 @@ export const AgentConfigCreationOptionsSchema = z.object({
   ormConnectionUrl: z.string().optional(),
   organization: z.string().optional(),
   project: z.string().optional(),
+  adoProxyUrl: z.string().optional(),
   repoName: z.string(),
   branch: z.string(),
   basePath: z.string().optional(),

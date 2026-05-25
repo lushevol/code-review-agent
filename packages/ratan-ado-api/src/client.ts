@@ -88,6 +88,16 @@ export class AzureDevOps {
   private API_TOKEN = "";
   private ADO_PROXY_URL = config.ADO_PROXY_URL || "";
 
+  private resolveProxyUrl(proxy: string | undefined) {
+    if (proxy === undefined) {
+      return this.ADO_PROXY_URL;
+    }
+    if (proxy.trim().toLowerCase() === "none") {
+      return "";
+    }
+    return proxy;
+  }
+
   constructor({
     proxy,
     organization,
@@ -97,9 +107,7 @@ export class AzureDevOps {
     organization?: string;
     project?: string;
   } = {}) {
-    if (proxy) {
-      this.ADO_PROXY_URL = proxy;
-    }
+    this.ADO_PROXY_URL = this.resolveProxyUrl(proxy);
     if (organization) {
       this.API_ORGANIZATION = organization;
     }
@@ -116,12 +124,7 @@ export class AzureDevOps {
     try {
       this.API_TOKEN = token;
       const authHandler = vm.getPersonalAccessTokenHandler(this.API_TOKEN);
-      const option: IRequestOptions = {
-        proxy: {
-          proxyUrl: this.ADO_PROXY_URL,
-        },
-        ignoreSslError: true,
-      };
+      const option = this.createRequestOptions();
 
       const vsts: vm.WebApi = new vm.WebApi(
         this.getServerUrl(),
@@ -162,6 +165,18 @@ export class AzureDevOps {
 
   getAdoClient() {
     return this.adoWebApi;
+  }
+
+  private createRequestOptions(): IRequestOptions {
+    const option: IRequestOptions = {
+      ignoreSslError: true,
+    };
+    if (this.ADO_PROXY_URL) {
+      option.proxy = {
+        proxyUrl: this.ADO_PROXY_URL,
+      };
+    }
+    return option;
   }
 
   getPullRequestListByRepoName = getPullRequestListByRepoName;
