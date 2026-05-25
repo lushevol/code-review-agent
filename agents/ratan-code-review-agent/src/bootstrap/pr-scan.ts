@@ -11,6 +11,24 @@ const PendingPRSchema = z.object({
 
 type PendingPR = z.infer<typeof PendingPRSchema>;
 
+// Repo list cache: 24h TTL
+const REPO_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+let cachedRepos: { name?: string }[] | null = null;
+let lastRepoFetch = 0;
+
+async function getCachedRepos(adoClient: { getRepos(): Promise<{ name?: string }[]> }) {
+  const now = Date.now();
+  if (!cachedRepos || now - lastRepoFetch > REPO_CACHE_TTL_MS) {
+    console.log("[scanPRs] Fetching repo list from ADO...");
+    cachedRepos = await adoClient.getRepos();
+    lastRepoFetch = now;
+    console.log(`[scanPRs] Cached ${cachedRepos.length} repos (24h TTL)`);
+  } else {
+    console.log(`[scanPRs] Using cached repo list (${cachedRepos.length} repos)`);
+  }
+  return cachedRepos;
+}
+
 export const scanPRs = ({
   requestContext,
 }: {
@@ -37,7 +55,7 @@ export const scanPRs = ({
       );
 
       const adoClient = agentConfig.getAdoClient();
-      const myRepos = await adoClient.getRepos();
+      const myRepos = await getCachedRepos(adoClient);
       console.log(`[scanPRs] Total repos fetched: ${myRepos.length}`);
 
       const ratanRepos = repoNamePatterns.length
