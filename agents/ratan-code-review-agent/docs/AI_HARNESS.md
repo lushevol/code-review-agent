@@ -72,16 +72,29 @@ If the harness needs to run agents against another endpoint, change this through
 Use these commands when dependencies are installed:
 
 ```bash
+# Build all packages
 pnpm build
+
+# Run tests
+pnpm test
+
+# Build Mastra artifacts
 pnpm mastra:build
+
+# Regenerate evaluation JSON schema
 pnpm codegen
+
+# CLI usage (after build)
+node bin/ratan-code-review.js --help
+node bin/ratan-code-review.js init  # scaffold config
+node bin/ratan-code-review.js scan  # one-shot PR scan
+
+# Live side-effectful commands (not safe default)
 pnpm dev
 pnpm demo
 ```
 
-`pnpm demo` is not a safe default because it starts the live PR scanning flow from `src/demo.ts`.
-
-There is a Vitest config, but `package.json` does not currently define a `test` script. Add one before expecting `pnpm test` to work.
+`pnpm demo` is not a safe default because it starts the live PR scanning flow from `src/demo.ts`. The `scan` CLI command also has external side effects (ADO calls) and requires a valid config.
 
 ## Suggested Harness Test Strategy
 
