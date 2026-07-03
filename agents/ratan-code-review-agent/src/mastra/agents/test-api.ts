@@ -1,4 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
+import { generateText } from "ai";
 
 const openai = createOpenAI({
   name: "openai",
@@ -6,19 +7,9 @@ const openai = createOpenAI({
   baseURL: "http://localhost:1218/v1",
 });
 
-openai("gpt-5-mini")
-  .doGenerate({
-    inputFormat: "prompt",
-    mode: {
-      type: "regular",
-    },
-    prompt: [
-      {
-        role: "system",
-        content: "Hello, how are you?",
-      },
-    ],
-  })
-  .then((res) => {
-    console.log("Response:", res.text);
-  });
+const response = await generateText({
+  model: openai("gpt-5-mini"),
+  prompt: "Hello, how are you?",
+});
+
+console.log("Response:", response.text);

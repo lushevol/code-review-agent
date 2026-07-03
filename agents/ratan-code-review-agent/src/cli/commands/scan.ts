@@ -1,14 +1,20 @@
 import { loadConfig } from "../config/loader";
-import { startScanWithProvider } from "../../bootstrap";
+import { startReviewPrWithProvider, startScanWithProvider } from "../../bootstrap";
 
 export interface ScanOptions {
   config?: string;
   watch?: boolean;
+  prId?: number;
 }
 
 export async function scan(options: ScanOptions) {
   const { provider } = await loadConfig(options.config);
   await provider.connect();
+
+  if (options.prId !== undefined) {
+    await startReviewPrWithProvider(provider, options.prId);
+    return;
+  }
 
   if (options.watch) {
     await runWatchLoop(provider, options);

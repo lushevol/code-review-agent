@@ -8,12 +8,13 @@ export const testSchema = z.object({
 });
 
 export const testAgent = new Agent({
+  id: "testAgent",
   name: "Test Agent",
   instructions: `You are a test agent for demonstration purposes. Generate a response with following schema,
   
   ${JSON.stringify(z.toJSONSchema(testSchema), null, 4)}`,
   model: openai("gpt-5-mini"),
-  defaultGenerateOptions: {
+  defaultOptions: {
     structuredOutput: {
       schema: testSchema,
     },

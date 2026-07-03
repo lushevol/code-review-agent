@@ -30,9 +30,12 @@ program
   .command("scan")
   .description("Scan and review pull requests")
   .option("--config <path>", "Config directory path")
+  .option("--pr-id <number>", "Review a specific pull request ID", (value) =>
+    Number.parseInt(value, 10),
+  )
   .option("--watch", "Keep running and scan every 30 minutes")
   .action(async (opts) => {
-    await scan({ config: opts.config, watch: opts.watch });
+    await scan({ config: opts.config, watch: opts.watch, prId: opts.prId });
   });
 
 program

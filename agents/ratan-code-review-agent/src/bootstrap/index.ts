@@ -24,6 +24,17 @@ export const startScanWithProvider = async (provider: ConfigProvider) => {
   await runScanLoop(registered);
 };
 
+export const startReviewPrWithProvider = async (
+  provider: ConfigProvider,
+  prId: number,
+) => {
+  console.log(`[startReviewPrWithProvider] Reviewing PR: ${prId}`);
+
+  const registered = getAgentConfigSessions().registerProvider(provider);
+
+  await runReviewWorkflow(registered, prId);
+};
+
 async function runScanLoop(agentConfig: ConfigProvider) {
   console.log("[startup] Agent config session created:", agentConfig.id);
 
@@ -35,25 +46,29 @@ async function runScanLoop(agentConfig: ConfigProvider) {
 
   pendingPR$.subscribe(async ({ prId }) => {
     console.log(`[startup] Received pending PR: ${prId}`);
-    const prReviewWorkflow = mastra.getWorkflow("prReviewWorkflow");
-    const run = prReviewWorkflow.createRun();
-
-    console.log(`[startup] Running prReviewWorkflow for PR: ${prId}`);
-
-    const requestContext: CommonRequestContext = new RequestContext();
-    requestContext.set("configSessionId", agentConfig.id);
-    const result = run.stream({
-      inputData: {
-        prId,
-      },
-      requestContext: requestContext as RequestContext,
-    });
-
-    for await (const output of result.fullStream) {
-      console.log("PR Review Workflow Output:", output);
-    }
-    console.log(`[startup] Finished processing PR: ${prId}`);
+    await runReviewWorkflow(agentConfig, prId);
   });
+}
+
+async function runReviewWorkflow(agentConfig: ConfigProvider, prId: number) {
+  const prReviewWorkflow = mastra.getWorkflow("prReviewWorkflow");
+  const run = await prReviewWorkflow.createRun();
+
+  console.log(`[startup] Running prReviewWorkflow for PR: ${prId}`);
+
+  const requestContext: CommonRequestContext = new RequestContext();
+  requestContext.set("configSessionId", agentConfig.id);
+  const result = run.stream({
+    inputData: {
+      prId,
+    },
+    requestContext: requestContext as RequestContext,
+  });
+
+  for await (const output of result.fullStream) {
+    console.log("PR Review Workflow Output:", output);
+  }
+  console.log(`[startup] Finished processing PR: ${prId}`);
 }
 
 export const startupEvaluation = async (

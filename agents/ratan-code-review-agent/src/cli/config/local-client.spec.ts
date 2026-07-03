@@ -119,6 +119,21 @@ describe("LocalConfigClient", () => {
     expect(config.prompts).toEqual(["prompts/review.md"]); // from agent
   });
 
+  it("stores the ADO proxy override for connection setup", () => {
+    const client = new LocalConfigClient({
+      configDir: FIXTURES_DIR,
+      config: { agents: { review: {} } },
+      ado: { organization: "o", project: "p" },
+      adoToken: "t",
+      adoProxyUrl: "none",
+    });
+
+    expect(
+      (client as unknown as { options: { adoProxyUrl?: string } }).options
+        .adoProxyUrl,
+    ).toBe("none");
+  });
+
   it("throws when configDir is missing in constructor", () => {
     expect(
       () =>

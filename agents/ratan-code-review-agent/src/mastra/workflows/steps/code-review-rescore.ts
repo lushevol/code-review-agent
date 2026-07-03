@@ -57,7 +57,7 @@ export const codeReviewRescore = createStep({
     const codeReviewRescoreAgent = mastra.getAgent("codeReviewRescoreAgent");
     const output = await codeReviewRescoreAgent.generate(prompt);
 
-    const rerankResults = output.result as CodeReviewRescore[];
+    const rerankResults = output.object as CodeReviewRescore[];
     return {
       issues: issues.map((e, idx) => {
         const rerankResult = rerankResults.find((r) => r.index === idx);

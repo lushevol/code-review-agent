@@ -16,6 +16,7 @@ interface RawWrapperConfig {
     project: string;
     token?: string;
   };
+  adoProxyUrl?: string;
   sonarQubeToken?: string;
   databaseUrl?: string;
   config?: RootAgentConfig;
@@ -94,6 +95,7 @@ export async function loadConfig(
       config: resolved.config,
       ado: resolved.ado,
       adoToken: resolved.ado.token,
+      adoProxyUrl: resolved.adoProxyUrl,
       sonarQubeToken: resolved.sonarQubeToken,
       databaseUrl: resolved.databaseUrl,
     });
@@ -111,6 +113,7 @@ export async function loadConfig(
       repoName: resolved.configRepo,
       branch: resolved.configBranch,
       basePath: resolved.configBasePath,
+      adoProxyUrl: resolved.adoProxyUrl,
       sonarQubeToken: resolved.sonarQubeToken,
       ormConnectionUrl: resolved.databaseUrl,
     });

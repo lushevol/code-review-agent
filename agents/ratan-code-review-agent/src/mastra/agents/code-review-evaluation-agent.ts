@@ -7,6 +7,7 @@ import { openai } from "./openai-client";
 type EvaluationRequestContext = RequestContext<AIJudgeInput>;
 
 export const codeReviewEvaluationJudgeAgent = new Agent({
+  id: "codeReviewEvaluationJudgeAgent",
   name: "Code Review Evaluation Judge Agent",
   instructions: ({ requestContext }) => `
   You are an expert Senior Software Engineer acting as a QA Judge for an AI Code Reviewer.
@@ -42,7 +43,7 @@ export const codeReviewEvaluationJudgeAgent = new Agent({
   ${structureOutputPrompt(aiJudgeOutputSchema)}
 `,
   model: openai("gpt-5-mini"),
-  defaultGenerateOptions: {
+  defaultOptions: {
     structuredOutput: {
       schema: aiJudgeOutputSchema,
     },

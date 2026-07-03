@@ -16,6 +16,7 @@ export interface LocalConfigOptions {
   config: RootAgentConfig;
   ado: { organization: string; project: string };
   adoToken?: string;
+  adoProxyUrl?: string;
   sonarQubeToken?: string;
   /** Reserved for future ORM support. Not currently used. */
   databaseUrl?: string;
@@ -46,6 +47,7 @@ export class LocalConfigClient implements ConfigProvider {
       this.adoClient = new AzureDevOps({
         organization: this.options.ado.organization,
         project: this.options.ado.project,
+        proxy: this.options.adoProxyUrl,
       });
       await this.adoClient.connect(this.options.adoToken);
     }

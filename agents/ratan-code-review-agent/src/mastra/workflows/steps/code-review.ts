@@ -63,10 +63,11 @@ export const codeReview = createStep({
         `;
 
         const output = await codeReviewAgent.generate(prompt);
-        (output.result as CodeReviewIssue[]).forEach(
+        const reviewIssues = output.object as CodeReviewIssue[];
+        reviewIssues.forEach(
           (i) => (i.file = change.newFilePath ?? change.oldFilePath ?? i.file),
         );
-        issues.push(...(output.result as CodeReviewIssue[]));
+        issues.push(...reviewIssues);
       }
     }
 

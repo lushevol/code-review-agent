@@ -64,7 +64,7 @@ export const CodeReviewIssueClassificationStep = createStep({
       await codeReviewIssueClassificationAgent.generate(prompt);
 
     const classificationResults =
-      output.result as CodeReviewIssueClassification[];
+      output.object as CodeReviewIssueClassification[];
     return {
       issues: issues.map((e, idx) => {
         const classificationResult = classificationResults.find(
