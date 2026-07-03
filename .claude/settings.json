@@ -2,6 +2,6 @@
   "enabledPlugins": {
     "imessage@claude-plugins-official": false,
     "remember@claude-plugins-official": true,
-    "understand-anything@understand-anything": true
+    "understand-anything@understand-anything": false
   }
 }
