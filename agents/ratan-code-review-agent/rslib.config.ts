@@ -4,7 +4,7 @@ export default defineConfig({
   source: {
     entry: {
       index: "./src/index.ts",
-      cli: "./src/cli.ts",
+      cli: "./src/cli/index.ts",
     },
   },
   lib: [
@@ -20,11 +20,5 @@ export default defineConfig({
   ],
   output: {
     minify: false, // Better stack traces for CLI users
-  },
-  source: {
-    entry: {
-      index: "./src/index.ts",
-      "cli/index": "./src/cli/index.ts",
-    },
   },
 });

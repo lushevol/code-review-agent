@@ -27,10 +27,11 @@ The public entry point in `src/index.ts` exports:
 - `mastra` from `src/mastra/index.ts`
 - shared types from `src/mastra/types`
 
-The package also builds an npm CLI entry point:
+The package also builds an npm CLI entry point `ratan-code-review` with commands:
 
-- `ratan-code-review-agent run` starts the live ADO review scanner and can post PR comments.
-- `ratan-code-review-agent doctor` performs a read-only ADO/config check and does not scan PRs or post comments.
+- `scan` — one-shot PR review scan (`--watch` for 30-min interval).
+- `studio` — launches the pre-built Mastra Studio web UI.
+- `init` — scaffolds `.ratan/code-review-agent/config.json` with defaults.
 
 Runtime work starts in `startup`. It creates an `agent-config-manager` session, scans for pending PRs, and starts a Mastra `prReviewWorkflow` run for each pending PR. Each run receives only a `configSessionId` in runtime context; steps use that id to recover the configured ADO and SonarQube clients.
 

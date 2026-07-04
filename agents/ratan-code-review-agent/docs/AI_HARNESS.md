@@ -209,7 +209,7 @@ Harness tests should verify prompt inputs, but should not assume prompt text is 
 
 Before allowing live PR review:
 
-- Run `ratan-code-review-agent doctor` successfully against the intended `ADO_CONFIG_REPO`, `ADO_CONFIG_BRANCH`, and `ADO_CONFIG_BASE_PATH`.
+- Run `ratan-code-review init` to scaffold a valid config, then verify ADO connectivity with `ratan-code-review scan` against a test PR first.
 - Confirm the target repositories and PR age window in root config.
 - Confirm `ADO_TOKEN` and `SONARQUBE_TOKEN` are scoped correctly.
 - Confirm the model endpoint at `http://localhost:1218/v1` is running and compatible with the AI SDK.
@@ -218,7 +218,7 @@ Before allowing live PR review:
 - Confirm whether the `locate-pr-changes` return value should use filtered `codeChangesArray`.
 - Run against a dedicated test PR before enabling broad scanning.
 
-Current status: local build/test/package checks pass, the installed CLI can authenticate to ADO, the Azure DevOps MCP server is registered and smoke-tested, `ratan-code-review-agent doctor` passes, and the configured prompt files load through `agent-config-manager`. The config repo currently has starter prompt content and `scanRepoNames` is intentionally set to `__replace_with_target_repo_name__`; do not claim end-to-end ADO review operation until the target repo is configured and a dedicated live test PR review has been completed.
+Current status: local build/test/package checks pass, the installed CLI can authenticate to ADO, the Azure DevOps MCP server is registered and smoke-tested, and the configured prompt files load through `agent-config-manager`. The config repo currently has starter prompt content and `scanRepoNames` is intentionally set to `__replace_with_target_repo_name__`; do not claim end-to-end ADO review operation until the target repo is configured and a dedicated live test PR review has been completed.
 
 ## Recommended Improvements
 
