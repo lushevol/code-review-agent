@@ -11,6 +11,7 @@ const prReviewIssuesWorkflow = createWorkflow({
   id: "pr-review-issues-workflow",
   inputSchema: z.object({
     prDetails: PullRequestSchema,
+    workItemContext: z.string().optional(),
   }),
   outputSchema: z.object({
     issues: z.array(CodeReviewIssueWithCategorySchema),

@@ -40,6 +40,8 @@
     "mastra": "^1.10.0",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
     "vitest": "^4.0.10"
   },
   "dependencies": {
@@ -51,6 +53,9 @@
     "agent-config-manager": "workspace:*",
     "ai": "^6.0.191",
     "commander": "^13.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "finding-store": "workspace:*",
     "handlebars": "^4.7.8",
     "minimatch": "^10.1.1",
     "openai": "^6.9.0",
@@ -62,6 +67,7 @@
     "request": "^2.88.2",
     "rxjs": "7.8.2",
     "talisman": "^1.1.4",
+    "yaml": "^2.5.0",
     "zod": "^4.1.12"
   },
   "author": "Shuai,Lu (shuai.lu@sc.com)",

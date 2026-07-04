@@ -8,10 +8,12 @@ import { maskSensitiveData } from "../../utils/sensitive-data-mask";
 
 const LocateChangesInputSchema = z.object({
   prDetails: PullRequestSchema,
+  workItemContext: z.string().optional(),
 });
 
 const LocateChangesResultSchema = z.object({
   prDetails: PullRequestSchema,
+  workItemContext: z.string().optional(),
 });
 
 export const locateChanges = createStep({
@@ -37,6 +39,7 @@ export const locateChanges = createStep({
       codeDiffs,
       codeDiffsArray,
     } = inputData.prDetails;
+    const { workItemContext } = inputData;
 
     let codeChangesArray = codeDiffsArray?.map((i) => {
       const { newFilePath, oldFilePath, changeType, changes } = i;
@@ -99,6 +102,7 @@ export const locateChanges = createStep({
         codeDiffs: maskSensitiveData(codeDiffs),
         codeDiffsArray,
       },
+      workItemContext,
     };
   },
 });

@@ -5,14 +5,25 @@ import {
   CodeReviewIssueWithCategorySchema,
   type CommonRequestContext,
 } from "../../types";
+import { NormalizedFindingSchema } from "../../types/finding";
 import { codeCommentHelper } from "../../utils/code-comment";
 import { CODE_REVIEW_AGENT_LATEST_REVIEW_ID } from "../../utils/const";
+import { reconcileFindings } from "../utils/finding-reconciler";
+import { FindingStore } from "finding-store";
 import type { PRDetailsResult } from "./fetch-pr";
 
 const CommentInputSchema = z.object({
-  "pr-review-issues-workflow": z.object({
-    issues: z.array(CodeReviewIssueWithCategorySchema),
-  }),
+  "scanner-pipeline": z
+    .object({
+      findings: z.array(NormalizedFindingSchema),
+      correlationSummary: z.string(),
+    })
+    .optional(),
+  "pr-review-issues-workflow": z
+    .object({
+      issues: z.array(CodeReviewIssueWithCategorySchema),
+    })
+    .optional(),
   "code-summary": z.object({
     codeChangeSummary: z.string().describe("The summary of the code changes"),
   }),
@@ -40,13 +51,14 @@ export const comment = createStep({
       throw new Error("Input data not found");
     }
 
+    const { prDetails } = getStepResult("fetch-pr-details") as PRDetailsResult;
+
     const {
+      "scanner-pipeline": scannerPipeline,
       "pr-review-issues-workflow": prReviewIssues,
       "code-summary": codeSummary,
       "sonarqube-measures": sonarqubeMeasures,
     } = inputData;
-
-    const { prDetails } = getStepResult("fetch-pr-details") as PRDetailsResult;
 
     const agentConfig = extractAgentConfig(
       requestContext as unknown as CommonRequestContext,
@@ -54,40 +66,110 @@ export const comment = createStep({
 
     const adoClient = agentConfig.getAdoClient();
 
+    // Use findings from scanner pipeline (new) or from old sub-workflow
+    const findings = scannerPipeline?.findings ?? [];
+    const oldIssues = prReviewIssues?.issues ?? [];
+
+    // ── "Changes since last review" section ──────────────────────────
+    let changesSinceLastReview = "";
+    try {
+      const rootConfig = await agentConfig.getRootConfig();
+      const findingStorePath = rootConfig.findingStorePath ?? ".ratan/code-review-agent/findings.db";
+      const findingStore = new FindingStore(findingStorePath);
+      findingStore.init();
+      const previousFindings = findingStore.getFindingsByPr(
+        prDetails.pullRequestId,
+        prDetails.repoName,
+      );
+      if (previousFindings.length > 0 && findings.length > 0) {
+        const reconciled = reconcileFindings(previousFindings, findings);
+        const parts: string[] = ["#### Changes since last review\n"];
+        if (reconciled.findingsToResolve.length > 0) {
+          parts.push(`✅ **${reconciled.findingsToResolve.length}** findings resolved`);
+        }
+        if (reconciled.findingsToSupersede.length > 0) {
+          parts.push(`🔄 **${reconciled.findingsToSupersede.length}** findings updated`);
+        }
+        if (reconciled.findingsToCreate.length > 0) {
+          parts.push(`🆕 **${reconciled.findingsToCreate.length}** new findings`);
+        }
+        if (parts.length > 1) {
+          changesSinceLastReview = parts.join("\n- ") + "\n\n";
+        }
+      }
+      findingStore.close();
+    } catch {
+      // FindingStore may not be configured — skip changes section
+    }
+
     const codeCommentIds: number[] = [];
-    // TODO: limit to 30 comments for now
-    const revertedErrors = [...prReviewIssues.issues].slice(0, 30).reverse();
-    for (const err of revertedErrors) {
+
+    // Post inline comments from scanner pipeline findings
+    const findingsToComment = findings.slice(0, 30);
+    for (const finding of findingsToComment) {
+      if (!finding.filePath || finding.lineStart === null) continue;
       try {
+        const commentText = `**${finding.severity.toUpperCase()}** - ${finding.title}` +
+          (finding.description ? `\n\n${finding.description}` : "") +
+          (finding.remediation ? `\n\n**Suggestion:** ${finding.remediation}` : "");
         const commentThread = await adoClient.addCommentThreadForPRCode({
           repoId: prDetails.repoId,
           pullRequestId: prDetails.pullRequestId,
-          comment: codeCommentHelper({
-            issue: err.message,
-            severity: err.severity,
-            priority: err.priority,
-            suggestion: err.suggestion,
-            suggestionCode: err.suggestion_code,
-            survey: true,
-          }),
-          filePath: err.file,
+          comment: `${commentText}\n\n<!-- survey: please provide feedback -->`,
+          filePath: finding.filePath,
           filePosition: "right",
-          fileStartLine: err.line,
-          fileEndLine: err.line,
+          fileStartLine: finding.lineStart,
+          fileEndLine: finding.lineEnd ?? finding.lineStart,
           fileStartOffset: 1,
           fileEndOffset: 1,
         });
 
         codeCommentIds.push(commentThread.id);
-      } catch (error) {}
+      } catch (error) {
+        // Silently skip per-line comment failures
+      }
     }
 
+    // Fallback: post old-format comments if no scanner pipeline findings
+    if (findings.length === 0) {
+      const revertedErrors = [...oldIssues].slice(0, 30).reverse();
+      for (const err of revertedErrors) {
+        try {
+          const commentThread = await adoClient.addCommentThreadForPRCode({
+            repoId: prDetails.repoId,
+            pullRequestId: prDetails.pullRequestId,
+            comment: codeCommentHelper({
+              issue: err.message,
+              severity: err.severity,
+              priority: err.priority,
+              suggestion: err.suggestion,
+              suggestionCode: err.suggestion_code,
+              survey: true,
+            }),
+            filePath: err.file,
+            filePosition: "right",
+            fileStartLine: err.line,
+            fileEndLine: err.line,
+            fileStartOffset: 1,
+            fileEndOffset: 1,
+          });
+
+          codeCommentIds.push(commentThread.id);
+        } catch (error) {}
+      }
+    }
+
+    const mainCommentSummary = (changesSinceLastReview || "") +
+      (scannerPipeline?.correlationSummary ??
+        (oldIssues.length > 0
+          ? `Found ${oldIssues.length} issues during code review.`
+          : "No issues detected."));
     const mainCommentThread = await adoClient.addCommentForPR(
       prDetails.repoName,
       prDetails.pullRequestId,
       {
-        approve: prReviewIssues.issues.length === 0,
-        errors: prReviewIssues.issues,
+        approve: (findings.length === 0 && oldIssues.length === 0),
+        errors: oldIssues,
       },
       codeSummary.codeChangeSummary,
       [],

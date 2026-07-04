@@ -19,7 +19,11 @@ import {
   getReleaseDiffChecking,
 } from "./git";
 import type { AdoWebApi } from "./interfaces";
-import { getSubscriptions } from "./notification";
+import {
+  createSubscription,
+  deleteSubscription,
+  getSubscriptions,
+} from "./notification";
 import {
   getPipelineByRepoName,
   getPipelineRuns,
@@ -39,6 +43,9 @@ import {
   isValidPullRequest,
   setPullRequestProperties,
 } from "./pull-request";
+import {
+  createPullRequestStatus,
+} from "./pull-request-status";
 import {
   addCommentForPR,
   addCommentThreadForPRCode,
@@ -212,6 +219,9 @@ export class AzureDevOps {
   getCommentThreadById = getCommentThreadById;
   updateCommentThreadStatus = updateCommentThreadStatus;
   getSubscriptions = getSubscriptions;
+  createSubscription = createSubscription;
+  deleteSubscription = deleteSubscription;
+  createPullRequestStatus = createPullRequestStatus;
   getBuildById = getBuildById;
   getBuildAttachmentContent = getBuildAttachmentContent;
   getBuildAttachments = getBuildAttachments;

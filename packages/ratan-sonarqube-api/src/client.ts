@@ -4,9 +4,45 @@
 
 import type { AxiosError, AxiosResponse } from "axios";
 import Sonar from "sonarqube-webapis";
-import { SonarMetricKey } from "sonarqube-webapis/dist/src/enums.js";
+import {
+  SonarIssuesSeverity,
+  SonarMetricKey,
+  SonarType,
+} from "sonarqube-webapis/dist/src/enums.js";
+import { IssuesStatus } from "sonarqube-webapis/dist/src/resources/index.js";
 import { MeasuresAdditionalFields } from "sonarqube-webapis/dist/src/resources/index.js";
 import type { MeasuresComponent, ParsedMeasuresComponent } from "./interfaces";
+
+export interface SonarIssueSearchResult {
+  total: number;
+  p: number;
+  ps: number;
+  issues: SonarIssue[];
+}
+
+export interface SonarIssue {
+  key: string;
+  rule: string;
+  severity: string;
+  component: string;
+  project: string;
+  line: number;
+  message: string;
+  effort: string;
+  debt: string;
+  tags: string[];
+  type: string;
+  status: string;
+  resolution: string;
+  creationDate: string;
+  updateDate: string;
+  textRange?: {
+    startLine: number;
+    endLine: number;
+    startOffset: number;
+    endOffset: number;
+  };
+}
 
 export class SonarQubeClient {
   private sonar!: Sonar;
@@ -45,6 +81,118 @@ export class SonarQubeClient {
       console.error("Errors: ", (error as AxiosError).response?.data);
       return false;
     }
+  }
+
+  public async searchIssues(
+    projectKey: string,
+    params: {
+      types?: string;
+      severities?: string;
+      statuses?: string;
+      p?: number;
+      ps?: number;
+      pullRequest?: number;
+      branch?: string;
+      resolutions?: string;
+    } = {},
+  ): Promise<SonarIssueSearchResult> {
+    try {
+      // The sonarqube-webapis library expects arrays of enum values for
+      // filter parameters. We accept comma-separated strings for convenience
+      // and split them into the expected types at call time.
+      const severities = params.severities?.split(",").filter(Boolean) as
+        | SonarIssuesSeverity[]
+        | undefined;
+      const statuses = params.statuses?.split(",").filter(Boolean) as
+        | IssuesStatus[]
+        | undefined;
+      const types = params.types?.split(",").filter(Boolean) as
+        | SonarType[]
+        | undefined;
+
+      const resp = await this.sonar.issues.search(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        [projectKey],
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        params.pullRequest !== undefined
+          ? String(params.pullRequest)
+          : undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        severities,
+        undefined,
+        statuses,
+        undefined,
+        types,
+        true,
+        false,
+        params.p ?? 1,
+        params.ps ?? 100,
+      );
+
+      return this.parseIssuesResponse(resp.data);
+    } catch (error) {
+      console.error("Error searching SonarQube issues:", (error as AxiosError).message);
+      throw error;
+    }
+  }
+
+  private parseIssuesResponse(data: unknown): SonarIssueSearchResult {
+    const d = data as Record<string, unknown>;
+    return {
+      total: Number(d.total ?? 0),
+      p: Number(d.p ?? 1),
+      ps: Number(d.ps ?? 100),
+      issues: ((d.issues as Record<string, unknown>[]) ?? []).map((issue) => ({
+        key: String(issue.key ?? ""),
+        rule: String(issue.rule ?? ""),
+        severity: String(issue.severity ?? ""),
+        component: String(issue.component ?? ""),
+        project: String(issue.project ?? ""),
+        line: Number(issue.line ?? 0),
+        message: String(issue.message ?? ""),
+        effort: String(issue.effort ?? ""),
+        debt: String(issue.debt ?? ""),
+        tags: (issue.tags as string[]) ?? [],
+        type: String(issue.type ?? ""),
+        status: String(issue.status ?? ""),
+        resolution: String(issue.resolution ?? ""),
+        creationDate: String(issue.creationDate ?? ""),
+        updateDate: String(issue.updateDate ?? ""),
+        textRange: issue.textRange
+          ? {
+              startLine: Number(
+                (issue.textRange as Record<string, unknown>).startLine ?? 0,
+              ),
+              endLine: Number(
+                (issue.textRange as Record<string, unknown>).endLine ?? 0,
+              ),
+              startOffset: Number(
+                (issue.textRange as Record<string, unknown>).startOffset ?? 0,
+              ),
+              endOffset: Number(
+                (issue.textRange as Record<string, unknown>).endOffset ?? 0,
+              ),
+            }
+          : undefined,
+      })),
+    };
   }
 
   public async getMeasures(

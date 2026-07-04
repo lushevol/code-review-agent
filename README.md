@@ -34,10 +34,10 @@ pnpm agent:mastra:build
 The installable CLI can be checked without contacting Azure DevOps:
 
 ```bash
-pnpm --filter ratan-code-review-agent build
+pnpm --filter ratan-code-review build
 node agents/ratan-code-review-agent/dist/cli.js --help
-node agents/ratan-code-review-agent/dist/cli.js doctor
-pnpm --filter ratan-code-review-agent pack --pack-destination /tmp
+node agents/ratan-code-review-agent/dist/cli.js init
+pnpm --filter ratan-code-review pack --pack-destination /tmp
 ```
 
 After `mastra:build`, start the generated Mastra API server with:
@@ -55,38 +55,45 @@ These commands connect to Azure DevOps and can create external side effects:
 ```bash
 pnpm agent:dev
 pnpm agent:demo
-ratan-code-review-agent run
+ratan-code-review scan
 ```
 
 Do not run them without a valid `ADO_TOKEN` and explicit intent to scan PRs and post review comments.
 
 ## CLI Usage
 
-After publishing or installing the `ratan-code-review-agent` package, run:
+After publishing or installing the `ratan-code-review` package, run:
 
 ```bash
-ratan-code-review-agent run \
-  --ado-token "$ADO_TOKEN" \
-  --config-repo "$ADO_CONFIG_REPO" \
-  --config-branch "$ADO_CONFIG_BRANCH"
+ratan-code-review scan
 ```
 
-To verify ADO credentials and the remote config repository without scanning PRs
-or posting comments, run:
+To scaffold a local config first:
 
 ```bash
-ratan-code-review-agent doctor \
-  --ado-token "$ADO_TOKEN" \
-  --config-repo "$ADO_CONFIG_REPO" \
-  --config-branch "$ADO_CONFIG_BRANCH"
+ratan-code-review init
 ```
 
-The CLI also accepts `ADO_TOKEN`, `ADO_CONFIG_REPO`, and `ADO_CONFIG_BRANCH`
-from the environment. Optional ADO settings are `ADO_ORGANIZATION`,
-`ADO_PROJECT`, `ADO_PROXY_URL`, and `ADO_CONFIG_BASE_PATH`; optional
-integrations use `SONARQUBE_TOKEN` and `DATABASE_URL`. Set
-`ADO_PROXY_URL=none` or pass `--ado-proxy-url none` when the machine should
-connect to Azure DevOps directly instead of using the packaged default proxy.
+Then edit `.ratan/code-review-agent/config.json` with your ADO organization and project.
+
+The CLI accepts `ADO_TOKEN`, `ADO_ORGANIZATION`, `ADO_PROJECT` from the
+environment. Additional settings use `ADO_CONFIG_REPO`, `ADO_CONFIG_BRANCH`,
+`ADO_CONFIG_BASE_PATH`, and `ADO_PROXY_URL`; optional integrations use
+`SONARQUBE_TOKEN` and `DATABASE_URL`. Set `ADO_PROXY_URL=none` or pass
+`--ado-proxy-url none` when the machine should connect to Azure DevOps directly
+instead of using the packaged default proxy.
+
+To run a one-shot scan with a custom config path:
+
+```bash
+ratan-code-review scan --config /path/to/config
+```
+
+For continuous scanning (every 30 minutes):
+
+```bash
+ratan-code-review scan --watch
+```
 
 ## Azure DevOps MCP
 
@@ -124,9 +131,9 @@ As of the latest local verification:
 - `pnpm test` passes.
 - `pnpm build` passes.
 - `pnpm -r pack --pack-destination /tmp/code-review-agent-packs` creates tarballs for all publishable workspaces.
-- `npm publish --dry-run /tmp/code-review-agent-packs/ratan-code-review-agent-0.0.1.tgz` succeeds for the CLI package.
-- Installing the packed CLI into a clean local consumer project works on macOS, and `ratan-code-review-agent --help` runs from `node_modules/.bin`.
-- Read-only ADO authentication/connectivity works, `ratan-code-review-agent doctor` passes, and the configured remote prompt files load through `agent-config-manager`.
+- `npm publish --dry-run /tmp/code-review-agent-packs/ratan-code-review-0.1.0.tgz` succeeds for the CLI package.
+- Installing the packed CLI into a clean local consumer project works on macOS, and `ratan-code-review --help` runs from `node_modules/.bin`.
+- ADO authentication/connectivity works, and the configured remote prompt files load through `agent-config-manager`.
 
 The end-to-end goal is therefore not complete yet: the starter config still needs a real `scanRepoNames` target, and a controlled live test PR review must be run before claiming full ADO review operation.
 
@@ -149,7 +156,7 @@ The LLM endpoint is currently configured in `agents/ratan-code-review-agent/src/
 
 ## Runtime Compatibility
 
-`ratan-code-review-agent start` uses `scripts/protobufjs-esm-loader.mjs` because the Mastra artifact externalizes `protobufjs`, and Node 24 requires explicit file and JSON import handling for some `protobufjs` subpaths emitted into the generated ESM bundle.
+`pnpm start` uses `scripts/protobufjs-esm-loader.mjs` because the Mastra artifact externalizes `protobufjs`, and Node 24 requires explicit file and JSON import handling for some `protobufjs` subpaths emitted into the generated ESM bundle.
 
 ## Architecture Notes
 

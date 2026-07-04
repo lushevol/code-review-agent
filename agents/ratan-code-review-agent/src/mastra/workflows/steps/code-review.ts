@@ -14,6 +14,7 @@ import { sortIssues } from "../../utils/sort-issues";
 
 const CodeReviewInputSchema = z.object({
   prDetails: PullRequestSchema,
+  workItemContext: z.string().optional(),
 });
 
 const CodeReviewResultSchema = z.object({
@@ -32,6 +33,7 @@ export const codeReview = createStep({
 
     const {
       prDetails: { codeDiffsArray, repoName },
+      workItemContext,
     } = inputData;
     const agentConfig = extractAgentConfig(
       requestContext as unknown as CommonRequestContext,
@@ -52,9 +54,12 @@ export const codeReview = createStep({
         });
         const codeReviewAgent = mastra.getAgent("codeReviewAgent");
 
+        const workItemSection = workItemContext
+          ? `\n${workItemContext}\n`
+          : "";
         const prompt = `
           ${instructionsPrompt}
-
+          ${workItemSection}
           ## Code Changes
 
           <CODE_CHANGES>
