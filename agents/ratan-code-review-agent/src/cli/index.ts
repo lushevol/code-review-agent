@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Suppress dotenv@17 "injected env" banner messages
+process.env.DOTENV_CONFIG_QUIET = "true";
+
 import { Command } from "commander";
 import path from "node:path";
 import { scan } from "./commands/scan";

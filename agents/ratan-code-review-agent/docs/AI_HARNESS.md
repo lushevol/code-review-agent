@@ -47,7 +47,7 @@ pnpm --version
 pnpm install
 ```
 
-Use pnpm 9, not pnpm 10.
+Use pnpm 9+ (compatible with pnpm 11).
 
 Expected environment:
 
@@ -59,9 +59,10 @@ ADO_ORGANIZATION=...
 ADO_PROJECT=...
 ADO_CONFIG_BASE_PATH=...
 ADO_PROXY_URL=none
+OPENAI_BASE_URL=http://localhost:1218/v1
+OPENAI_API_KEY=...
 SONARQUBE_TOKEN=...
 DATABASE_URL=...
-GENAISCRIPT_MODEL_LARGE=github_copilot_chat:gpt-4.1
 ```
 
 Use `ADO_PROXY_URL=none` when the host can reach Azure DevOps directly. Omit it or set a proxy URL when the host must use a corporate proxy.
@@ -81,14 +82,14 @@ Azure DevOps MCP tools for organization `lushe`. If tools are not visible in a
 running Codex session, restart Codex or open a new session so the newly
 registered MCP server is loaded.
 
-The LLM client is currently configured in `src/mastra/agents/openai-client.ts`:
+The LLM client in `src/mastra/agents/openai-client.ts` reads from environment variables:
 
 ```ts
-baseURL: "http://localhost:1218/v1"
-apiKey: ""
+baseURL: process.env.OPENAI_BASE_URL || "http://localhost:1218/v1"
+apiKey: process.env.OPENAI_API_KEY || ""
 ```
 
-If the harness needs to run agents against another endpoint, change this through a configuration refactor or a controlled environment override rather than embedding secrets.
+Override these through environment configuration rather than embedding secrets.
 
 ## Validation Commands
 
@@ -102,15 +103,16 @@ pnpm build
 pnpm test
 
 # Build Mastra artifacts
-pnpm mastra:build
+pnpm agent:mastra:build
 
 # Regenerate evaluation JSON schema
-pnpm codegen
+pnpm --filter ratan-code-review codegen
 
 # CLI usage (after build)
-node bin/ratan-code-review.js --help
-node bin/ratan-code-review.js init  # scaffold config
-node bin/ratan-code-review.js scan  # one-shot PR scan
+node bin/ratan-code-review.cjs --help
+node bin/ratan-code-review.cjs init  # scaffold config
+node bin/ratan-code-review.cjs scan  # one-shot PR scan
+node bin/ratan-code-review.cjs dashboard  # start dashboard server
 
 # Live side-effectful commands (not safe default)
 pnpm dev
@@ -211,21 +213,23 @@ Before allowing live PR review:
 
 - Run `ratan-code-review init` to scaffold a valid config, then verify ADO connectivity with `ratan-code-review scan` against a test PR first.
 - Confirm the target repositories and PR age window in root config.
-- Confirm `ADO_TOKEN` and `SONARQUBE_TOKEN` are scoped correctly.
-- Confirm the model endpoint at `http://localhost:1218/v1` is running and compatible with the AI SDK.
+- Confirm `ADO_TOKEN`, `OPENAI_BASE_URL`, and `OPENAI_API_KEY` (or `SONARQUBE_TOKEN`) are scoped correctly.
+- Confirm the model endpoint at the configured `OPENAI_BASE_URL` is running and compatible with the AI SDK.
 - Confirm the review prompts are available for `review`, `review-rescore`, `issue-classification`, and `summary`.
-- Confirm allowlist/blocklist patterns.
+- Confirm allowlist/blocklist patterns and merge policy configuration.
 - Confirm whether the `locate-pr-changes` return value should use filtered `codeChangesArray`.
 - Run against a dedicated test PR before enabling broad scanning.
 
-Current status: local build/test/package checks pass, the installed CLI can authenticate to ADO, the Azure DevOps MCP server is registered and smoke-tested, and the configured prompt files load through `agent-config-manager`. The config repo currently has starter prompt content and `scanRepoNames` is intentionally set to `__replace_with_target_repo_name__`; do not claim end-to-end ADO review operation until the target repo is configured and a dedicated live test PR review has been completed.
+Current status: local build/test/package checks pass for v2 (10 test files, ~134+ tests). The installed CLI can authenticate to ADO, the Azure DevOps MCP server is registered and smoke-tested, and the configured prompt files load through `agent-config-manager`. Scanner pipeline, FindingStore, webhook receiver, merge gate, work item creation, and dashboard are implemented. The config repo currently has starter prompt content and `scanRepoNames` is intentionally set to `__replace_with_target_repo_name__`; do not claim end-to-end ADO review operation until the target repo is configured and a dedicated live test PR review has been completed.
 
 ## Recommended Improvements
 
-- Move model base URL, model name, and API key behavior to environment or agent config.
-- Add a `test` script and focused Vitest tests.
+- [DONE] Move model base URL, model name, and API key behavior to environment or agent config — now reads `OPENAI_BASE_URL` + `OPENAI_API_KEY` from env.
+- Add a `test` script and focused Vitest tests (currently 10 test files, ~134+ tests).
 - Implement `src/evaluation/scorer.ts` and `startupEvaluation`.
 - Fix or confirm the `locate-pr-changes` filtered array return behavior.
 - Align `pr-review-workflow` output schema with the `comment-review-results` step.
 - Log inline comment failures with enough context to debug without exposing secrets.
 - Add dry-run mode so the full workflow can execute without writing PR comments.
+- Add webhook server graceful shutdown and restart recovery.
+- Add dashboard authentication/authorization.
