@@ -1,0 +1,34 @@
+{
+  "version": "2.0",
+  "ado": {
+    "organization": "",
+    "project": "",
+    "token": "env:ADO_TOKEN"
+  },
+  "llm": {
+    "provider": "openai",
+    "baseUrl": "http://localhost:1218/v1",
+    "apiKey": "env:OPENAI_API_KEY",
+    "model": "gpt-5-mini"
+  },
+  "scanRepoNames": [],
+  "scannerSettings": {
+    "cve": { "enabled": false },
+    "compliance": { "enabled": true }
+  },
+  "filePathsAllowlist": [
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.js",
+    "**/*.jsx",
+    "**/*.java",
+    "**/*.sql"
+  ],
+  "filePathsBlocklist": [
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/__tests__/**",
+    "**/test/**",
+    "**/generated/**"
+  ]
+}

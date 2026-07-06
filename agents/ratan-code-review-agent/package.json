@@ -17,7 +17,8 @@
   "files": [
     "dist",
     "bin",
-    ".mastra"
+    ".mastra",
+    "templates"
   ],
   "scripts": {
     "dev": "cross-env MASTRA_TELEMETRY_DISABLED=1 mastra dev",
