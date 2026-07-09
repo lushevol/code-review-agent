@@ -1,6 +1,6 @@
 ## Context
 
-The existing code-review-agent is a Mastra-based AI code review system that scans Azure DevOps pull requests, reviews diffs using an LLM (`codeReviewAgent`), optionally integrates SonarQube, and posts PR comments. It operates on a polling loop (`scan` CLI command with optional `--watch`) and reads configuration from local filesystem or ADO repos.
+The existing code-review-agent is a framework-based AI code review system that scans Azure DevOps pull requests, reviews diffs using an LLM (`codeReviewAgent`), optionally integrates SonarQube, and posts PR comments. It operates on a polling loop (`scan` CLI command with optional `--watch`) and reads configuration from local filesystem or ADO repos.
 
 The PRD calls for evolving this into a **PR Guardian Copilot** — a centralized, policy-enforcing, multi-scanner code review platform with merge governance, automated remediation, and analytics. This requires significant architectural changes to support a pipeline of deterministic scanners alongside AI analysis, a richer finding data model, work item integration, branch policy enforcement, and a web dashboard.
 
@@ -64,7 +64,7 @@ PR Event (webhook/poll) → Eligibility Gate → Collect Context
 
 ### D1: Scanner Pipeline Architecture
 
-Each scanner is an independent step in the Mastra workflow, producing typed findings that feed into a correlation step. Scanners run in parallel where possible.
+Each scanner is an independent step in the plain TypeScript workflow, producing typed findings that feed into a correlation step. Scanners run in parallel where possible.
 
 **Rationale:** New scanner types (CVE, secrets, compliance) can be added without modifying existing scanners. The correlation step is the single point of deduplication and prioritization, keeping each scanner simple. Parallel execution minimizes total review latency.
 
@@ -72,7 +72,7 @@ Each scanner is an independent step in the Mastra workflow, producing typed find
 - *Monolithic agent prompt:* Was considered but rejected — combining all scanner concerns in one LLM prompt degrades accuracy and makes it impossible to add deterministic scanner outputs.
 - *Sequential pipeline:* Simpler but increases latency linearly with each scanner.
 
-**Implementation:** Scanners are wrapped into the `Scanner` interface and run via `Promise.allSettled` inside a single `scanner-pipeline` Mastra step, using Mastra's existing `.parallel()` pattern for independent steps (codeSummary, SonarQube measures).
+**Implementation:** Scanners are wrapped into the `Scanner` interface and run via `Promise.allSettled` inside a single `scanner-pipeline` plain TypeScript step, using plain TypeScript review runtime's existing `.parallel()` pattern for independent steps (codeSummary, SonarQube measures).
 
 ### D2: Normalized Finding Schema
 
@@ -137,7 +137,7 @@ The agent reports a branch policy status (using ADO PR Status API) rather than m
 
 ### D6: Dashboard Architecture
 
-Separate backend service (lightweight, perhaps Express or a Mastra tool) that queries the review results store and serves REST/GraphQL to a frontend (React). Data is written by the agent after each review completes.
+Separate backend service (lightweight, perhaps Express or a Express service) that queries the review results store and serves REST/GraphQL to a frontend (React). Data is written by the agent after each review completes.
 
 **Rationale:** Decoupling the dashboard from the review agent prevents review latency from being affected by dashboard load. The agent writes once; the dashboard reads many times.
 
@@ -165,7 +165,7 @@ Fallback: `(filePath, lineStart ± 3, sourceEngine, category)` when content cont
 
 Primary: ADO webhook (PR created, PR updated) for low latency. Fallback: polling with configurable interval (30s minimum) for repositories where webhooks cannot be configured.
 
-Webhook receiver is a lightweight HTTP endpoint that enqueues a review job. The Mastra workflow is triggered asynchronously.
+Webhook receiver is a lightweight HTTP endpoint that enqueues a review job. The plain TypeScript workflow is triggered asynchronously.
 
 Webhooks are auto-registered at startup when running `scan --mode=service`. The agent calls `adoClient.createSubscription()` for `git.pullrequest.created` and `git.pullrequest.updated` events. If auto-registration fails (permissions, network), the agent falls back to polling with a 30-second configurable interval.
 
@@ -198,7 +198,7 @@ The agent runs as a persistent service via `scan --mode=service` rather than one
 - Webhook receiver (Express HTTP server)
 - SQLite FindingStore (findings, overrides, audit)
 - Dashboard REST API (Express)
-- Mastra workflow engine
+- plain TypeScript workflow engine
 - Optional feedback daemon
 
 **Rationale:** A persistent process is required for webhook-triggered reviews, background feedback collection, and dashboard data availability. SQLite is sufficient for pilot scale (single-agent deployment). The existing `scan` (one-shot) and `scan --watch` (polling) modes remain available.

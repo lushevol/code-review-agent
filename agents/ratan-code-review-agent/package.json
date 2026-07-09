@@ -17,19 +17,17 @@
   "files": [
     "dist",
     "bin",
-    ".mastra",
     "templates"
   ],
   "scripts": {
-    "dev": "cross-env MASTRA_TELEMETRY_DISABLED=1 mastra dev",
-    "demo": "cross-env MASTRA_TELEMETRY_DISABLED=1 NODE_TLS_REJECT_UNAUTHORIZED=0 tsx src/demo.ts",
-    "test-api": "tsx src/mastra/agents/test-api.ts",
+    "dev": "tsx src/cli/index.ts start --watch",
+    "demo": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 tsx src/demo.ts",
+    "test-api": "tsx src/review/agents/test-api.ts",
     "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 rslib build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "mastra:build": "cross-env MASTRA_TELEMETRY_DISABLED=1 PNPM_CONFIG_DANGEROUSLY_ALLOW_ALL_BUILDS=true mastra build",
-    "start": "cross-env MASTRA_TELEMETRY_DISABLED=1 node --loader=./scripts/protobufjs-esm-loader.mjs --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs",
+    "start": "node ./bin/ratan-code-review.cjs start",
     "codegen": "tsx ./src/evaluation/json-schema-generator.ts",
-    "prepublish": "pnpm build && pnpm mastra:build"
+    "prepublish": "pnpm build"
   },
   "publishConfig": {
     "access": "public"
@@ -39,7 +37,6 @@
     "@types/node": "^25.9.1",
     "cross-env": "^10.1.0",
     "dotenv": "^17.4.2",
-    "mastra": "^1.10.0",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3",
     "@types/cors": "^2.8.17",
@@ -48,10 +45,6 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.65",
-    "@mastra/core": "^1.36.0",
-    "@mastra/libsql": "^1.11.1",
-    "@mastra/loggers": "^1.1.1",
-    "@mastra/memory": "^1.19.0",
     "agent-config-manager": "workspace:*",
     "ai": "^6.0.191",
     "commander": "^13.0.0",

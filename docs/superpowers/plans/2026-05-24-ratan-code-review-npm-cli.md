@@ -6,7 +6,7 @@
 
 **Architecture:** Add a `ConfigProvider` interface to `agent-config-manager` that both `AgentConfigClient` (ADO) and new `LocalConfigClient` (filesystem) implement. The CLI is additive — new `src/cli/` directory with commander-based command handling, `bin/` shebang shim, and a config loader that resolves `"env:VAR_NAME"` token references. Existing workflow code is untouched; only `bootstrap/session.ts` and `bootstrap/index.ts` are adapted to accept `ConfigProvider`.
 
-**Tech Stack:** TypeScript, commander (CLI), rslib (build), Mastra (agent framework)
+**Tech Stack:** TypeScript, commander (CLI), rslib (build), plain TypeScript review runtime (agent framework)
 
 ---
 
@@ -521,7 +521,7 @@ import type z from "zod";
 import type {
   CommonRequestContext,
   CommonRequestContextSchema,
-} from "../mastra/types";
+} from "../review/types";
 
 const agentConfigSessions = new AgentConfigSession();
 
@@ -558,10 +558,10 @@ Only changes: import `ConfigProvider`, add `: ConfigProvider` return type.
 In `agents/ratan-code-review-agent/src/bootstrap/index.ts`, add a second export function for CLI usage:
 
 ```typescript
-import { RequestContext } from "@mastra/core/request-context";
+import { RequestContext } from "../review/runtime";
 import type { AgentConfigCreationOptions, ConfigProvider } from "agent-config-manager";
-import { mastra } from "../mastra";
-import type { CommonRequestContext } from "../mastra/types";
+import { reviewAgents } from "../review";
+import type { CommonRequestContext } from "../review/types";
 import { scanPRs } from "./pr-scan";
 import { getAgentConfigSessions } from "./session";
 
@@ -595,7 +595,7 @@ async function runScanLoop(agentConfig: ConfigProvider) {
 
   pendingPR$.subscribe(async ({ prId }) => {
     console.log(`[startup] Received pending PR: ${prId}`);
-    const prReviewWorkflow = mastra.getWorkflow("prReviewWorkflow");
+    const prReviewWorkflow = review-runtime.getWorkflow("prReviewWorkflow");
     const run = prReviewWorkflow.createRun();
 
     console.log(`[startup] Running prReviewWorkflow for PR: ${prId}`);
@@ -623,7 +623,7 @@ export const startupEvaluation = async (
   const agentConfig =
     await getAgentConfigSessions().createAgentConfigSession(startupOptions);
   console.log("[startup] Agent config session created:", agentConfig.id);
-  const codeReviewEvaluationJudgeAgent = mastra.getAgent(
+  const codeReviewEvaluationJudgeAgent = review-runtime.getAgent(
     "codeReviewEvaluationJudgeAgent",
   );
   console.log("[startupEvaluation] Evaluation mode is not yet implemented.");
@@ -661,7 +661,7 @@ In `agents/ratan-code-review-agent/src/bootstrap/pr-scan.ts`, add a module-level
 import { minimatch } from "minimatch";
 import { Observable } from "rxjs";
 import z from "zod";
-import type { CommonRequestContextSchema } from "../mastra/types";
+import type { CommonRequestContextSchema } from "../review/types";
 import { extractAgentConfig } from "./session";
 
 const PendingPRSchema = z.object({
@@ -863,24 +863,24 @@ export interface StudioOptions {
 }
 
 export async function studio(options: StudioOptions) {
-  // Resolve the package root to find .mastra/output/
+  // Resolve the package root to find dist/
   const packageRoot = path.resolve(__dirname, "../../../..");
-  const mastraOutput = path.resolve(packageRoot, ".mastra/output/index.mjs");
+  const reviewOutput = path.resolve(packageRoot, "dist/index.mjs");
 
-  let entryPoint = mastraOutput;
+  let entryPoint = reviewOutput;
   try {
     await import("node:fs/promises").then(fs => fs.access(entryPoint));
   } catch {
     console.error(
-      `\n  Error: Mastra output not found at ${entryPoint}\n` +
-      "  The .mastra/ directory should be included in the installed package.\n" +
+      `\n  Error: plain TypeScript review runtime output not found at ${entryPoint}\n` +
+      "  The dist/ directory should be included in the installed package.\n" +
       "  Try reinstalling: npm install -g ratan-code-review\n"
     );
     process.exit(1);
   }
 
   const loaderFlag = path.resolve(packageRoot, "scripts/protobufjs-esm-loader.mjs");
-  const instrumentationFlag = path.resolve(packageRoot, ".mastra/output/instrumentation.mjs");
+  const instrumentationFlag = path.resolve(packageRoot, "dist/instrumentation.mjs");
 
   const args = [
     `--loader=${loaderFlag}`,
@@ -889,7 +889,7 @@ export async function studio(options: StudioOptions) {
     ...(options.port ? ["--port", String(options.port)] : []),
   ];
 
-  console.log(`Starting Mastra Studio...`);
+  console.log(`Starting review dashboard...`);
   if (options.port) {
     console.log(`  Port: ${options.port}`);
   }
@@ -949,7 +949,7 @@ program
 
 program
   .command("studio")
-  .description("Launch Mastra Studio web UI")
+  .description("Launch review dashboard web UI")
   .option("--config <path>", "Config directory path")
   .option("--port <number>", "Port to run the studio on")
   .action(async (opts) => {
@@ -1017,17 +1017,16 @@ Update `agents/ratan-code-review-agent/package.json`:
   "files": [
     "dist",
     "bin",
-    ".mastra"
+    "dist"
   ],
   "scripts": {
-    "dev": "cross-env MASTRA_TELEMETRY_DISABLED=1 mastra dev",
-    "demo": "cross-env MASTRA_TELEMETRY_DISABLED=1 NODE_TLS_REJECT_UNAUTHORIZED=0 tsx src/demo.ts",
-    "test-api": "tsx src/mastra/agents/test-api.ts",
+    "dev": "tsx src/cli/index.ts start --watch",
+    "demo": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 tsx src/demo.ts",
+    "test-api": "tsx src/review/agents/test-api.ts",
     "build": "NODE_OPTIONS='--max-old-space-size=4096' rslib build",
-    "mastra:build": "cross-env MASTRA_TELEMETRY_DISABLED=1 PNPM_CONFIG_DANGEROUSLY_ALLOW_ALL_BUILDS=true mastra build",
-    "start": "cross-env MASTRA_TELEMETRY_DISABLED=1 node --loader=./scripts/protobufjs-esm-loader.mjs --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs",
+    "start": "node ./bin/ratan-code-review.cjs start",
     "codegen": "tsx ./src/evaluation/json-schema-generator.ts",
-    "prepublish": "pnpm build && pnpm mastra:build"
+    "prepublish": "pnpm build"
   },
   "publishConfig": {
     "access": "public"
@@ -1037,17 +1036,12 @@ Update `agents/ratan-code-review-agent/package.json`:
     "@types/node": "^25.9.1",
     "cross-env": "^10.1.0",
     "dotenv": "^17.4.2",
-    "mastra": "^1.10.0",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.10"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.65",
-    "@mastra/core": "^1.36.0",
-    "@mastra/libsql": "^1.11.1",
-    "@mastra/loggers": "^1.1.1",
-    "@mastra/memory": "^1.19.0",
     "agent-config-manager": "workspace:*",
     "ai": "^6.0.191",
     "commander": "^13.0.0",
@@ -1074,7 +1068,7 @@ Key changes:
 - `private` changed to `false`
 - Added `bin` field
 - Added `commander` to dependencies
-- Updated `files` to include `.mastra`
+- Updated `files` to include `dist`
 - Added `prepublish` script
 - Added `publishConfig`
 
@@ -1083,7 +1077,7 @@ Key changes:
 Update `agents/ratan-code-review-agent/rslib.config.ts`:
 
 ```typescript
-import { defineConfig } from "@rslib/core";
+import { defineConfig } from "@rsliblocal review runtime";
 
 export default defineConfig({
   lib: [
@@ -1174,7 +1168,7 @@ git commit -m "chore: update lockfile after adding commander dependency"
 | `init` command | Task 6, Step 1 |
 | `scan` command (one-shot) | Task 6, Step 2 |
 | `scan --watch` (30min interval) | Task 6, Step 2 |
-| `studio` command (pre-built .mastra/) | Task 6, Step 3 |
+| `studio` command (pre-built dist/) | Task 6, Step 3 |
 | Repo list cache (24h TTL) | Task 5 |
 | `startup()` backward-compat | Task 4, Step 2 |
 | `startScanWithProvider()` | Task 4, Step 2 |

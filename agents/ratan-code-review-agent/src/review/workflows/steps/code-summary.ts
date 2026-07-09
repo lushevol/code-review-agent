@@ -1,0 +1,68 @@
+import { defineStep } from "../../runtime";
+import z from "zod";
+import { extractAgentConfig } from "../../../bootstrap/session";
+import { type CommonRequestContext, PullRequestSchema } from "../../types";
+import { MAX_CHARACTER } from "../../utils/const";
+
+const CodeSummaryInputSchema = z.object({
+  prDetails: PullRequestSchema,
+  workItemContext: z.string().optional(),
+  findings: z.array(NormalizedFindingSchema),
+  correlationSummary: z.string(),
+  changesSinceLastReview: z.string().optional(),
+});
+
+const CodeSummaryResultSchema = z.object({
+  codeChangeSummary: z.string().describe("The summary of the code changes"),
+});
+
+export const codeSummary = defineStep({
+  id: "code-summary",
+  description: "Summarizes code changes",
+  inputSchema: CodeSummaryInputSchema,
+  outputSchema: CodeSummaryResultSchema,
+  execute: async ({ inputData, agents, requestContext }) => {
+    if (!inputData) {
+      throw new Error("Input data not found");
+    }
+    let {
+      prDetails: { codeDiffs },
+    } = inputData;
+
+    let warning = "";
+    if (codeDiffs.length > MAX_CHARACTER) {
+      codeDiffs = codeDiffs.slice(0, MAX_CHARACTER);
+      warning =
+        "[Warning: The code diff is too large, only the first part is included.]\n";
+    }
+    if (codeDiffs.trim() === "") {
+      return {
+        codeChangeSummary: "No code changes detected.",
+      };
+    }
+
+    const agentConfig = extractAgentConfig(
+      requestContext as unknown as CommonRequestContext,
+    );
+
+    const instructionsPrompt = await agentConfig.buildPrompt("summary");
+
+    const prompt = `
+      ${instructionsPrompt}
+
+      ## Code Changes
+
+      <CODE_CHANGES>
+      ${codeDiffs}
+      </CODE_CHANGES>
+    `;
+
+    const codeChangeSummaryAgent = agents.getAgent("codeChangeSummaryAgent");
+    const output = await codeChangeSummaryAgent.generate(prompt);
+
+    return {
+      codeChangeSummary: warning ? `${warning}\n${output.text}` : output.text,
+    };
+  },
+});
+import { NormalizedFindingSchema } from "../../types/finding";

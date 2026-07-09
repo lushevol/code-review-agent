@@ -1,11 +1,11 @@
-import { RequestContext } from "@mastra/core/request-context";
 import { AgentConfigSession } from "agent-config-manager";
 import type { ConfigProvider } from "agent-config-manager";
 import type z from "zod";
+import { RequestContext } from "../review/runtime";
 import type {
   CommonRequestContext,
   CommonRequestContextSchema,
-} from "../mastra/types";
+} from "../review/types";
 
 const agentConfigSessions = new AgentConfigSession();
 

@@ -1,0 +1,101 @@
+import { defineStep } from "../../runtime";
+import z from "zod";
+import { extractAgentConfig } from "../../../bootstrap/session";
+import { type CommonRequestContext, PullRequestSchema } from "../../types";
+import { NormalizedFindingSchema } from "../../types/finding";
+import { CODE_REVIEW_AGENT_LATEST_REVIEW_ID } from "../../utils/const";
+
+const CommentInputSchema = z.object({
+  prDetails: PullRequestSchema,
+  findings: z.array(NormalizedFindingSchema),
+  correlationSummary: z.string(),
+  changesSinceLastReview: z.string().optional(),
+  codeChangeSummary: z.string(),
+  measures: z.union([z.any(), z.null()]),
+  mergeDecision: z.enum(["allowed", "blocked", "pending"]),
+  createdWorkItems: z.number(),
+});
+
+const CodeReviewResultSchema = z.object({
+  mainCommentId: z.number().describe("The ID of the main comment added"),
+  codeCommentIds: z
+    .array(z.number())
+    .describe("The IDs of the code comments added"),
+});
+
+export const comment = defineStep({
+  id: "comment-review-results",
+  description: "Reviews code changes and provides feedback",
+  inputSchema: CommentInputSchema,
+  outputSchema: CodeReviewResultSchema,
+  execute: async ({ inputData, requestContext }) => {
+    if (!inputData) {
+      throw new Error("Input data not found");
+    }
+
+    const { prDetails, findings } = inputData;
+
+    const agentConfig = extractAgentConfig(
+      requestContext as unknown as CommonRequestContext,
+    );
+
+    const adoClient = agentConfig.getAdoClient();
+
+    const codeCommentIds: number[] = [];
+
+    // Post inline comments from scanner pipeline findings
+    const findingsToComment = findings.slice(0, 30);
+    for (const finding of findingsToComment) {
+      if (!finding.filePath || finding.lineStart === null) continue;
+      try {
+        const commentText = `**${finding.severity.toUpperCase()}** - ${finding.title}` +
+          (finding.description ? `\n\n${finding.description}` : "") +
+          (finding.remediation ? `\n\n**Suggestion:** ${finding.remediation}` : "");
+        const commentThread = await adoClient.addCommentThreadForPRCode({
+          repoId: prDetails.repoId,
+          pullRequestId: prDetails.pullRequestId,
+          comment: `${commentText}\n\n<!-- survey: please provide feedback -->`,
+          filePath: finding.filePath,
+          filePosition: "right",
+          fileStartLine: finding.lineStart,
+          fileEndLine: finding.lineEnd ?? finding.lineStart,
+          fileStartOffset: 1,
+          fileEndOffset: 1,
+        });
+
+        codeCommentIds.push(commentThread.id);
+      } catch (error) {
+        // Silently skip per-line comment failures
+      }
+    }
+
+    const mainCommentSummary = (inputData.changesSinceLastReview || "") +
+      (inputData.correlationSummary || "No issues detected.");
+    const mainCommentThread = await adoClient.addCommentForPR(
+      prDetails.repoName,
+      prDetails.pullRequestId,
+      {
+        approve: findings.length === 0,
+        errors: [],
+      },
+      `${mainCommentSummary}\n\n${inputData.codeChangeSummary}`,
+      [],
+      inputData.measures,
+    );
+
+    await adoClient.setPullRequestProperties(
+      prDetails.repoName,
+      prDetails.pullRequestId,
+      {
+        [`/${CODE_REVIEW_AGENT_LATEST_REVIEW_ID}`]: String(
+          prDetails.latestIterationId,
+        ),
+      },
+    );
+
+    return {
+      mainCommentId: mainCommentThread.id,
+      codeCommentIds,
+    };
+  },
+});

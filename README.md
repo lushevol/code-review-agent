@@ -2,13 +2,13 @@
 
 AI-powered Azure DevOps pull request governance platform built as a pnpm workspace. Scans PRs through a multi-scanner pipeline (AI code review, CVE scanning, compliance checking), enforces merge policies via ADO PR status, and provides a dashboard for findings management.
 
-Originally a basic Mastra-based code review agent, evolved into a full governance platform (v2: PR Guardian Copilot).
+Originally a basic framework-based code review agent, evolved into a full governance platform (v2: PR Guardian Copilot). The current runtime uses plain TypeScript orchestration and the AI SDK directly.
 
 ## Packages
 
 | Workspace | Location | Purpose |
 | --- | --- | --- |
-| `ratan-code-review` | `agents/ratan-code-review-agent` | Mastra workflows, scanner pipeline, CLI, webhooks, dashboard backend |
+| `ratan-code-review` | `agents/ratan-code-review-agent` | TypeScript review runtime, scanner pipeline, CLI, webhooks, dashboard backend |
 | `finding-store` | `packages/finding-store` | SQLite-based persistence for findings, overrides, and audit records |
 | `agent-config-manager` | `packages/agent-config-manager` | Runtime config and prompt loading from Azure DevOps or local filesystem |
 | `ratan-ado-api` | `packages/ratan-ado-api` | Azure DevOps API client |
@@ -22,7 +22,7 @@ Originally a basic Mastra-based code review agent, evolved into a full governanc
 pnpm install
 ```
 
-The workspace is currently compatible with pnpm 11. The Mastra artifact build needs generated dependency build scripts to run, so `ratan-code-review-agent` sets `PNPM_CONFIG_DANGEROUSLY_ALLOW_ALL_BUILDS=true` only for `mastra:build`.
+The workspace is currently compatible with pnpm 11.
 
 ## Safe Verification
 
@@ -31,7 +31,6 @@ These commands do not scan live pull requests or post comments:
 ```bash
 pnpm build
 pnpm test
-pnpm agent:mastra:build
 ```
 
 The installable CLI can be checked without contacting Azure DevOps:
@@ -42,14 +41,6 @@ node agents/ratan-code-review-agent/dist/cli.js --help
 node agents/ratan-code-review-agent/dist/cli.js start --help
 pnpm --filter ratan-code-review pack --pack-destination /tmp
 ```
-
-After `mastra:build`, start the generated Mastra API server with:
-
-```bash
-pnpm agent:start
-```
-
-The API listens at `http://localhost:4111/api`.
 
 ## Runtime Commands
 
@@ -219,10 +210,6 @@ Optional:
 SONARQUBE_TOKEN=your_sonarqube_token
 DATABASE_URL=postgres_connection_string
 ```
-
-## Runtime Compatibility
-
-`pnpm start` uses `scripts/protobufjs-esm-loader.mjs` because the Mastra artifact externalizes `protobufjs`, and Node 24 requires explicit file and JSON import handling for some `protobufjs` subpaths emitted into the generated ESM bundle.
 
 ## Architecture Notes
 

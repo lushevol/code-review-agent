@@ -53,4 +53,4 @@ The existing code-review-agent provides basic AI-powered PR reviews using an LLM
 - **New dependencies**: SCA tool integration, work item API usage (already available via ADO API client), dashboard frontend framework, and potentially a lightweight database for the dashboard.
 - **ADO integration**: Extended use of branch policy APIs, work item creation APIs, and webhook/event subscriptions.
 - **CLI**: The current `scan`, `studio`, `init` commands remain, but `scan` gains new flags for policy enforcement and dashboard reporting. A new `dashboard` command or mode may be needed.
-- **Mastra workflows**: The `pr-review-workflow` needs to be restructured to support the multi-stage pipeline (scanners → AI analysis → dedup/prioritize → comment → task creation → policy evaluation).
+- **plain TypeScript workflows**: The `pr-review-workflow` needs to be restructured to support the multi-stage pipeline (scanners → AI analysis → dedup/prioritize → comment → task creation → policy evaluation).

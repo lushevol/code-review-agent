@@ -2,7 +2,7 @@
 
 ## Overview
 
-Package the existing `ratan-code-review-agent` Mastra-based code review agent as a publishable npm CLI package (`ratan-code-review`) with a `ratan-code-review` binary. The CLI supports two modes of operation — local config from `.ratan/code-review-agent/` or remote config from Azure DevOps repos — and provides `scan` and `studio` commands.
+Package the existing `ratan-code-review-agent` framework-based code review agent as a publishable npm CLI package (`ratan-code-review`) with a `ratan-code-review` binary. The CLI supports two modes of operation — local config from `.ratan/code-review-agent/` or remote config from Azure DevOps repos — and provides `scan` and `studio` commands.
 
 ## Design Decisions
 
@@ -17,7 +17,7 @@ Secrets (ADO token, SonarQube token) are never stored in the config file. They r
 Multi-command CLI with `commander`:
 - `init` — scaffold `.ratan/code-review-agent/config.json` with default local-mode template
 - `scan` — runs the PR review workflow (wraps existing `startup()`)
-- `studio` — launches Mastra Studio web UI
+- `studio` — launches review dashboard web UI
 
 ### Config Provider Interface
 
@@ -40,12 +40,12 @@ ratan-code-review (was ratan-code-review-agent, published as ratan-code-review)
 │   │   ├── index.ts            ← bin entry: commander setup, command registration
 │   │   ├── commands/
 │   │   │   ├── scan.ts         ← scan command handler
-│   │   │   └── studio.ts       ← studio command handler (runs pre-built .mastra/output)
+│   │   │   └── studio.ts       ← studio command handler (runs pre-built dist)
 │   │   └── config/
 │   │       ├── loader.ts       ← reads wrapper config, resolves env tokens
 │   │       └── local-client.ts ← LocalConfigClient (filesystem-backed config provider)
 │   ├── bootstrap/…             ← unchanged
-│   ├── mastra/…                ← unchanged
+│   ├── review-runtime/…                ← unchanged
 │   └── index.ts                ← unchanged (library exports)
 ├── package.json
 ├── rslib.config.ts             ← updated with banner for CLI entry
@@ -85,7 +85,7 @@ ratan-code-review init                       # scaffold default config
 ratan-code-review scan                       # one-shot scan
 ratan-code-review scan --watch               # continuous (30min interval)
 ratan-code-review scan --config ./custom     # custom config path
-ratan-code-review studio                     # launch Mastra Studio
+ratan-code-review studio                     # launch review dashboard
 ratan-code-review studio --port 3456         # custom port
 ratan-code-review --help
 ```
@@ -119,21 +119,21 @@ The PR scan flow adds a 24-hour in-memory cache for the ADO repo list. This prev
 
 ### Studio Command
 
-The `studio` command starts the Mastra Studio web UI from a pre-built `.mastra/output/` directory. This directory is **built at publish time** (via `mastra build` in prepublish) and shipped with the package. No runtime `mastra` CLI dependency needed.
+The `studio` command starts the review dashboard web UI from a pre-built `dist/` directory. This directory is **built at publish time** (via `review-runtime build` in prepublish) and shipped with the package. No runtime `review-runtime` CLI dependency needed.
 
 When the user runs `ratan-code-review studio`:
-1. It starts the compiled Mastra server: `node --loader=./scripts/protobufjs-esm-loader.mjs --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs`
-2. This serves both the Mastra Studio web UI and the agent API
+1. It starts the compiled plain TypeScript review runtime server: `node --loader=./scripts/protobufjs-esm-loader.mjs --import=./dist/instrumentation.mjs dist/index.mjs`
+2. This serves both the review dashboard web UI and the agent API
 3. The user opens `http://localhost:PORT` in their browser
 
-If `.mastra/output/` is missing (dev/build issue), `studio` prints a clear error instructing the user to reinstall or rebuild.
+If `dist/` is missing (dev/build issue), `studio` prints a clear error instructing the user to reinstall or rebuild.
 
 ### Build & Packaging
 
 - `rslib.config.ts`: disable minify for better user stack traces; no banner needed since the shebang lives in the `bin/` shim
-- `package.json`: add `bin` field pointing to `bin/ratan-code-review.js`, remove `private`, set `files: ["dist", "bin", ".mastra"]`, add `"prepublish": "pnpm build && pnpm mastra:build"`
+- `package.json`: add `bin` field pointing to `bin/ratan-code-review.js`, remove `private`, set `files: ["dist", "bin", "dist"]`, add `"prepublish": "pnpm build && pnpm build"`
 - The `bin/ratan-code-review.js` shim handles the shebang (`#!/usr/bin/env node`) and re-exports from the compiled `dist/cli/index.js` — more reliable than relying on the bundler to preserve the shebang
-- Publish: `pnbuild && npm publish` (prepublish hook runs build + mastra:build automatically)
+- Publish: `pnbuild && npm publish` (prepublish hook runs build + build automatically)
 - New dependency: `commander` (lightweight CLI parser)
 
 ### .ratan/code-review-agent/ Directory Layout
@@ -169,4 +169,4 @@ If `.mastra/output/` is missing (dev/build issue), `studio` prints a clear error
 
 - E2E tests for the CLI (manual smoke test before publish)
 - CI/CD pipeline for npm publishing
-- Windows-specific path handling (Node path.resolve works cross-platform, but `mastra dev` may have issues)
+- Windows-specific path handling (Node path.resolve works cross-platform, but `tsx src/cli/index.ts start --watch` may have issues)

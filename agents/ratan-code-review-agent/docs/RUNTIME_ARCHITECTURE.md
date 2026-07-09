@@ -6,7 +6,7 @@
 flowchart TD
     Webhook["ADO Webhook:<br/>git.pullrequest.created/updated"] --> Eligibility["Eligibility Gate:<br/>pilot repo, draft, min size"]
     Eligibility --> Dedup["Dedup Window: 5 min"]
-    Dedup --> WorkflowRun["Mastra prReviewWorkflow run"]
+    Dedup --> WorkflowRun["runPrReviewWorkflow"]
 
     Polling["Polling: scan --watch<br/>every 30 min"] --> PRScan["scanPRs(runtimeContext)"]
     PRScan --> ADOList["ADO: repos and PR list"]
@@ -26,7 +26,7 @@ flowchart TD
     Compliance --> Correlate
     Correlate --> Persist["Persist to FindingStore<br/>(SQLite)"]
 
-    Persist --> Para["Parallel (Mastra step)"]
+    Persist --> Para["Parallel Promise.all"]
     Para --> Summary["code-summary<br/>LLM PR summary"]
     Para --> Sonar["sonarqube-measures<br/>quality gate metrics"]
 
@@ -72,7 +72,7 @@ Both converge on `runScanLoop(agentConfig: ConfigProvider)`, which calls `scanPR
 }
 ```
 
-`scanPRs` returns an RxJS `Observable` of pending pull requests. For every pending PR, `runScanLoop` creates a Mastra workflow run, sets `configSessionId` in `RuntimeContext`, streams the workflow, and logs every full-stream output.
+`scanPRs` returns an RxJS `Observable` of pending pull requests. For every pending PR, `runScanLoop` creates a local `RequestContext`, sets `configSessionId`, streams `runPrReviewWorkflow`, and logs every step output.
 
 ## PR Scan Flow
 
@@ -151,7 +151,7 @@ After all findings are collected and persisted:
 3. Extract `resource.repository.id`, `resource.pullRequestId`.
 4. Check dedup window (5 min) — skip if recently processed.
 5. Check eligibility gate — pilot repo, draft status, min size.
-6. Trigger `prReviewWorkflow` via Mastra.
+6. Trigger `runPrReviewWorkflow`.
 
 ## Data Privacy Flow
 

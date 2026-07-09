@@ -7,7 +7,7 @@ import { getLogger, cleanOldLogs } from "../utils/logger";
 import { getPRQueue } from "../services/pr-queue";
 import { getAutoScanService } from "../services/auto-scan";
 import { startReviewPrWithProvider } from "../../bootstrap";
-import { FeedbackService } from "../../mastra/workflows/services/feedback-service";
+import { FeedbackService } from "../../review/workflows/services/feedback-service";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

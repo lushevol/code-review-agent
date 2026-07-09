@@ -1,7 +1,8 @@
-import { RequestContext } from "@mastra/core/request-context";
 import type { AgentConfigCreationOptions, ConfigProvider } from "agent-config-manager";
-import { mastra } from "../mastra";
-import type { CommonRequestContext } from "../mastra/types";
+import { reviewAgents } from "../review";
+import { runPrReviewWorkflow } from "../review/workflows/pr-review-workflow";
+import { RequestContext } from "../review/runtime";
+import type { CommonRequestContext } from "../review/types";
 import { scanPRs } from "./pr-scan";
 import { getAgentConfigSessions } from "./session";
 
@@ -51,21 +52,18 @@ async function runScanLoop(agentConfig: ConfigProvider) {
 }
 
 async function runReviewWorkflow(agentConfig: ConfigProvider, prId: number) {
-  const prReviewWorkflow = mastra.getWorkflow("prReviewWorkflow");
-  const run = await prReviewWorkflow.createRun();
-
   console.log(`[startup] Running prReviewWorkflow for PR: ${prId}`);
 
   const requestContext: CommonRequestContext = new RequestContext();
   requestContext.set("configSessionId", agentConfig.id);
-  const result = run.stream({
+
+  for await (const output of runPrReviewWorkflow({
     inputData: {
       prId,
     },
-    requestContext: requestContext as RequestContext,
-  });
-
-  for await (const output of result.fullStream) {
+    requestContext,
+    agents: reviewAgents,
+  })) {
     console.log("PR Review Workflow Output:", output);
   }
   console.log(`[startup] Finished processing PR: ${prId}`);
@@ -80,7 +78,7 @@ export const startupEvaluation = async (
 
   console.log("[startup] Agent config session created:", agentConfig.id);
 
-  const codeReviewEvaluationJudgeAgent = mastra.getAgent(
+  const codeReviewEvaluationJudgeAgent = reviewAgents.getAgent(
     "codeReviewEvaluationJudgeAgent",
   );
 

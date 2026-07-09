@@ -25,7 +25,7 @@ Safe activities:
 - Read source files.
 - Edit TypeScript, Markdown, schemas, and fixtures.
 - Run type/build/test commands that do not require network access.
-- Add unit tests with mocked `agent-config-manager`, ADO, SonarQube, and Mastra agent calls.
+- Add unit tests with mocked `agent-config-manager`, ADO, SonarQube, and local review agent calls.
 - Generate or update evaluation fixtures.
 
 Side-effectful activities:
@@ -82,7 +82,7 @@ Azure DevOps MCP tools for organization `lushe`. If tools are not visible in a
 running Codex session, restart Codex or open a new session so the newly
 registered MCP server is loaded.
 
-The LLM client in `src/mastra/agents/openai-client.ts` reads from environment variables:
+The LLM client in `src/review/agents/openai-client.ts` reads from environment variables:
 
 ```ts
 baseURL: process.env.OPENAI_BASE_URL || "http://localhost:1218/v1"
@@ -102,16 +102,12 @@ pnpm build
 # Run tests
 pnpm test
 
-# Build Mastra artifacts
-pnpm agent:mastra:build
-
 # Regenerate evaluation JSON schema
 pnpm --filter ratan-code-review codegen
 
 # CLI usage (after build)
 node bin/ratan-code-review.cjs --help
-node bin/ratan-code-review.cjs init  # scaffold config
-node bin/ratan-code-review.cjs scan  # one-shot PR scan
+node bin/ratan-code-review.cjs start --help
 node bin/ratan-code-review.cjs dashboard  # start dashboard server
 
 # Live side-effectful commands (not safe default)

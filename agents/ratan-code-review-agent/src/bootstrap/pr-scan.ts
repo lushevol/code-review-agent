@@ -1,7 +1,7 @@
 import { minimatch } from "minimatch";
 import { Observable } from "rxjs";
 import z from "zod";
-import type { CommonRequestContextSchema } from "../mastra/types";
+import type { CommonRequestContextSchema } from "../review/types";
 import { extractAgentConfig } from "./session";
 
 const PendingPRSchema = z.object({

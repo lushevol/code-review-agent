@@ -68,7 +68,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## Project Overview
 
-This is a pnpm workspace monorepo (pnpm 9/11) containing **PR Guardian Copilot** — an AI-powered Azure DevOps pull request governance platform built on the **Mastra** framework. It evolved from a basic code review agent into a full governance platform by adding a multi-scanner pipeline (AI review, CVE scanning, compliance checking), merge governance via ADO PR status, webhook-driven PR event detection, a React dashboard, SQLite-based finding persistence, and an audit trail with override management.
+This is a pnpm workspace monorepo (pnpm 9/11) containing **PR Guardian Copilot** — an AI-powered Azure DevOps pull request governance platform built with plain TypeScript orchestration. It evolved from a basic code review agent into a full governance platform by adding a multi-scanner pipeline (AI review, CVE scanning, compliance checking), merge governance via ADO PR status, webhook-driven PR event detection, a React dashboard, SQLite-based finding persistence, and an audit trail with override management.
 
 The system connects to Azure DevOps (ADO) for PR data, calls OpenAI-compatible LLMs for AI review, queries SonarQube for security vulnerabilities, enforces compliance rules, and posts review results as ADO PR comments and status checks.
 
@@ -78,7 +78,7 @@ Published as `ratan-code-review` on npm with a CLI binary providing `start` and 
 
 | Workspace | Location | Purpose |
 |---------|----------|---------|
-| `ratan-code-review` | `agents/ratan-code-review-agent` | Main Mastra-based agent — workflows, scanner pipeline, CLI, webhooks, dashboard backend, services |
+| `ratan-code-review` | `agents/ratan-code-review-agent` | Main review agent — TypeScript workflow runner, scanner pipeline, CLI, webhooks, dashboard backend, services |
 | `finding-store` | `packages/finding-store` | SQLite-based persistence for findings, overrides, and audit records |
 | `agent-config-manager` | `packages/agent-config-manager` | `ConfigProvider` interface, ADO config fetching/caching, LocalConfigClient |
 | `ratan-ado-api` | `packages/ratan-ado-api` | Azure DevOps API client (PRs, repos, builds, work items, comments, status) |
@@ -88,7 +88,7 @@ Published as `ratan-code-review` on npm with a CLI binary providing `start` and 
 
 ## Architecture
 
-### Workflow (Mastra)
+### Workflow
 
 ```
 prReviewWorkflow(prId):
@@ -100,7 +100,7 @@ prReviewWorkflow(prId):
     └── compliance-engine            — Static analysis: TODO/FIXME, console.log, large files, YAML rules
   correlation & dedup (content-hash)  — Merge all scanner findings, deduplicate by SHA-256 hash
   persist to FindingStore             — SQLite: findings, override_log, audit_records
-  parallel (Mastra parallel step):
+  parallel Promise.all:
     ├── code-summary                 — LLM PR summary
     └── sonarqube-measures           — SonarQube quality gate metrics
   merge-gate                         — Evaluate blocking findings, set ADO PR status (succeeded/failed)
@@ -147,7 +147,7 @@ The `ConfigProvider` interface (in `agent-config-manager`) is implemented by:
 
 The wrapper config at `.ratan/code-review-agent/config.json` declares the mode (`"local"` or `"ado"`) and mode-specific parameters. Secrets use `"env:VAR_NAME"` syntax, resolved at load time by the config loader.
 
-### Agents (registered in `src/mastra/index.ts`)
+### Agents (registered in `src/review/index.ts`)
 - **codeReviewAgent** — GPT-5-mini, reviews code diffs, returns issues with Zod schema
 - **codeReviewRescoreAgent** — re-evaluates confidence scores
 - **codeReviewIssueClassificationAgent** — categorizes issues
@@ -180,7 +180,7 @@ A React SPA (Vite + Recharts + React Router) served by an Express backend:
 
 ### LLM Configuration
 
-Model endpoint reads from environment: `OPENAI_BASE_URL` and `OPENAI_API_KEY` (resolved in `src/mastra/agents/openai-client.ts`).
+Model endpoint reads from environment: `OPENAI_BASE_URL` and `OPENAI_API_KEY` (resolved in `src/review/agents/openai-client.ts`).
 
 ### Data Privacy
 Diff text is masked via `maskSensitiveData()` using `redact-pii` (credentials only) and custom regex for Stripe keys, bearer tokens, and `password`/`token`/`secret` assignments.
@@ -204,15 +204,15 @@ Default config and prompt templates shipped with the package live at `templates/
 - `agents/ratan-code-review-agent/src/cli/dashboard/` — Express dashboard backend (health, findings, audit, stats APIs)
 - `agents/ratan-code-review-agent/bin/ratan-code-review.cjs` — npm bin shim (CJS entry)
 - `agents/ratan-code-review-agent/bin/ratan-code-review.js` — npm bin shim (ESM entry)
-- `agents/ratan-code-review-agent/src/mastra/index.ts` — Mastra instance, agent/workflow registration
-- `agents/ratan-code-review-agent/src/mastra/workflows/pr-review-workflow.ts` — top-level workflow definition (v2: scanner pipeline, merge gate, work items)
-- `agents/ratan-code-review-agent/src/mastra/workflows/steps/` — individual workflow step implementations (fetch-pr, fetch-workitem-context, code-review, filter-issues, rescore, classify, code-summary, sonarqube-measures, merge-gate, create-workitems, comment)
-- `agents/ratan-code-review-agent/src/mastra/workflows/scanners/` — scanner pipeline: types, scanner-pipeline, ai-review-scanner, cve-scanner, compliance-engine
-- `agents/ratan-code-review-agent/src/mastra/workflows/services/` — audit-service, feedback-service, override-service
-- `agents/ratan-code-review-agent/src/mastra/workflows/utils/` — finding-reconciler, review-tracker
-- `agents/ratan-code-review-agent/src/mastra/agents/` — LLM agent definitions (openai-client, code-review-agent, code-review-rescore-agent, code-review-issue-classification-agent, code-change-summary-agent, code-review-evaluation-agent)
-- `agents/ratan-code-review-agent/src/mastra/types/index.ts` — shared Zod schemas and TypeScript types
-- `agents/ratan-code-review-agent/src/mastra/types/finding.ts` — NormalizedFinding schema, FindingCategory, FindingSeverity, EngineType, content hash computation
+- `agents/ratan-code-review-agent/src/review/index.ts` — local review agent registry
+- `agents/ratan-code-review-agent/src/review/workflows/pr-review-workflow.ts` — top-level workflow definition (v2: scanner pipeline, merge gate, work items)
+- `agents/ratan-code-review-agent/src/review/workflows/steps/` — individual workflow step implementations (fetch-pr, fetch-workitem-context, code-review, filter-issues, rescore, classify, code-summary, sonarqube-measures, merge-gate, create-workitems, comment)
+- `agents/ratan-code-review-agent/src/review/workflows/scanners/` — scanner pipeline: types, scanner-pipeline, ai-review-scanner, cve-scanner, compliance-engine
+- `agents/ratan-code-review-agent/src/review/workflows/services/` — audit-service, feedback-service, override-service
+- `agents/ratan-code-review-agent/src/review/workflows/utils/` — finding-reconciler, review-tracker
+- `agents/ratan-code-review-agent/src/review/agents/` — LLM agent definitions (openai-client, code-review-agent, code-review-rescore-agent, code-review-issue-classification-agent, code-change-summary-agent, code-review-evaluation-agent)
+- `agents/ratan-code-review-agent/src/review/types/index.ts` — shared Zod schemas and TypeScript types
+- `agents/ratan-code-review-agent/src/review/types/finding.ts` — NormalizedFinding schema, FindingCategory, FindingSeverity, EngineType, content hash computation
 - `agents/ratan-code-review-agent/src/bootstrap/` — startup, PR scanning, session handling
 - `agents/ratan-code-review-agent/src/webhooks/` — Express webhook receiver, HMAC validation, eligibility gate
 - `agents/ratan-code-review-agent/src/evaluation/` — evaluation types, dataset fixtures, judge agent
@@ -257,14 +257,11 @@ node agents/ratan-code-review-agent/bin/ratan-code-review.cjs start --watch
 node agents/ratan-code-review-agent/bin/ratan-code-review.cjs start --pr-id 12345
 node agents/ratan-code-review-agent/bin/ratan-code-review.cjs dashboard
 
-# Run Mastra dev mode (starts PR scanning — has side effects)
+# Run watch mode (starts PR scanning — has side effects)
 pnpm agent:dev
 
 # Run demo (live PR scanning — has side effects)
 pnpm agent:demo
-
-# Build Mastra artifacts
-pnpm agent:mastra:build
 
 # Regenerate evaluation JSON schema
 pnpm --filter ratan-code-review codegen
@@ -296,7 +293,7 @@ DATABASE_URL=postgres_connection_string
 - Merge gate sets ADO PR Status (`succeeded`/`failed`) based on policy. Errors are non-fatal.
 - Work item creation step handles errors gracefully (non-fatal).
 - Comment step silently swallows per-line comment failures and still posts the main PR comment.
-- Confidence score threshold for AI review findings is 0.8 (in `src/mastra/utils/const.ts`).
+- Confidence score threshold for AI review findings is 0.8 (in `src/review/utils/const.ts`).
 - `locate-pr-changes` builds a filtered/masked `codeChangesArray` but returns the original `codeDiffsArray` — verify before relying on incremental filtering.
 - Test count: 10 test files (~134+ tests) covering CLI config, sensitive data mask, compliance engine, CVE scanner, scanner pipeline integration, finding types, commit parser, retry logic, eligibility gate, and local config client.
 

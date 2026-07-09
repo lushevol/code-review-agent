@@ -2,7 +2,7 @@ import z from "zod";
 import {
   CodeChangeSchema,
   CodeReviewIssueWithCategorySchema,
-} from "../mastra/types";
+} from "../review/types";
 
 const CodeReviewIssueForTestSchema = CodeReviewIssueWithCategorySchema.omit({
   severity: true,

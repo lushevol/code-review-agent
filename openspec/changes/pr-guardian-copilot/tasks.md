@@ -1,6 +1,6 @@
 ## 1. Data Model — Normalized Finding Schema
 
-- [x] 1.1 Define `NormalizedFinding` Zod schema in `src/mastra/types/finding.ts` with fields: id, prId, repository, filePath, lineStart, lineEnd, category, severity, confidence, title, description, evidence, businessImpact, remediation, blocking, linkedTaskId, resolution, sourceEngine, sourceVersion, supersedesFindingId, contentHash, createdAt, resolvedAt
+- [x] 1.1 Define `NormalizedFinding` Zod schema in `src/review/types/finding.ts` with fields: id, prId, repository, filePath, lineStart, lineEnd, category, severity, confidence, title, description, evidence, businessImpact, remediation, blocking, linkedTaskId, resolution, sourceEngine, sourceVersion, supersedesFindingId, contentHash, createdAt, resolvedAt
 - [x] 1.2 Define `FindingCategory` enum (bug, security, compliance, cve, dependency, quality)
 - [x] 1.3 Define `FindingSeverity` enum (critical, high, medium, low, informational)
 - [x] 1.4 Define `FindingResolution` enum (open, resolved, superseded, waived, false-positive, accepted-risk)
@@ -13,7 +13,7 @@
 
 - [x] 2.1 Define `FindingStore` interface (init, upsertFinding, batchUpsert, getFindingsByPr, getFindingById, updateResolution, getFindingsByContentHash, saveAuditRecord, queryAuditRecords, close)
 - [x] 2.2 Implement SQLite `FindingStore` using better-sqlite3 for pilot deployments (in `packages/finding-store/`)
-- [x] 2.3 Implement in-memory `MemoryFindingStore` for testing in `packages/finding-store/src/memory-store.ts`
+- [x] 2.3 Implement in-memory `MemoryFindingStore` for testing in `packages/finding-store/srclocal request context-store.ts`
 - [x] 2.4 Implement finding identity hash function using content-context SHA-256 `(filePath, surroundingLines) -> string`
 
 ## 3. Scanner Pipeline Architecture
@@ -56,19 +56,19 @@
 
 ## 8. Work Item Creation
 
-- [x] 8.1 Create `create-workitems.ts` Mastra step using `ratan-ado-api` WIT client
+- [x] 8.1 Create `create-workitems.ts` plain TypeScript step using `ratan-ado-api` WIT client
 - [x] 8.2 Implement logic: Critical → Bug work item type, High → Task, others → skip
 - [x] 8.3 Format work item title as `[PR Guardian] <finding title> (PR #<prId>)`
 - [x] 8.4 Populate work item description with full finding details and PR link
 - [x] 8.5 Add artifact link from work item to ADO pull request
 - [x] 8.6 Implement idempotency check — skip if work item already exists (via linkedTaskId in FindingStore)
 - [x] 8.7 Store `linkedTaskId` back on the finding in FindingStore
-- [x] 8.8 Add retry logic with exponential backoff for ADO API rate limits (in `src/mastra/utils/retry.ts`, 7 tests)
+- [x] 8.8 Add retry logic with exponential backoff for ADO API rate limits (in `src/review/utils/retry.ts`, 7 tests)
 - [x] 8.9 Unit tests: retry (7), CVE (12), compliance (14), schema (27), eligibility (10) = 70+ new tests
 
 ## 9. Merge Governance — PR Status Reporting
 
-- [x] 9.1 Create `merge-gate.ts` Mastra step — evaluates whether PR can be merged based on findings and active overrides
+- [x] 9.1 Create `merge-gate.ts` plain TypeScript step — evaluates whether PR can be merged based on findings and active overrides
 - [x] 9.2 Implement ADO PR Status API via `createPullRequestStatus()` in new `packages/ratan-ado-api/src/pull-request-status.ts`
 - [x] 9.3 Set status to `failed` when unresolved blocking findings exist
 - [x] 9.4 Set status to `succeeded` when no blocking findings
@@ -122,7 +122,7 @@
 - [x] 15.1 Create lightweight Express webhook receiver in `src/webhooks/index.ts`
 - [x] 15.2 Handle `pullrequest.created` and `pullrequest.updated` event types
 - [x] 15.3 Validate event payload — check repository is in pilot list, PR is not draft
-- [x] 15.4 Enqueue review job — trigger Mastra workflow asynchronously
+- [x] 15.4 Enqueue review job — trigger plain TypeScript workflow asynchronously
 - [x] 15.5 Implement duplicate detection — dedup map with 5-min window in webhook handler
 - [x] 15.6 Keep polling fallback — update existing `--watch` mode; webhook auto-registration in `scan --mode=service`
 - [x] 15.7 Add eligibility gate — skip non-pilot repos, draft PRs, PRs below minimum size threshold
@@ -158,7 +158,7 @@
 ## 19. PR Context from Commit Messages (NEW)
 
 - [x] 19.1 Create `commit-parser.ts` — extract ADO work item IDs from commit messages
-- [x] 19.2 Create `fetch-workitem-context.ts` Mastra step — fetch work item description, acceptance criteria, comments
+- [x] 19.2 Create `fetch-workitem-context.ts` plain TypeScript step — fetch work item description, acceptance criteria, comments
 - [x] 19.3 Inject work item context into AI review agent prompt in `code-review.ts`
 - [x] 19.4 Thread workItemContext through `locate-changes.ts` and `pr-review-issues-workflow.ts`
 

@@ -29,13 +29,11 @@
 - [x] `pnpm -r pack --pack-destination /tmp/code-review-agent-packs` — latest verification created tarballs for publishable workspaces.
 - [x] `npm publish --dry-run /tmp/code-review-agent-packs/ratan-code-review-0.1.0.tgz` — latest verification passed for the CLI package.
 - [x] Install packed CLI into a clean local macOS consumer project and run `ratan-code-review --help`.
-- [x] `pnpm agent:mastra:build` — verified in v1; rerun before release if artifacts have changed.
-- [x] `pnpm agent:start` — previously verified to reach `Mastra API running` at `http://localhost:4111/api`; rerun before release if artifacts have changed.
-- [ ] `curl http://localhost:4111/api` after starting the Mastra server.
+- [ ] `pnpm agent:start -- --help` after build — verify the packaged CLI start command loads.
 - [ ] Verify FindingStore SQLite database initializes correctly in `.ratan/code-review-agent/findings.db`.
 - [ ] Verify webhook receiver starts and HMAC validation works.
 - [ ] Verify dashboard starts and serves API + React SPA.
-- [ ] Run `ratan-code-review scan` only when live ADO side effects are intended.
+- [ ] Run `ratan-code-review start` only when live ADO side effects are intended.
 
 ## Azure DevOps MCP
 
@@ -125,9 +123,3 @@
 - [ ] Implement `src/evaluation/scorer.ts` or document why evaluation scoring is deferred.
 - [ ] Consider replacing deprecated `request` if the `redact-pii` dependency chain can be upgraded or removed.
 - [ ] Move FindingStore from SQLite to Drizzle ORM for PostgreSQL parity (if needed for scale).
-
-## Runtime Compatibility Follow-Ups
-
-- [ ] Track Mastra/protobufjs compatibility with Node 24.
-- [ ] Remove `scripts/protobufjs-esm-loader.mjs` if a future Mastra/protobufjs version emits Node-compatible ESM imports.
-- [ ] Revisit `PNPM_CONFIG_DANGEROUSLY_ALLOW_ALL_BUILDS=true` in `mastra:build` if Mastra starts copying workspace-level `allowBuilds` into generated artifacts.

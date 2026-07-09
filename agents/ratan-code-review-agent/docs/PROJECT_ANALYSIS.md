@@ -4,7 +4,7 @@
 
 `ratan-code-review` (PR Guardian Copilot) is a TypeScript package that automates company pull request governance. It scans Azure DevOps repositories for active pull requests, runs a multi-scanner pipeline (AI code review, CVE scanning, compliance checking), persists findings to a SQLite store, enforces merge policy via ADO PR status, auto-creates work items for critical issues, and posts review comments back to Azure DevOps. A React dashboard provides visibility into findings and history.
 
-The project evolved from a basic Mastra-based code review agent (v1) into a full governance platform (v2: PR Guardian Copilot) with scanner pipeline, webhooks, merge gate, audit trail, override management, and dashboard.
+The project evolved from a basic code review agent (v1) into a full governance platform (v2: PR Guardian Copilot) with scanner pipeline, webhooks, merge gate, audit trail, override management, and dashboard. It now uses a lightweight TypeScript review runtime instead of a framework runtime.
 
 The project is structured as a pnpm workspace monorepo with the main package (`ratan-code-review`) and six supporting packages (`finding-store`, `agent-config-manager`, `ratan-ado-api`, `ratan-code-review-agent-orm`, `ratan-markdown-tool`, `ratan-sonarqube-api`).
 
@@ -38,17 +38,17 @@ The project is structured as a pnpm workspace monorepo with the main package (`r
 The public entry point in `src/index.ts` exports:
 
 - `startup` from `src/bootstrap/index.ts`
-- `mastra` from `src/mastra/index.ts`
-- shared types from `src/mastra/types`
+- local review agent exports from `src/review/index.ts`
+- shared types from `src/review/types`
 
 The package also builds an npm CLI entry point `ratan-code-review` with commands:
 
 - `start` — unified entry point. On first run, scaffolds `.ratan/` folder with default config and prompts from `templates/`. Reads config, initializes PR queue, runs scan loop. `--watch` for 30-min polling with background feedback daemon. `--pr-id <id>` for single PR review.
 - `dashboard` — starts the PR Guardian dashboard (Express backend + React SPA).
 
-Runtime work starts in `startup`. It creates an `agent-config-manager` session, scans for pending PRs, and starts a Mastra `prReviewWorkflow` run for each pending PR. Each run receives only a `configSessionId` in runtime context; steps use that id to recover the configured ADO and SonarQube clients.
+Runtime work starts in `startup`. It creates an `agent-config-manager` session, scans for pending PRs, and starts `runPrReviewWorkflow` for each pending PR. Each run receives only a `configSessionId` in the local request context; steps use that id to recover the configured ADO and SonarQube clients.
 
-The Mastra instance registers one workflow and five agents:
+The local review agent registry exposes five agents:
 
 - `codeReviewAgent`
 - `codeReviewRescoreAgent`
@@ -56,7 +56,7 @@ The Mastra instance registers one workflow and five agents:
 - `codeChangeSummaryAgent`
 - `codeReviewEvaluationJudgeAgent`
 
-Storage is configured as in-memory LibSQL, logging uses `PinoLogger`, and Mastra telemetry/observability are disabled by default.
+The workflow runner is plain TypeScript. Persistence uses `FindingStore`, and logging is handled by the existing CLI/logger paths.
 
 ## Workflow (v2)
 
@@ -128,7 +128,6 @@ The confidence filter keeps only AI review issues with `confidence_score >= 0.8`
 
 External package dependencies include:
 
-- `@mastra/core`, `mastra`, `@mastra/libsql`, `@mastra/loggers`, `@mastra/memory`
 - `@ai-sdk/openai`, `openai`, `ai`
 - `zod`
 - `rxjs`
@@ -209,8 +208,9 @@ src/
     webhooks/
       index.ts                      -- Express webhook receiver (HMAC validation)
       eligibility.ts                -- PR eligibility gate
-  mastra/
-    index.ts                        -- Mastra instance
+  review/
+    index.ts                        -- Local review agent registry
+    runtime/                        -- RequestContext, step runner, agent registry contracts
     agents/                         -- 5 LLM agent definitions
     workflows/
       pr-review-workflow.ts         -- Top-level workflow (v2)
@@ -253,13 +253,13 @@ dashboard/                          -- React SPA (Vite + Recharts)
 
 - `src/cli/bin.spec.ts` — CLI binary tests
 - `src/cli/config/local-client.spec.ts` — LocalConfigClient tests
-- `src/mastra/types/finding.spec.ts` — Finding type tests
-- `src/mastra/utils/commit-parser.spec.ts` — Commit parser tests
-- `src/mastra/utils/retry.spec.ts` — Retry tests
-- `src/mastra/utils/sensitive-data-mask.spec.ts` — Sensitive data masking tests
-- `src/mastra/workflows/scanners/compliance-engine.spec.ts` — Compliance engine tests
-- `src/mastra/workflows/scanners/cve-scanner.spec.ts` — CVE scanner tests
-- `src/mastra/workflows/scanners/scanner-pipeline.integration.spec.ts` — Pipeline integration tests
+- `src/review/types/finding.spec.ts` — Finding type tests
+- `src/review/utils/commit-parser.spec.ts` — Commit parser tests
+- `src/review/utils/retry.spec.ts` — Retry tests
+- `src/review/utils/sensitive-data-mask.spec.ts` — Sensitive data masking tests
+- `src/review/workflows/scanners/compliance-engine.spec.ts` — Compliance engine tests
+- `src/review/workflows/scanners/cve-scanner.spec.ts` — CVE scanner tests
+- `src/review/workflows/scanners/scanner-pipeline.integration.spec.ts` — Pipeline integration tests
 - `src/webhooks/eligibility.spec.ts` — Eligibility gate tests
 
 ## Evaluation State
@@ -269,7 +269,7 @@ The evaluation area has:
 - Zod schemas for test cases, results, AI judge input, and aggregate metrics.
 - A generated JSON schema for code-change review test cases.
 - One Java fixture that expects detection of a null pointer risk.
-- An LLM judge agent registered in Mastra.
+- An LLM judge agent registered in the local review agent registry.
 - A standalone evaluator class in `src/evaluation/judge.ts`.
 
 Gaps:
