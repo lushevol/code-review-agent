@@ -353,3 +353,11 @@ export async function getCommentThreadById(
 
   return thread;
 }
+
+export async function getPullRequestThreads(repoId: string, prId: number) {
+  const webApi = this.adoWebApi as AdoWebApi;
+  const gitApi = await webApi.getGitApi();
+  const projectName = this.getProjectName();
+
+  return gitApi.getThreads(repoId, prId, projectName);
+}

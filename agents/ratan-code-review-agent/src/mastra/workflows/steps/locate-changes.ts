@@ -42,12 +42,14 @@ export const locateChanges = createStep({
     const { workItemContext } = inputData;
 
     let codeChangesArray = codeDiffsArray?.map((i) => {
-      const { newFilePath, oldFilePath, changeType, changes } = i;
       return {
-        newFilePath,
-        oldFilePath,
-        changeType,
-        changes: maskSensitiveData(changes),
+        ...i,
+        changes: maskSensitiveData(i.changes),
+        blocks: i.blocks.map((block) => ({
+          ...block,
+          mLines: block.mLines.map((line) => maskSensitiveData(line)),
+          oLines: block.oLines.map((line) => maskSensitiveData(line)),
+        })),
       };
     });
 
@@ -100,7 +102,7 @@ export const locateChanges = createStep({
       prDetails: {
         ...inputData.prDetails,
         codeDiffs: maskSensitiveData(codeDiffs),
-        codeDiffsArray,
+        codeDiffsArray: codeChangesArray,
       },
       workItemContext,
     };

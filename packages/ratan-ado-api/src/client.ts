@@ -15,6 +15,7 @@ import { getCodeDiffFromHierarchyQuery } from "./extension/CodeDiff";
 import {
   commitCompare,
   getBranchLatestCommit,
+  getCommitsBatch,
   getFileContent,
   getReleaseDiffChecking,
 } from "./git";
@@ -32,6 +33,7 @@ import {
 import {
   getLatestPullRequestIterations,
   getLatestPullRequestStatus,
+  getPullRequestStatuses,
   getPullRequestById,
   getPullRequestChangesFiles,
   getPullRequestIterationChangesFiles,
@@ -50,6 +52,7 @@ import {
   addCommentForPR,
   addCommentThreadForPRCode,
   getCommentThreadById,
+  getPullRequestThreads,
   updateCommentThreadStatus,
 } from "./pull-request-comment";
 import { getReleaseWorkItems, queryRatanReleaseIds } from "./release";
@@ -190,6 +193,7 @@ export class AzureDevOps {
   getPullRequestById = getPullRequestById;
   getRepos = getRepos;
   getBranchLatestCommit = getBranchLatestCommit;
+  getCommitsBatch = getCommitsBatch;
   commitCompare = commitCompare;
   getReleaseDiffChecking = getReleaseDiffChecking;
   getPipelineRuns = getPipelineRuns;
@@ -206,6 +210,7 @@ export class AzureDevOps {
   isValidPullRequest = isValidPullRequest;
   hasAlreadyCommented = hasAlreadyCommented;
   getLatestPullRequestStatus = getLatestPullRequestStatus;
+  getPullRequestStatuses = getPullRequestStatuses;
   getWorkitemsByFields = getWorkitemsByFields;
   getCommonWorkItems = getCommonWorkItems;
   getReleaseWorkItems = getReleaseWorkItems;
@@ -217,6 +222,7 @@ export class AzureDevOps {
   addCommentForPR = addCommentForPR;
   addCommentThreadForPRCode = addCommentThreadForPRCode;
   getCommentThreadById = getCommentThreadById;
+  getPullRequestThreads = getPullRequestThreads;
   updateCommentThreadStatus = updateCommentThreadStatus;
   getSubscriptions = getSubscriptions;
   createSubscription = createSubscription;

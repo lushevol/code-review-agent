@@ -31,9 +31,11 @@ export const mastra = new Mastra({
       "sonarqube-webapis/dist/src/enums",
       "sonarqube-webapis/dist/src/resources",
       "azure-devops-node-api",
+      "typed-rest-client",
       "readable-stream",
       "request",
       "protobufjs",
+      "better-sqlite3",
     ],
   },
 });

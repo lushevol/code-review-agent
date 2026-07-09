@@ -8,6 +8,7 @@ import { CveScanner } from "./cve-scanner";
 import { complianceEngine } from "./compliance-engine";
 import type { FindingStore } from "finding-store";
 import type { Scanner } from "./types";
+import { reconcileFindings } from "../utils/finding-reconciler";
 
 // ─── Input/Output Schemas ─────────────────────────────────────────────────────
 
@@ -17,8 +18,11 @@ const ScannerPipelineInputSchema = z.object({
 });
 
 const ScannerPipelineOutputSchema = z.object({
+  prDetails: PullRequestSchema,
+  workItemContext: z.string().optional(),
   findings: z.array(NormalizedFindingSchema),
   correlationSummary: z.string(),
+  changesSinceLastReview: z.string().optional(),
 });
 
 // ─── Severity Priority Map ────────────────────────────────────────────────────
@@ -119,7 +123,7 @@ export const scannerPipeline = createStep({
 
     // ── Initialise FindingStore ─────────────────────────────────────────
     const findingStore: FindingStore = new (await import("finding-store")).FindingStore();
-    const findingStorePath = rootConfig.findingStorePath;
+    const findingStorePath = rootConfig.findingStorePath ?? ".ratan/data/findings.db";
     findingStore.init(findingStorePath);
 
     // ── Build scanner list ──────────────────────────────────────────────
@@ -172,6 +176,32 @@ export const scannerPipeline = createStep({
     const correlated = correlateFindings(allFindings);
     const prioritized = prioritizeFindings(correlated);
 
+    let changesSinceLastReview = "";
+    try {
+      const previousFindings = findingStore.getFindingsByPr(
+        prDetails.pullRequestId,
+        prDetails.repoName,
+      ) as unknown as NormalizedFinding[];
+      if (previousFindings.length > 0 && prioritized.length > 0) {
+        const reconciled = reconcileFindings(previousFindings, prioritized);
+        const parts: string[] = ["#### Changes since last review\n"];
+        if (reconciled.findingsToResolve.length > 0) {
+          parts.push(`**${reconciled.findingsToResolve.length}** findings resolved`);
+        }
+        if (reconciled.findingsToSupersede.length > 0) {
+          parts.push(`**${reconciled.findingsToSupersede.length}** findings updated`);
+        }
+        if (reconciled.findingsToCreate.length > 0) {
+          parts.push(`**${reconciled.findingsToCreate.length}** new findings`);
+        }
+        if (parts.length > 1) {
+          changesSinceLastReview = parts.join("\n- ") + "\n\n";
+        }
+      }
+    } catch {
+      changesSinceLastReview = "";
+    }
+
     // ── Persist ─────────────────────────────────────────────────────────
     try {
       findingStore.batchUpsert(prioritized as Parameters<typeof findingStore.batchUpsert>[0]);
@@ -211,8 +241,11 @@ export const scannerPipeline = createStep({
     const correlationSummary = summaryParts.join(" ");
 
     return {
+      prDetails,
+      workItemContext,
       findings: prioritized,
       correlationSummary,
+      changesSinceLastReview,
     };
   },
 });

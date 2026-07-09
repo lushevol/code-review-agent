@@ -1,4 +1,4 @@
-import type { NormalizedFinding } from "../types/finding";
+import type { NormalizedFinding } from "../../types/finding";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 

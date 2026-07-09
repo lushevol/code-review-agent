@@ -9,9 +9,14 @@ import { type NormalizedFinding, NormalizedFindingSchema } from "../../types/fin
 const MergeGateInputSchema = z.object({
   prDetails: PullRequestSchema,
   findings: z.array(NormalizedFindingSchema),
+  workItemContext: z.string().optional(),
+  correlationSummary: z.string(),
+  changesSinceLastReview: z.string().optional(),
+  codeChangeSummary: z.string(),
+  measures: z.union([z.any(), z.null()]),
 });
 
-const MergeGateOutputSchema = z.object({
+const MergeGateOutputSchema = MergeGateInputSchema.extend({
   mergeDecision: z
     .enum(["allowed", "blocked", "pending"])
     .describe("The merge gate decision"),
@@ -78,22 +83,15 @@ export const mergeGate = createStep({
           : GIT_STATUS_STATE.Pending;
 
     try {
-      const webApi = adoClient.getAdoClient();
-      const gitApi = await webApi.getGitApi();
-      const projectName = adoClient.getProjectName();
-
-      await gitApi.createPullRequestStatus(
+      await adoClient.createPullRequestStatus(
+        prDetails.repoName,
+        prDetails.pullRequestId,
         {
           state,
           description: statusDescription + commitHint,
-          context: {
-            name: "PR Guardian / Merge Gate" + iterationSuffix,
-            genre: "PR Guardian",
-          },
+          contextName: "PR Guardian / Merge Gate" + iterationSuffix,
+          genre: "PR Guardian",
         },
-        prDetails.repoName,
-        prDetails.pullRequestId,
-        projectName,
       );
     } catch (err) {
       console.error(
@@ -102,6 +100,6 @@ export const mergeGate = createStep({
       // Non-fatal — decision is still returned
     }
 
-    return { mergeDecision };
+    return { ...inputData, mergeDecision };
   },
 });

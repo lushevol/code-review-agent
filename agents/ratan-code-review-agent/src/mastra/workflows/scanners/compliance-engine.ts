@@ -105,7 +105,7 @@ function normalizeSeverity(severity: string): NormalizedFinding["severity"] {
 
 // ─── Rule File Loading ────────────────────────────────────────────────────
 
-let yamlModule: typeof import("yaml") | null = null;
+let yamlModule: typeof import("yaml") | null | undefined;
 
 async function getYamlModule(): Promise<typeof import("yaml") | null> {
   if (yamlModule !== undefined) return yamlModule;

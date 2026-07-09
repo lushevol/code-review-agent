@@ -17,7 +17,7 @@ export interface Scanner {
 export interface ScanContext {
   provider: ConfigProvider;
   adoClient: AzureDevOps;
-  sonarClient?: SonarQubeClient;
+  sonarClient?: SonarQubeClient | null;
   findingStore: FindingStore;
   mastra: Mastra;
   workItemContext?: string;

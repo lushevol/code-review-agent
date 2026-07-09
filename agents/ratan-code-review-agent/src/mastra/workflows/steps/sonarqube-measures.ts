@@ -3,9 +3,14 @@ import { ParsedMeasuresComponentSchema } from "ratan-sonarqube-api";
 import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
 import { type CommonRequestContext, PullRequestSchema } from "../../types";
+import { NormalizedFindingSchema } from "../../types/finding";
 
 const PRDetailsInputSchema = z.object({
   prDetails: PullRequestSchema,
+  workItemContext: z.string().optional(),
+  findings: z.array(NormalizedFindingSchema),
+  correlationSummary: z.string(),
+  changesSinceLastReview: z.string().optional(),
 });
 
 const PRDetailsResultSchema = z.object({

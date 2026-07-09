@@ -145,7 +145,7 @@ export class FindingStore {
   private dbPath: string;
 
   constructor(dbPath?: string) {
-    this.dbPath = dbPath ?? ".ratan/code-review-agent/findings.db";
+    this.dbPath = dbPath ?? ".ratan/data/findings.db";
   }
 
   /**
@@ -265,7 +265,7 @@ export class FindingStore {
     );
 
     const upsertCols =
-      "pr_id=excluded.pr_id, repository=excluded.repository, file_path=excluded.file_path, line_start=excluded.line_start, line_end=excluded.line_end, category=excluded.category, severity=excluded.severity, confidence=excluded.confidence, title=excluded.title, description=excluded.description, evidence=excluded.evidence, business_impact=excluded.business_impact, remediation=excluded.remediation, blocking=excluded.blocking, resolution=excluded.resolution, source_engine=excluded.source_engine, source_version=excluded.source_version, supersedes_finding_id=excluded.supersedes_finding_id, content_hash=excluded.content_hash";
+      "pr_id=excluded.pr_id, repository=excluded.repository, file_path=excluded.file_path, line_start=excluded.line_start, line_end=excluded.line_end, category=excluded.category, severity=excluded.severity, confidence=excluded.confidence, title=excluded.title, description=excluded.description, evidence=excluded.evidence, business_impact=excluded.business_impact, remediation=excluded.remediation, blocking=excluded.blocking, linked_task_id=excluded.linked_task_id, resolution=excluded.resolution, source_engine=excluded.source_engine, source_version=excluded.source_version, supersedes_finding_id=excluded.supersedes_finding_id, content_hash=excluded.content_hash";
 
     this.stmts.set(
       STMT.UPSERT_FINDING,
@@ -273,13 +273,13 @@ export class FindingStore {
         INSERT INTO findings (
           id, pr_id, repository, file_path, line_start, line_end,
           category, severity, confidence, title, description,
-          evidence, business_impact, remediation, blocking, resolution,
+          evidence, business_impact, remediation, blocking, linked_task_id, resolution,
           source_engine, source_version, supersedes_finding_id,
           content_hash, created_at
         ) VALUES (
           @id, @pr_id, @repository, @file_path, @line_start, @line_end,
           @category, @severity, @confidence, @title, @description,
-          @evidence, @business_impact, @remediation, @blocking, @resolution,
+          @evidence, @business_impact, @remediation, @blocking, @linked_task_id, @resolution,
           @source_engine, @source_version, @supersedes_finding_id,
           @content_hash, @created_at
         )

@@ -8,7 +8,7 @@ export interface DashboardOptions {
 
 export async function startDashboard(options: DashboardOptions) {
   const port = options.port ?? 3099;
-  const dbPath = options.findingStorePath ?? ".ratan/code-review-agent/findings.db";
+  const dbPath = options.findingStorePath ?? ".ratan/data/findings.db";
 
   // Initialize FindingStore
   const findingStore = new FindingStore(dbPath);

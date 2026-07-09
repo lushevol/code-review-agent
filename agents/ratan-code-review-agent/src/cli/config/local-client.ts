@@ -117,12 +117,7 @@ export class LocalConfigClient implements ConfigProvider {
     return this.adoClient;
   }
 
-  getSonarQubeClient(): SonarQubeClient {
-    if (!this.sonarQubeClient) {
-      throw new Error(
-        "SonarQube client not connected. Call connect() first.",
-      );
-    }
+  getSonarQubeClient(): SonarQubeClient | null {
     return this.sonarQubeClient;
   }
 

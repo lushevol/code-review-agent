@@ -137,6 +137,6 @@ export interface ConfigProvider {
   getAgentConfig(agentName: string): Promise<AgentConfig>;
   buildPrompt(promptKey: string, context?: PromptContext): Promise<string>;
   getAdoClient(): AzureDevOps;
-  getSonarQubeClient(): SonarQubeClient;
+  getSonarQubeClient(): SonarQubeClient | null;
   getOrmClient(): Promise<NodePgDatabase<typeof schema> & { $client: Pool } | null>;
 }

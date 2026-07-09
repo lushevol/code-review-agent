@@ -9,6 +9,7 @@ const FetchWorkItemContextInputSchema = z.object({
 });
 
 const FetchWorkItemContextResultSchema = z.object({
+  prDetails: PullRequestSchema,
   workItemContext: z.string(),
 });
 
@@ -29,8 +30,8 @@ export const fetchWorkItemContext = createStep({
         repoName,
         repoId,
         workItemIds,
-        sourceRefName,
-        targetRefName,
+        latestTargetCommitId,
+        latestSourceCommitId,
       },
     } = inputData;
 
@@ -49,11 +50,10 @@ export const fetchWorkItemContext = createStep({
 
     // Work items referenced in commit messages
     try {
-      const sourceBranch = sourceRefName?.replace("refs/heads/", "") ?? "";
       const commits = await adoClient.getCommitsBatch(
-        repoId ?? repoName,
-        sourceBranch,
-        100, // batch size
+        repoName,
+        latestTargetCommitId,
+        latestSourceCommitId,
       );
       const commitMessages: string[] = (commits ?? []).map(
         (c: { comment?: string }) => c.comment ?? "",
@@ -69,7 +69,7 @@ export const fetchWorkItemContext = createStep({
 
     // 2. Fetch work item details
     if (allWorkItemIds.size === 0) {
-      return { workItemContext: "" };
+      return { prDetails: inputData.prDetails, workItemContext: "" };
     }
 
     try {
@@ -84,11 +84,11 @@ export const fetchWorkItemContext = createStep({
       parts.push("## PR Context from Work Items\n");
 
       for (const wi of workItems ?? []) {
-        const id = wi.id ?? wi.Id ?? wi.ID;
-        const title = wi.title ?? wi.Title ?? "Untitled";
-        const description = wi.description ?? wi.Description ?? "";
-        const acceptanceCriteria = wi.acceptanceCriteria ?? wi.AcceptanceCriteria ?? "";
-        const comments = wi.comments ?? wi.Comments ?? [];
+        const id = wi.id;
+        const title = wi.title ?? "Untitled";
+        const description = wi.description ?? "";
+        const acceptanceCriteria = wi.acceptanceCriteria ?? "";
+        const comments = wi.comments ?? [];
 
         parts.push(`### #${id} - ${title}`);
 
@@ -103,19 +103,17 @@ export const fetchWorkItemContext = createStep({
         if (Array.isArray(comments) && comments.length > 0) {
           parts.push("**Comments:**");
           for (const comment of comments) {
-            const text = comment.text ?? comment.Text ?? "";
-            const by = comment.author ?? comment.by ?? "Unknown";
-            if (text) {
-              parts.push(`- ${by}: ${text}`);
+            if (comment) {
+              parts.push(`- ${comment}`);
             }
           }
         }
       }
 
-      return { workItemContext: parts.join("\n") };
+      return { prDetails: inputData.prDetails, workItemContext: parts.join("\n") };
     } catch (error) {
       console.error("Error fetching work item context:", error);
-      return { workItemContext: "" };
+      return { prDetails: inputData.prDetails, workItemContext: "" };
     }
   },
 });

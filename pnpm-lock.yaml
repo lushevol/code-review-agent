@@ -62,6 +62,12 @@ importers:
       ratan-ado-api:
         specifier: workspace:*
         version: link:../../packages/ratan-ado-api
+      ratan-code-review-agent-orm:
+        specifier: workspace:*
+        version: link:../../packages/ratan-code-review-agent-orm
+      ratan-markdown-tool:
+        specifier: workspace:*
+        version: link:../../packages/ratan-markdown-tool
       ratan-sonarqube-api:
         specifier: workspace:*
         version: link:../../packages/ratan-sonarqube-api

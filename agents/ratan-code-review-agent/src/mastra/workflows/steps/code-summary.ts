@@ -6,6 +6,10 @@ import { MAX_CHARACTER } from "../../utils/const";
 
 const CodeSummaryInputSchema = z.object({
   prDetails: PullRequestSchema,
+  workItemContext: z.string().optional(),
+  findings: z.array(NormalizedFindingSchema),
+  correlationSummary: z.string(),
+  changesSinceLastReview: z.string().optional(),
 });
 
 const CodeSummaryResultSchema = z.object({
@@ -61,3 +65,4 @@ export const codeSummary = createStep({
     };
   },
 });
+import { NormalizedFindingSchema } from "../../types/finding";

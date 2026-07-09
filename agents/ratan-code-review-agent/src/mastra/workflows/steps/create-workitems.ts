@@ -9,9 +9,16 @@ import { type NormalizedFinding, NormalizedFindingSchema } from "../../types/fin
 const CreateWorkItemsInputSchema = z.object({
   prDetails: PullRequestSchema,
   findings: z.array(NormalizedFindingSchema),
+  workItemContext: z.string().optional(),
+  correlationSummary: z.string(),
+  changesSinceLastReview: z.string().optional(),
+  codeChangeSummary: z.string(),
+  measures: z.union([z.any(), z.null()]),
+  mergeDecision: z.enum(["allowed", "blocked", "pending"]),
+  auditRecordId: z.string().uuid().optional(),
 });
 
-const CreateWorkItemsOutputSchema = z.object({
+const CreateWorkItemsOutputSchema = CreateWorkItemsInputSchema.extend({
   createdWorkItems: z.number().describe("Number of work items created"),
 });
 
@@ -92,7 +99,7 @@ export const createWorkItems = createStep({
     // ── Initialise FindingStore (for idempotency checks) ────────────────
     const { FindingStore } = await import("finding-store");
     const findingStore = new FindingStore();
-    const findingStorePath = rootConfig.findingStorePath;
+    const findingStorePath = rootConfig.findingStorePath ?? ".ratan/data/findings.db";
     findingStore.init(findingStorePath);
 
     // Build PR URL for work item description
@@ -110,7 +117,7 @@ export const createWorkItems = createStep({
     );
 
     if (actionableFindings.length === 0) {
-      return { createdWorkItems: 0 };
+      return { ...inputData, createdWorkItems: 0 };
     }
 
     // ── Get the underlying ADO WebApi for work item creation ────────────
@@ -194,6 +201,6 @@ export const createWorkItems = createStep({
       }
     }
 
-    return { createdWorkItems: createdCount };
+    return { ...inputData, createdWorkItems: createdCount };
   },
 });

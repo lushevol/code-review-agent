@@ -9,6 +9,13 @@
     "moduleResolution": "bundler",
     "target": "ESNext",
     "useDefineForClassFields": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "paths": {
+      "finding-store": ["../../packages/finding-store/src/index.ts"],
+      "agent-config-manager": ["../../packages/agent-config-manager/src/index.ts"],
+      "ratan-ado-api": ["../../packages/ratan-ado-api/src/index.ts"],
+      "ratan-sonarqube-api": ["../../packages/ratan-sonarqube-api/src/index.ts"]
+    }
   }
 }

@@ -31,8 +31,8 @@ export interface StartOptions {
 
 // ─── Ratan Folder Setup ─────────────────────────────────────────────────────
 
-function ensureRatanFolder(baseDir: string) {
-  const ratanDir = path.resolve(baseDir, RATAN_DIR);
+export function ensureRatanFolder(ratanDirPath: string) {
+  const ratanDir = path.resolve(ratanDirPath);
 
   if (!fs.existsSync(ratanDir)) {
     console.log(`[start] Creating .ratan folder at: ${ratanDir}`);
@@ -60,6 +60,7 @@ function ensureRatanFolder(baseDir: string) {
         name: "issue-classification.md",
         template: "issue-classification.md.template",
       },
+      { name: "summary.md", template: "summary.md.template" },
     ];
     for (const { name, template } of promptTemplates) {
       const promptPath = path.join(promptsDir, name);
@@ -110,32 +111,36 @@ async function startFeedbackDaemon(
     try {
       // Get all unique PRs from audit records
       const auditRecords = findingStore.queryAuditRecords({});
-      const prSet = new Set<number>();
+      const prRepos = new Map<number, Set<string>>();
       for (const record of auditRecords) {
-        prSet.add(record.prId);
+        const repos = prRepos.get(record.prId) ?? new Set<string>();
+        repos.add(record.repository);
+        prRepos.set(record.prId, repos);
       }
 
       let totalResolved = 0;
       let totalDismissed = 0;
       let totalFp = 0;
 
-      for (const prId of prSet) {
-        try {
-          const result = await feedbackService.syncAdoCommentThreads(
-            provider,
-            prId,
-            "", // repo name — sync tries all threads
-          );
-          totalResolved += result.resolvedByDev;
-          totalDismissed += result.dismissedByDev;
-          totalFp += result.flaggedFalsePositive;
-        } catch {
-          // Per-PR failure is non-fatal
+      for (const [prId, repos] of prRepos) {
+        for (const repoName of repos) {
+          try {
+            const result = await feedbackService.syncAdoCommentThreads(
+              provider,
+              prId,
+              repoName,
+            );
+            totalResolved += result.resolvedByDev;
+            totalDismissed += result.dismissedByDev;
+            totalFp += result.flaggedFalsePositive;
+          } catch {
+            // Per-PR failure is non-fatal
+          }
         }
       }
 
       logger.info(
-        `Feedback cycle: ${totalResolved} resolved, ${totalDismissed} dismissed, ${totalFp} FP flagged (${prSet.size} PRs)`,
+        `Feedback cycle: ${totalResolved} resolved, ${totalDismissed} dismissed, ${totalFp} FP flagged (${prRepos.size} PRs)`,
       );
     } catch (err) {
       logger.error(`Feedback cycle failed: ${(err as Error).message}`);
@@ -161,11 +166,10 @@ export async function startCommand(options: StartOptions) {
   cleanOldLogs(30);
 
   // 2. Setup .ratan folder
-  const baseDir = options.config
+  const ratanDir = options.config
     ? path.resolve(options.config)
-    : path.resolve(process.cwd());
-  ensureRatanFolder(baseDir);
-  const ratanDir = path.resolve(baseDir, RATAN_DIR);
+    : path.resolve(process.cwd(), RATAN_DIR);
+  ensureRatanFolder(ratanDir);
 
   // 3. Load config
   logger.info("Loading configuration...");
@@ -195,10 +199,9 @@ export async function startCommand(options: StartOptions) {
   }
 
   // 6. Start the feedback daemon (ado comment sync, false-positive detection)
-  startFeedbackDaemon(provider, ratanDir);
-
   // 7. Handle --watch mode: scan every 30 minutes, daemon keeps running
   if (options.watch) {
+    startFeedbackDaemon(provider, ratanDir);
     const INTERVAL_MS = 30 * 60 * 1000;
 
     const runScan = async () => {

@@ -12,8 +12,6 @@ export class AuditService {
     try {
       const now = new Date().toISOString();
 
-      // Serialise the local AuditRecord to match the FindingStore's
-      // AuditRecord interface, which expects JSON-encoded string fields.
       this.findingStore.saveAuditRecord({
         id: auditRecord.id,
         prId: auditRecord.prId,
@@ -22,15 +20,13 @@ export class AuditService {
         baseCommitHash: auditRecord.baseCommitHash,
         reviewStartTimestamp: auditRecord.reviewStartTimestamp,
         reviewEndTimestamp: auditRecord.reviewEndTimestamp,
-        scanners: JSON.stringify(auditRecord.scanners),
+        scanners: auditRecord.scanners,
         modelVersion: auditRecord.modelVersion,
         findingsCount: auditRecord.findingsCount,
         blockingFindingsCount: auditRecord.blockingFindingsCount,
         mergePolicyDecision: auditRecord.mergePolicyDecision,
         supersedesReviewId: auditRecord.supersedesReviewId,
-        rawScannerOutputs: auditRecord.rawScannerOutputs
-          ? JSON.stringify(auditRecord.rawScannerOutputs)
-          : null,
+        rawScannerOutputs: auditRecord.rawScannerOutputs,
         createdAt: now,
       });
     } catch (err) {

@@ -1,3 +1,6 @@
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { complianceEngine } from "./compliance-engine";
 
@@ -102,6 +105,53 @@ describe("complianceEngine", () => {
     expect(todoFinding!.severity).toBe("low");
     expect(todoFinding!.category).toBe("compliance");
     expect(todoFinding!.confidence).toBe(1.0);
+  });
+
+  it("loads YAML compliance rules from the configured rules path", async () => {
+    const baseDir = await mkdtemp(path.join(tmpdir(), "ratan-rules-"));
+    try {
+      const rulesDir = path.join(baseDir, ".ratan", "code-review-agent", "rules");
+      await mkdir(rulesDir, { recursive: true });
+      await writeFile(
+        path.join(rulesDir, "forbidden.yaml"),
+        [
+          "rule-id: no-dangerous-call",
+          "description: Dangerous calls are not allowed",
+          "severity: high",
+          "forbidden_patterns:",
+          "  - dangerousCall(",
+          "file_patterns:",
+          "  - '**/*.ts'",
+          "",
+        ].join("\n"),
+        "utf-8",
+      );
+
+      const pr = createMockPR("src/main.ts", ["dangerousCall(userInput);"]);
+      const context = {
+        ...createMockContext(),
+        provider: {
+          getRootConfig: vi.fn().mockResolvedValue({
+            scannerSettings: {
+              compliance: {
+                rulesPath: baseDir,
+              },
+            },
+          }),
+        },
+      };
+
+      const result = await complianceEngine.scan(pr, context);
+
+      const yamlFinding = result.findings.find(
+        (finding) => finding.title === "Compliance rule: no-dangerous-call",
+      );
+      expect(yamlFinding).toBeDefined();
+      expect(yamlFinding!.severity).toBe("high");
+      expect(yamlFinding!.blocking).toBe(true);
+    } finally {
+      await rm(baseDir, { recursive: true, force: true });
+    }
   });
 
   it("returns a finding when a changed file contains a FIXME comment", async () => {

@@ -75,7 +75,7 @@ export const ScannerResultSchema = z.object({
   findings: z.array(NormalizedFindingSchema),
   engine: EngineType,
   durationMs: z.number(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 export type ScannerResult = z.infer<typeof ScannerResultSchema>;
 
@@ -115,7 +115,7 @@ export const AuditRecordSchema = z.object({
   blockingFindingsCount: z.number(),
   mergePolicyDecision: z.enum(["allowed", "blocked", "pending"]),
   supersedesReviewId: z.string().uuid().nullable(),
-  rawScannerOutputs: z.record(z.unknown()).optional(),
+  rawScannerOutputs: z.record(z.string(), z.unknown()).optional(),
 });
 export type AuditRecord = z.infer<typeof AuditRecordSchema>;
 

@@ -71,6 +71,15 @@ export class PRQueueService {
   }
 
   /**
+   * Clear pending items. The item currently being processed is left alone.
+   */
+  clearPending(): number {
+    const count = this.queue.length;
+    this.queue = [];
+    return count;
+  }
+
+  /**
    * Check if a PR with build pipeline exists before allowing it through the queue.
    * This queries ADO for build/CI status of the PR's latest commit.
    */
@@ -84,7 +93,6 @@ export class PRQueueService {
       const statuses = await adoClient.getPullRequestStatuses(
         repoName,
         prId,
-        provider.getProjectName(),
       );
 
       // A build pipeline is detected by checking if any GitBuild status exists

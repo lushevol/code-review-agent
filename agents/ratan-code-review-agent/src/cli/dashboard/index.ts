@@ -73,11 +73,11 @@ export function createDashboardApp(findingStore: FindingStore) {
    */
   app.post("/api/queue/cancel", (_req, res) => {
     try {
-      // Note: hard cancellation is best-effort; the processor runs to completion.
-      // This endpoint clears the queue but the current PR finishes.
       const queue = getPRQueue();
+      const cleared = queue.clearPending();
       res.json({
         success: true,
+        cleared,
         message: "Queue cleared (current processing continues)",
       });
     } catch (err) {
