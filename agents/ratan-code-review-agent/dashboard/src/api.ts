@@ -65,3 +65,27 @@ export async function overrideFinding(
   if (!res.ok) throw new Error(`Failed to override finding: ${res.statusText}`);
   return res.json();
 }
+
+// ── Queue API ─────────────────────────────────────────────────────────────────
+
+/**
+ * Get current PR queue status.
+ */
+export async function fetchQueue(): Promise<any> {
+  const res = await fetch(`${API_BASE}/queue`);
+  if (!res.ok) throw new Error(`Failed to fetch queue: ${res.statusText}`);
+  return res.json();
+}
+
+/**
+ * Manually add a PR to the review queue.
+ */
+export async function addPRToQueue(prId: number, repoName?: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/queue`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prId, repoName: repoName ?? `PR #${prId}` }),
+  });
+  if (!res.ok) throw new Error(`Failed to add PR to queue: ${res.statusText}`);
+  return res.json();
+}

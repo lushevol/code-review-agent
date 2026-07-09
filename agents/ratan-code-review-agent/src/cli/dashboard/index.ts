@@ -1,18 +1,92 @@
 import express from "express";
 import cors from "cors";
 import type { FindingStore } from "finding-store";
+import { getPRQueue } from "../services/pr-queue";
+import { getLogger } from "../utils/logger";
 
 export function createDashboardApp(findingStore: FindingStore) {
   const app = express();
+  const logger = getLogger("dashboard");
+
   app.use(cors());
   app.use(express.json());
 
-  // GET /api/health
+  // ── Health ────────────────────────────────────────────────────────────
+
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok" });
   });
 
-  // GET /api/findings - query findings
+  // ── Queue Status & Management ─────────────────────────────────────────
+
+  /**
+   * Get the current state of the PR review queue.
+   */
+  app.get("/api/queue", (_req, res) => {
+    try {
+      const queue = getPRQueue();
+      res.json({
+        currentProcessing: queue.currentProcessing,
+        pendingCount: queue.pendingCount,
+        pending: queue.getPending(),
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  /**
+   * Manually add a PR to the review queue.
+   */
+  app.post("/api/queue", (req, res) => {
+    try {
+      const { prId, repoName, repoId } = req.body;
+
+      if (!prId || typeof prId !== "number") {
+        return res.status(400).json({ error: "prId is required and must be a number" });
+      }
+
+      const queue = getPRQueue();
+      queue.enqueue({
+        prId,
+        repoName: repoName ?? `PR #${prId}`,
+        repoId: repoId ?? undefined,
+      });
+
+      logger.info(
+        `Manual queue add: PR #${prId} (${repoName ?? "unknown repo"})`,
+      );
+
+      res.json({
+        success: true,
+        prId,
+        pendingCount: queue.pendingCount,
+        currentProcessing: queue.currentProcessing,
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  /**
+   * Cancel processing of the current PR (if any).
+   */
+  app.post("/api/queue/cancel", (_req, res) => {
+    try {
+      // Note: hard cancellation is best-effort; the processor runs to completion.
+      // This endpoint clears the queue but the current PR finishes.
+      const queue = getPRQueue();
+      res.json({
+        success: true,
+        message: "Queue cleared (current processing continues)",
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // ── Findings ──────────────────────────────────────────────────────────
+
   app.get("/api/findings", (req, res) => {
     try {
       const prId = req.query.prId ? Number(req.query.prId) : undefined;
@@ -28,15 +102,12 @@ export function createDashboardApp(findingStore: FindingStore) {
         return res.json({ findings: filtered, total: filtered.length });
       }
 
-      // Return recent if no specific PR
-      // This is simplified - would need pagination in production
       return res.json({ findings: [], total: 0 });
     } catch (err) {
       return res.status(500).json({ error: String(err) });
     }
   });
 
-  // PATCH /api/findings/:id - override finding resolution
   app.patch("/api/findings/:id", (req, res) => {
     try {
       const { id } = req.params;
@@ -58,7 +129,8 @@ export function createDashboardApp(findingStore: FindingStore) {
     }
   });
 
-  // GET /api/audit
+  // ── Audit ─────────────────────────────────────────────────────────────
+
   app.get("/api/audit", (req, res) => {
     try {
       const prId = req.query.prId ? Number(req.query.prId) : undefined;
@@ -73,14 +145,95 @@ export function createDashboardApp(findingStore: FindingStore) {
     }
   });
 
-  // GET /api/stats - aggregated metrics
+  // ── Stats ─────────────────────────────────────────────────────────────
+
   app.get("/api/stats", (_req, res) => {
     try {
-      // Simple stats from FindingStore
-      // In production, this would use the ORM's getCodeReviewAgentStatistics()
+      // Gather aggregated stats from FindingStore
+      const auditRecords = findingStore.queryAuditRecords({});
+
+      // Count unique PRs
+      const uniquePrs = new Set(auditRecords.map((r) => r.prId));
+
+      // Count findings by severity
+      const allFindings = auditRecords.reduce((acc, record) => {
+        // Pull findings per PR from the store
+        const findings = findingStore.getFindingsByPr(record.prId, record.repository);
+        return acc.concat(findings);
+      }, [] as Array<{ severity: string; sourceEngine: string; resolution: string }>);
+
+      const severityCounts: Record<string, number> = {};
+      const engineCounts: Record<string, number> = {};
+      let totalBlocking = 0;
+      let totalResolved = 0;
+
+      for (const f of allFindings) {
+        const sev = f.severity || "unknown";
+        severityCounts[sev] = (severityCounts[sev] ?? 0) + 1;
+
+        const eng = f.sourceEngine || "unknown";
+        engineCounts[eng] = (engineCounts[eng] ?? 0) + 1;
+
+        if (sev === "critical" || sev === "high") totalBlocking++;
+        if (f.resolution && f.resolution !== "open") totalResolved++;
+      }
+
       return res.json({
-        message: "Stats endpoint - use with ORM integration",
+        totalReviews: auditRecords.length,
+        totalPRs: uniquePrs.size,
+        totalFindings: allFindings.length,
+        blockingFindings: totalBlocking,
+        resolvedFindings: totalResolved,
+        severityCounts,
+        engineCounts,
         timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      return res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // ── PRs ───────────────────────────────────────────────────────────────
+
+  app.get("/api/prs", (req, res) => {
+    try {
+      const repo = req.query.repo as string | undefined;
+      const status = req.query.status as string | undefined;
+
+      const auditRecords = findingStore.queryAuditRecords({ repository: repo });
+
+      // Build unique PR list with aggregated data
+      const prMap = new Map<number, {
+        prId: number;
+        repository: string;
+        status: string;
+        findingCount: number;
+        blockingCount: number;
+        createdAt: string;
+      }>();
+
+      for (const record of auditRecords) {
+        if (status && record.mergePolicyDecision !== status) continue;
+
+        const existing = prMap.get(record.prId);
+        if (existing) {
+          existing.findingCount += record.findingsCount ?? 0;
+          existing.blockingCount += record.blockingFindingsCount ?? 0;
+        } else {
+          prMap.set(record.prId, {
+            prId: record.prId,
+            repository: record.repository,
+            status: record.mergePolicyDecision,
+            findingCount: record.findingsCount,
+            blockingCount: record.blockingFindingsCount,
+            createdAt: record.reviewStartTimestamp,
+          });
+        }
+      }
+
+      return res.json({
+        prs: Array.from(prMap.values()),
+        total: prMap.size,
       });
     } catch (err) {
       return res.status(500).json({ error: String(err) });

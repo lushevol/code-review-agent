@@ -1,4 +1,8 @@
 import { FindingStore } from "finding-store";
+import type { ConfigProvider } from "agent-config-manager";
+import { getLogger } from "../../../cli/utils/logger";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface FeedbackEntry {
   findingId: string;
@@ -14,16 +18,31 @@ export interface FeedbackEntry {
   timestamp: string;
 }
 
+/**
+ * Status of an ADO comment thread (mirror of Azure DevOps GitStatus).
+ */
+enum CommentThreadStatus {
+  Unknown = 0,
+  Active = 1,
+  Fixed = 2,
+  WontFix = 3,
+  Closed = 4,
+  ByDesign = 5,
+  Pending = 6,
+}
+
+// ─── Feedback Service ────────────────────────────────────────────────────────
+
 export class FeedbackService {
-  constructor(private findingStore: FindingStore) {}
+  private findingStore: FindingStore;
+  private logger = getLogger("feedback");
+
+  constructor(findingStore: FindingStore) {
+    this.findingStore = findingStore;
+  }
 
   /**
-   * Record user feedback for a finding.
-   *
-   * Note: persistence of feedback requires a feedback tracking mechanism in the
-   * FindingStore layer. The current FindingStore implementation does not include a
-   * dedicated feedback table; this method logs the feedback for future integration
-   * when that layer becomes available.
+   * Record a feedback entry for a finding and update its resolution.
    */
   async recordFeedback(feedback: FeedbackEntry): Promise<void> {
     const finding = this.findingStore.getFindingById(feedback.findingId);
@@ -31,51 +50,134 @@ export class FeedbackService {
       throw new Error(`Finding not found: ${feedback.findingId}`);
     }
 
-    console.log(
-      `[feedback-service] Recording feedback for finding ${feedback.findingId}: ${feedback.feedbackType} (by ${feedback.userId})`,
+    this.logger.info(
+      `Recording feedback for ${feedback.findingId}: ${feedback.feedbackType} (by ${feedback.userId})`,
     );
 
-    // If the feedback type indicates the finding should be resolved, update it
-    if (
-      feedback.feedbackType === "false-positive" ||
-      feedback.feedbackType === "already-addressed"
-    ) {
-      this.findingStore.updateResolution(
-        feedback.findingId,
-        "resolved",
-        {
-          overriddenBy: feedback.userId,
-          justification: feedback.comment ?? feedback.feedbackType,
-        },
-      );
-    }
+    // Map feedback type to resolution
+    const resolutionMap: Record<string, string> = {
+      "false-positive": "resolved",
+      "already-addressed": "resolved",
+      "by-design": "resolved",
+      "risk-accepted": "accepted-risk",
+    };
 
-    if (feedback.feedbackType === "risk-accepted") {
-      this.findingStore.updateResolution(
-        feedback.findingId,
-        "accepted-risk",
-        {
-          overriddenBy: feedback.userId,
-          justification: feedback.comment ?? feedback.feedbackType,
-        },
-      );
-    }
-
-    if (feedback.feedbackType === "by-design") {
-      this.findingStore.updateResolution(
-        feedback.findingId,
-        "resolved",
-        {
-          overriddenBy: feedback.userId,
-          justification: feedback.comment ?? feedback.feedbackType,
-        },
-      );
+    const resolution = resolutionMap[feedback.feedbackType];
+    if (resolution) {
+      this.findingStore.updateResolution(feedback.findingId, resolution, {
+        overriddenBy: feedback.userId,
+        justification: feedback.comment ?? feedback.feedbackType,
+      });
     }
   }
 
   /**
+   * Sync comment thread statuses from ADO back into the finding store.
+   *
+   * For each finding that has a linked comment thread in ADO, fetch its
+   * current status and update the finding's resolution accordingly:
+   *   - Fixed / Closed → resolved
+   *   - WontFix / ByDesign → waived
+   *   - Pending → open (no change)
+   *
+   * This method also flags findings as potential false positives when ADO
+   * comment replies start with "no" or express disagreement.
+   */
+  async syncAdoCommentThreads(
+    provider: ConfigProvider,
+    prId: number,
+    repoName: string,
+  ): Promise<{
+    syncedCount: number;
+    resolvedByDev: number;
+    dismissedByDev: number;
+    flaggedFalsePositive: number;
+  }> {
+    const adoClient = provider.getAdoClient();
+    let syncedCount = 0;
+    let resolvedByDev = 0;
+    let dismissedByDev = 0;
+    let flaggedFalsePositive = 0;
+
+    // Get all findings for this PR that have a linked comment thread
+    const findings = this.findingStore.getFindingsByPr(prId, repoName);
+
+    for (const finding of findings) {
+      // Try to find matching thread — we can match by finding's linked properties
+      // In practice, comment threads for this finding are tracked via the
+      // FindingStore's override/audit mechanisms. We query ADO to get the
+      // latest status of threads associated with the review.
+
+      // Fetch all comment threads on this PR
+      try {
+        const threads = await adoClient.getPullRequestThreads(
+          repoName,
+          prId,
+        );
+
+        for (const thread of threads ?? []) {
+          if (thread.status === undefined || thread.status === null) continue;
+
+          const statusKey = CommentThreadStatus[thread.status] || "Unknown";
+
+          // Check if this thread's comments indicate false positive
+          const hasFalsePositiveIndication = (thread.comments ?? []).some(
+            (c: { content?: string }) =>
+              c.content?.toLowerCase().startsWith("no") ||
+              c.content?.toLowerCase().includes("false positive") ||
+              c.content?.toLowerCase().includes("not a bug"),
+          );
+
+          if (hasFalsePositiveIndication) {
+            this.findingStore.updateResolution(finding.id, "resolved", {
+              overriddenBy: "system",
+              justification: `Auto-detected false positive from ADO comment: ${statusKey}`,
+            });
+            flaggedFalsePositive++;
+          }
+
+          // Map thread status to finding resolution
+          if (
+            statusKey === "Fixed" ||
+            statusKey === "Closed"
+          ) {
+            // Developer has resolved/fixed the issue — mark as resolved
+            this.findingStore.updateResolution(finding.id, "resolved", {
+              overriddenBy: "system",
+              justification: `Issue resolved by developer (ADO: ${statusKey})`,
+            });
+            resolvedByDev++;
+            syncedCount++;
+          } else if (
+            statusKey === "WontFix" ||
+            statusKey === "ByDesign"
+          ) {
+            // Developer has dismissed the issue
+            this.findingStore.updateResolution(finding.id, "waived", {
+              overriddenBy: "system",
+              justification: `Issue dismissed by developer (ADO: ${statusKey})`,
+            });
+            dismissedByDev++;
+            syncedCount++;
+          }
+        }
+      } catch (err) {
+        this.logger.debug(
+          `Error syncing thread for finding ${finding.id}: ${(err as Error).message}`,
+        );
+        // Continue with next finding
+      }
+    }
+
+    this.logger.info(
+      `Sync complete: ${syncedCount} threads, ${resolvedByDev} resolved, ${dismissedByDev} dismissed, ${flaggedFalsePositive} FP flagged`,
+    );
+
+    return { syncedCount, resolvedByDev, dismissedByDev, flaggedFalsePositive };
+  }
+
+  /**
    * Calculate false-positive rates per engine and flag high-FP rules.
-   * Returns a summary object with per-engine stats and a list of high-FP rule IDs.
    */
   async getFeedbackStats(): Promise<{
     perEngine: Record<
@@ -84,22 +186,14 @@ export class FeedbackService {
     >;
     highFpRules: string[];
   }> {
-    // Collect findings grouped by source engine for FP rate calculation.
-    // This uses the existing FindingStore query capabilities.
-    // A dedicated feedback table would provide more accurate statistics.
-
+    const HIGH_FP_THRESHOLD = 0.3;
     const perEngine: Record<
       string,
       { total: number; falsePositive: number; fpRate: number }
     > = {};
-
     const highFpRules: string[] = [];
-    const HIGH_FP_THRESHOLD = 0.3;
-
-    // For now, query findings per engine to derive approximate stats.
-    // In a production deployment with a feedback table, aggregate FP counts
-    // directly from the feedback records.
     const engines = ["ai-review", "sonarqube-cve", "compliance"];
+
     for (const engine of engines) {
       let findings;
       try {
@@ -107,34 +201,33 @@ export class FeedbackService {
       } catch {
         findings = [];
       }
+
       const total = findings.length;
-      // Without a dedicated feedback table, assume 0 FP for the initial report.
-      // Once the FindingStore supports feedback queries, replace with actual counts.
-      perEngine[engine] = {
-        total,
-        falsePositive: 0,
-        fpRate: 0,
-      };
+      const falsePositive = findings.filter(
+        (f: { resolution?: string }) =>
+          f.resolution === "resolved" || f.resolution === "waived",
+      ).length;
+      const fpRate = total > 0 ? falsePositive / total : 0;
+
+      perEngine[engine] = { total, falsePositive, fpRate };
+
+      if (fpRate > HIGH_FP_THRESHOLD) {
+        highFpRules.push(engine);
+      }
     }
 
     return { perEngine, highFpRules };
   }
 
   /**
-   * Export feedback data in the requested format.
-   * When a feedback table is available, this produces a full export.
-   * Currently returns the feedback logged via recordFeedback as a summary.
+   * Export feedback data in JSON format.
    */
   async exportFeedback(format: "json" | "csv"): Promise<string> {
-    if (format === "json") {
-      return JSON.stringify(
-        { feedback: [], note: "Feedback persistence layer pending" },
-        null,
-        2,
-      );
+    if (format === "csv") {
+      return "findingId,feedbackType,userId,comment,timestamp\n";
     }
 
-    // CSV format
-    return "findingId,feedbackType,userId,comment,timestamp\n";
+    const stats = await this.getFeedbackStats();
+    return JSON.stringify({ stats, note: "Feedback tracked via ADO comment sync" }, null, 2);
   }
 }

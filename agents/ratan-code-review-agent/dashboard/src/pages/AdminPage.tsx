@@ -1,39 +1,84 @@
 import { useEffect, useState } from "react";
-import { fetchAudit, fetchFindings } from "../api";
+import { fetchAudit, fetchFindings, fetchQueue, addPRToQueue } from "../api";
 
 export default function AdminPage() {
   const [auditLog, setAuditLog] = useState<any[]>([]);
   const [findings, setFindings] = useState<any[]>([]);
+  const [queueStatus, setQueueStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Manual PR Queue Form ─────────────────────────────────────
+
+  const [prIdInput, setPrIdInput] = useState("");
+  const [repoNameInput, setRepoNameInput] = useState("");
+  const [queueMsg, setQueueMsg] = useState<string | null>(null);
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const [queueRefreshing, setQueueRefreshing] = useState(false);
+
+  const refreshQueue = async () => {
+    try {
+      setQueueRefreshing(true);
+      const data = await fetchQueue();
+      setQueueStatus(data);
+    } catch (e: any) {
+      setQueueStatus(null);
+    } finally {
+      setQueueRefreshing(false);
+    }
+  };
+
+  const handleAddPR = async () => {
+    const prId = parseInt(prIdInput, 10);
+    if (isNaN(prId) || prId <= 0) {
+      setQueueError("Please enter a valid PR ID (positive number)");
+      return;
+    }
+
+    setQueueMsg(null);
+    setQueueError(null);
+
+    try {
+      const result = await addPRToQueue(prId, repoNameInput || undefined);
+      setQueueMsg(`PR #${prId} added to queue. ${result.pendingCount} PR(s) pending.`);
+      setPrIdInput("");
+      setRepoNameInput("");
+      await refreshQueue();
+    } catch (e: any) {
+      setQueueError(e.message);
+    }
+  };
+
+  // ── Data Loading ─────────────────────────────────────────────
+
   useEffect(() => {
     Promise.all([
-      fetchAudit().then((d) => d.entries ?? d.auditLog ?? d.results ?? []),
+      fetchAudit().then((d) => d.entries ?? d.auditLog ?? d.results ?? d.records ?? []),
       fetchFindings().then((d) => d.findings ?? []),
+      fetchQueue().catch(() => null),
     ])
-      .then(([audit, f]) => {
+      .then(([audit, f, queue]) => {
         setAuditLog(audit);
         setFindings(f);
+        setQueueStatus(queue);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div>Loading admin panel...</div>;
-  if (error)
-    return <div style={{ color: "#e94560" }}>Error: {error}</div>;
+  // ── Derived Stats ────────────────────────────────────────────
 
-  // FP rate per engine
-  const engines = [...new Set(findings.map((f) => f.engine || f.source || "unknown"))];
+  const engines = [...new Set(findings.map((f) => f.engine || f.sourceEngine || "unknown"))];
   const fpRateByEngine = engines.map((engine) => {
     const engineFindings = findings.filter(
-      (f) => (f.engine || f.source || "unknown") === engine,
+      (f) => (f.engine || f.sourceEngine || "unknown") === engine,
     );
     const total = engineFindings.length;
     const fp = engineFindings.filter(
       (f) =>
-        f.resolution === "false-positive" || f.status === "false-positive",
+        f.resolution === "false-positive" ||
+        f.resolution === "resolved" ||
+        f.resolution === "waived",
     ).length;
     return {
       engine,
@@ -43,13 +88,13 @@ export default function AdminPage() {
     };
   });
 
-  // Overrides from audit log
   const overrides = auditLog.filter(
     (entry) =>
       entry.action?.toLowerCase().includes("override") ||
-      entry.action?.toLowerCase().includes("override_finding") ||
       entry.type === "override",
   );
+
+  // ── Styles ───────────────────────────────────────────────────
 
   const cellStyle: React.CSSProperties = {
     padding: "0.65rem 0.75rem",
@@ -65,11 +110,143 @@ export default function AdminPage() {
     marginBottom: "1.5rem",
   };
 
+  const inputStyle: React.CSSProperties = {
+    padding: "0.5rem 0.75rem",
+    border: "1px solid #ddd",
+    borderRadius: 6,
+    fontSize: "0.9rem",
+    flex: 1,
+  };
+
+  const buttonStyle: React.CSSProperties = {
+    padding: "0.5rem 1.25rem",
+    background: "#1a1a2e",
+    color: "#fff",
+    border: "none",
+    borderRadius: 6,
+    cursor: "pointer",
+    fontSize: "0.9rem",
+    fontWeight: 600,
+  };
+
+  if (loading) return <div>Loading admin panel...</div>;
+  if (error) return <div style={{ color: "#e94560" }}>Error: {error}</div>;
+
   return (
     <div>
       <h1 style={{ marginBottom: "1.5rem", fontSize: "1.5rem" }}>Admin</h1>
 
-      {/* FP Rate by Engine */}
+      {/* ── PR Queue Management ──────────────────────────────────────────── */}
+      <div style={sectionStyle}>
+        <h3 style={{ marginBottom: "1rem", fontSize: "1.05rem" }}>
+          PR Review Queue
+        </h3>
+
+        {/* Manual PR addition */}
+        <div
+          style={{
+            display: "flex",
+            gap: "0.75rem",
+            alignItems: "center",
+            marginBottom: "1rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label style={{ fontSize: "0.8rem", color: "#666", display: "block", marginBottom: "0.25rem" }}>
+              PR ID
+            </label>
+            <input
+              type="number"
+              placeholder="e.g. 12345"
+              value={prIdInput}
+              onChange={(e) => setPrIdInput(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ flex: 2, minWidth: 250 }}>
+            <label style={{ fontSize: "0.8rem", color: "#666", display: "block", marginBottom: "0.25rem" }}>
+              Repository Name (optional)
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. my-team-project"
+              value={repoNameInput}
+              onChange={(e) => setRepoNameInput(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+          <button onClick={handleAddPR} style={{ ...buttonStyle, marginTop: 16 }}>
+            Add to Queue
+          </button>
+        </div>
+
+        {queueError && (
+          <div style={{ color: "#e94560", fontSize: "0.85rem", marginBottom: "0.5rem" }}>
+            {queueError}
+          </div>
+        )}
+        {queueMsg && (
+          <div style={{ color: "#2ecc71", fontSize: "0.85rem", marginBottom: "0.5rem" }}>
+            {queueMsg}
+          </div>
+        )}
+
+        {/* Queue status */}
+        <div
+          style={{
+            display: "flex",
+            gap: "1.5rem",
+            padding: "0.75rem",
+            background: "#fafafa",
+            borderRadius: 6,
+            fontSize: "0.9rem",
+          }}
+        >
+          <div>
+            <strong>Currently Processing:</strong>{" "}
+            {queueStatus?.currentProcessing
+              ? `PR #${queueStatus.currentProcessing}`
+              : "None"}
+          </div>
+          <div>
+            <strong>Pending:</strong> {queueStatus?.pendingCount ?? 0}
+          </div>
+          <button
+            onClick={refreshQueue}
+            style={{ marginLeft: "auto", ...buttonStyle, fontSize: "0.8rem", padding: "0.3rem 0.75rem" }}
+          >
+            {queueRefreshing ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
+
+        {/* Pending queue items */}
+        {queueStatus?.pending && queueStatus.pending.length > 0 && (
+          <div style={{ marginTop: "0.75rem" }}>
+            <h4 style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>Pending Items</h4>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+              <thead>
+                <tr style={{ background: "#fafafa" }}>
+                  <th style={cellStyle}>PR ID</th>
+                  <th style={cellStyle}>Repository</th>
+                </tr>
+              </thead>
+              <tbody>
+                {queueStatus.pending.map((item: any, i: number) => (
+                  <tr key={i}>
+                    <td style={cellStyle}>
+                      <code>#{item.prId}</code>
+                    </td>
+                    <td style={cellStyle}>{item.repoName || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── FP Rate by Engine ────────────────────────────────────────────── */}
       <div style={sectionStyle}>
         <h3 style={{ marginBottom: "1rem", fontSize: "1.05rem" }}>
           False Positive Rate by Engine
@@ -104,13 +281,7 @@ export default function AdminPage() {
                 >
                   {item.engine}
                 </div>
-                <div
-                  style={{
-                    fontSize: "1.5rem",
-                    fontWeight: 700,
-                    color,
-                  }}
-                >
+                <div style={{ fontSize: "1.5rem", fontWeight: 700, color }}>
                   {item.fpRate}%
                 </div>
                 <div style={{ fontSize: "0.75rem", color: "#999" }}>
@@ -122,7 +293,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* High-FP Rule Alerts */}
+      {/* ── High FP Rate Alerts ──────────────────────────────────────────── */}
       {fpRateByEngine.filter((e) => parseFloat(e.fpRate) > 15).length > 0 && (
         <div style={sectionStyle}>
           <h3
@@ -149,7 +320,7 @@ export default function AdminPage() {
                 }}
               >
                 <strong>{item.engine}</strong> has a{" "}
-                <strong>{item.fpRate}%</strong> false positive rate ({item.fpCount}{" "}
+                <strong>{item.fpRate}%</strong> false positive rate ({item.fpCount}
                 of {item.total} findings). Consider reviewing the rules for this
                 engine.
               </div>
@@ -157,7 +328,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Override Log */}
+      {/* ── Override Log ─────────────────────────────────────────────────── */}
       <div style={sectionStyle}>
         <h3 style={{ marginBottom: "1rem", fontSize: "1.05rem" }}>
           Override Log
