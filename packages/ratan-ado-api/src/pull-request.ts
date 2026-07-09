@@ -431,3 +431,11 @@ export async function getLatestPullRequestStatus(
     status: latestPullRequestStatus,
   };
 }
+
+export async function getPullRequestStatuses(repoName: string, prId: number) {
+  const webApi = this.adoWebApi as AdoWebApi;
+  const gitApi = await webApi.getGitApi();
+  const projectName = this.getProjectName();
+
+  return gitApi.getPullRequestStatuses(repoName, prId, projectName);
+}

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
+// Suppress dotenv@17 "injected env" banner messages
+process.env.DOTENV_CONFIG_QUIET = "true";
+
 import { Command } from "commander";
-import path from "node:path";
-import { scan } from "./commands/scan";
-import { studio } from "./commands/studio";
-import { init } from "./commands/init";
+import { startCommand } from "./commands/start";
+import { startDashboard } from "./commands/dashboard";
 
 const packageJson = await import("../../package.json", { with: { type: "json" } });
 
@@ -16,35 +17,43 @@ program
   .version(packageJson.default?.version ?? packageJson.version ?? "0.0.1");
 
 program
-  .command("init")
-  .description("Scaffold .ratan/code-review-agent/config.json with defaults")
-  .option("--config <path>", "Config directory path")
-  .action(async (opts) => {
-    const configDir = opts.config
-      ? path.resolve(opts.config)
-      : path.resolve(process.cwd(), ".ratan/code-review-agent");
-    await init(configDir);
-  });
-
-program
-  .command("scan")
-  .description("Scan and review pull requests")
-  .option("--config <path>", "Config directory path")
-  .option("--pr-id <number>", "Review a specific pull request ID", (value) =>
-    Number.parseInt(value, 10),
+  .command("start")
+  .description(
+    "Start the code review agent — creates .ratan folder on first run, scans repos, processes PRs. Runs feedback daemon (ADO comment sync) automatically in --watch mode.",
   )
-  .option("--watch", "Keep running and scan every 30 minutes")
+  .option("--config <path>", "Config directory path (default: .ratan)")
+  .option(
+    "--pr-id <number>",
+    "Review a specific pull request ID",
+    (value) => Number.parseInt(value, 10),
+  )
+  .option("--watch", "Keep running: scan every 30 min + background feedback sync")
+  .option(
+    "--repo-pattern <patterns...>",
+    "Repo name glob patterns to scan (e.g. 'my-team-*')",
+  )
   .action(async (opts) => {
-    await scan({ config: opts.config, watch: opts.watch, prId: opts.prId });
+    await startCommand({
+      config: opts.config,
+      watch: opts.watch,
+      prId: opts.prId,
+      repoPatterns: opts.repoPattern,
+    });
   });
 
 program
-  .command("studio")
-  .description("Launch Mastra Studio web UI")
-  .option("--config <path>", "Config directory path")
-  .option("--port <number>", "Port to run the studio on")
+  .command("dashboard")
+  .description("Start the PR Guardian dashboard with PR queue management")
+  .option("--port <number>", "Port for the dashboard server")
+  .option(
+    "--finding-store <path>",
+    "Path to the FindingStore SQLite database",
+  )
   .action(async (opts) => {
-    await studio({ config: opts.config, port: opts.port ? Number(opts.port) : undefined });
+    await startDashboard({
+      port: opts.port ? Number(opts.port) : undefined,
+      findingStorePath: opts.findingStore,
+    });
   });
 
 program.parse(process.argv);

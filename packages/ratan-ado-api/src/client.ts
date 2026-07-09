@@ -15,11 +15,16 @@ import { getCodeDiffFromHierarchyQuery } from "./extension/CodeDiff";
 import {
   commitCompare,
   getBranchLatestCommit,
+  getCommitsBatch,
   getFileContent,
   getReleaseDiffChecking,
 } from "./git";
 import type { AdoWebApi } from "./interfaces";
-import { getSubscriptions } from "./notification";
+import {
+  createSubscription,
+  deleteSubscription,
+  getSubscriptions,
+} from "./notification";
 import {
   getPipelineByRepoName,
   getPipelineRuns,
@@ -28,6 +33,7 @@ import {
 import {
   getLatestPullRequestIterations,
   getLatestPullRequestStatus,
+  getPullRequestStatuses,
   getPullRequestById,
   getPullRequestChangesFiles,
   getPullRequestIterationChangesFiles,
@@ -40,9 +46,13 @@ import {
   setPullRequestProperties,
 } from "./pull-request";
 import {
+  createPullRequestStatus,
+} from "./pull-request-status";
+import {
   addCommentForPR,
   addCommentThreadForPRCode,
   getCommentThreadById,
+  getPullRequestThreads,
   updateCommentThreadStatus,
 } from "./pull-request-comment";
 import { getReleaseWorkItems, queryRatanReleaseIds } from "./release";
@@ -183,6 +193,7 @@ export class AzureDevOps {
   getPullRequestById = getPullRequestById;
   getRepos = getRepos;
   getBranchLatestCommit = getBranchLatestCommit;
+  getCommitsBatch = getCommitsBatch;
   commitCompare = commitCompare;
   getReleaseDiffChecking = getReleaseDiffChecking;
   getPipelineRuns = getPipelineRuns;
@@ -199,6 +210,7 @@ export class AzureDevOps {
   isValidPullRequest = isValidPullRequest;
   hasAlreadyCommented = hasAlreadyCommented;
   getLatestPullRequestStatus = getLatestPullRequestStatus;
+  getPullRequestStatuses = getPullRequestStatuses;
   getWorkitemsByFields = getWorkitemsByFields;
   getCommonWorkItems = getCommonWorkItems;
   getReleaseWorkItems = getReleaseWorkItems;
@@ -210,8 +222,12 @@ export class AzureDevOps {
   addCommentForPR = addCommentForPR;
   addCommentThreadForPRCode = addCommentThreadForPRCode;
   getCommentThreadById = getCommentThreadById;
+  getPullRequestThreads = getPullRequestThreads;
   updateCommentThreadStatus = updateCommentThreadStatus;
   getSubscriptions = getSubscriptions;
+  createSubscription = createSubscription;
+  deleteSubscription = deleteSubscription;
+  createPullRequestStatus = createPullRequestStatus;
   getBuildById = getBuildById;
   getBuildAttachmentContent = getBuildAttachmentContent;
   getBuildAttachments = getBuildAttachments;

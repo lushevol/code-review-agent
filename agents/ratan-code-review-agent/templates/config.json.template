@@ -1,0 +1,46 @@
+{
+  "mode": "local",
+  "ado": {
+    "organization": "your-organization",
+    "project": "your-project",
+    "token": "env:ADO_TOKEN"
+  },
+  "config": {
+    "scanRepoNames": [],
+    "scanPRCreatedDaysAgo": 7,
+    "findingStorePath": ".ratan/data/findings.db",
+    "scannerSettings": {
+      "cve": { "enabled": false },
+      "compliance": { "enabled": true }
+    },
+    "filePathsAllowlist": [
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.java",
+      "**/*.sql"
+    ],
+    "filePathsBlocklist": [
+      "**/*.test.*",
+      "**/*.spec.*",
+      "**/__tests__/**",
+      "**/test/**",
+      "**/generated/**"
+    ],
+    "agents": {
+      "review": {
+        "prompts": ["prompts/review.md"]
+      },
+      "review-rescore": {
+        "prompts": ["prompts/review-rescore.md"]
+      },
+      "issue-classification": {
+        "prompts": ["prompts/issue-classification.md"]
+      },
+      "summary": {
+        "prompts": ["prompts/summary.md"]
+      }
+    }
+  }
+}

@@ -20,13 +20,12 @@ describe("CLI binary", () => {
     });
 
     expect(output).toContain("Usage: ratan-code-review");
-    expect(output).toContain("scan");
-    expect(output).toContain("studio");
-    expect(output).toContain("init");
+    expect(output).toContain("start");
+    expect(output).toContain("dashboard");
   });
 
-  it("documents direct PR review for scan", () => {
-    const output = execFileSync("node", [binPath, "scan", "--help"], {
+  it("documents direct PR review for start", () => {
+    const output = execFileSync("node", [binPath, "start", "--help"], {
       cwd: packageRoot,
       encoding: "utf8",
     });

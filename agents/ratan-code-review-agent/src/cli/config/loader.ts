@@ -69,7 +69,7 @@ export async function loadConfig(
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       console.error(
         `\n  Error: No config found at ${configFile}\n` +
-        `  Create one with: ratan-code-review init\n`
+        `  Run ratan-code-review start once to create a default .ratan folder.\n`
       );
       process.exit(1);
     }

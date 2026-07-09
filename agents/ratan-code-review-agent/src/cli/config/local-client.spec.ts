@@ -89,16 +89,14 @@ describe("LocalConfigClient", () => {
     );
   });
 
-  it("throws on getSonarQubeClient before connect", () => {
+  it("returns null SonarQube client when no token is configured", () => {
     const client = new LocalConfigClient({
       configDir: FIXTURES_DIR,
       config: { agents: { review: {} } },
       ado: { organization: "o", project: "p" },
       adoToken: "t",
     });
-    expect(() => client.getSonarQubeClient()).toThrow(
-      "SonarQube client not connected. Call connect() first.",
-    );
+    expect(client.getSonarQubeClient()).toBeNull();
   });
 
   it("merges defaultAgentConfig with agent config", async () => {

@@ -28,7 +28,7 @@ const REFRESH_INTERVAL_MS_DEFAULT = 5 * 60 * 1000; // 5 minutes
 export class AgentConfigClient implements ConfigProvider {
   public id: string;
   private adoClient: AzureDevOps;
-  private sonarQubeClient: SonarQubeClient;
+  private sonarQubeClient: SonarQubeClient | null = null;
   private ormClient:
     | (NodePgDatabase<typeof schema> & {
         $client: Pool;
@@ -54,7 +54,6 @@ export class AgentConfigClient implements ConfigProvider {
       project: validOptions.project,
       proxy: validOptions.adoProxyUrl,
     });
-    this.sonarQubeClient = new SonarQubeClient();
     this.id = v4();
   }
 
@@ -67,6 +66,7 @@ export class AgentConfigClient implements ConfigProvider {
     console.log("[AgentConfigClient] Connected.");
 
     if (this.options.sonarQubeToken) {
+      this.sonarQubeClient = new SonarQubeClient();
       await this.sonarQubeClient.connect(this.options.sonarQubeToken);
     }
 

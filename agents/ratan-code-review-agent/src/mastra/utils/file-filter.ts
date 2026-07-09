@@ -1,7 +1,7 @@
 import { minimatch } from "minimatch";
-import type { CodeChanges } from "../types";
-
-export const filterReviewableFiles = <T extends CodeChanges>(
+export const filterReviewableFiles = <
+  T extends Array<{ newFilePath: string; changeType: string }>,
+>(
   fileChanges: T,
   filePathsAllowlist: string[],
   filePathsBlocklist: string[],
@@ -15,5 +15,5 @@ export const filterReviewableFiles = <T extends CodeChanges>(
     );
     const isDeleted = changeType.toLowerCase() === "delete";
     return isInAllowlist && !isInBlocklist && !isDeleted;
-  });
+  }) as T;
 };

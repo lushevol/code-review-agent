@@ -44,6 +44,53 @@ export const AgentConfigSchema = z.object({
 
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
+const CveScannerSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  sonarqubeProjectKey: z.string().optional(),
+});
+
+const ComplianceScannerSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  rulesPath: z.string().optional(),
+});
+
+const ScannerSettingsSchema = z.object({
+  cve: CveScannerSettingsSchema.optional(),
+  compliance: ComplianceScannerSettingsSchema.optional(),
+});
+
+const OverrideAuthRulesSchema = z.object({
+  criticalRequiresTwoPerson: z.boolean().optional(),
+});
+
+const MergePolicySchema = z.object({
+  defaultBlockingSeverities: z.array(z.string()).optional(),
+  overrideAuthRules: OverrideAuthRulesSchema.optional(),
+});
+
+const WebhookConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  port: z.number().optional(),
+});
+
+const DashboardConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  port: z.number().optional(),
+});
+
+const RemediationTasksConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+});
+
+const AuditConfigSchema = z.object({
+  retentionDays: z.number().optional(),
+});
+
+const FeedbackDaemonConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  intervalMs: z.number().optional(),
+});
+
 /**
  * Full agent config with defaults and optional repo-specific overrides.
  */
@@ -54,6 +101,14 @@ export const RootAgentConfigSchema = z.object({
   filePathsBlocklist: z.array(z.string()).optional(),
   defaultAgentConfig: AgentConfigSchema.optional(),
   agents: z.record(z.string(), AgentConfigSchema),
+  findingStorePath: z.string().optional(),
+  scannerSettings: ScannerSettingsSchema.optional(),
+  mergePolicy: MergePolicySchema.optional(),
+  webhook: WebhookConfigSchema.optional(),
+  dashboard: DashboardConfigSchema.optional(),
+  remediationTasks: RemediationTasksConfigSchema.optional(),
+  audit: AuditConfigSchema.optional(),
+  feedbackDaemon: FeedbackDaemonConfigSchema.optional(),
 });
 
 export type RootAgentConfig = z.infer<typeof RootAgentConfigSchema>;
@@ -82,6 +137,6 @@ export interface ConfigProvider {
   getAgentConfig(agentName: string): Promise<AgentConfig>;
   buildPrompt(promptKey: string, context?: PromptContext): Promise<string>;
   getAdoClient(): AzureDevOps;
-  getSonarQubeClient(): SonarQubeClient;
+  getSonarQubeClient(): SonarQubeClient | null;
   getOrmClient(): Promise<NodePgDatabase<typeof schema> & { $client: Pool } | null>;
 }
