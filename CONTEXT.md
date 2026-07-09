@@ -19,14 +19,9 @@ The `.ratan/code-review-agent/config.json` file that serves as the single entry 
 Located at `src/cli/config/loader.ts`. Reads the wrapper config, resolves `"env:VAR_NAME"` token references to environment variables, and creates the appropriate `ConfigProvider` (local or ADO).
 
 ## CLI Commands
-The `ratan-code-review` npm package exposes seven commands:
-- **`init`** — Scaffolds `.ratan/code-review-agent/config.json` with defaults
-- **`scan`** — One-shot PR review scan (`--watch` for 30-min interval, `--mode=service` for webhook-driven)
-- **`studio`** — Launches pre-built Mastra Studio web UI
+The `ratan-code-review` npm package exposes two commands:
+- **`start`** — Unified entry point. On first run, scaffolds `.ratan/` folder with default config and prompts from `templates/`. Reads config, initializes PR queue, runs scan loop. `--watch` for 30-min polling with background feedback daemon. `--pr-id <id>` for single PR review.
 - **`dashboard`** — Starts the PR Guardian dashboard (Express REST API + React SPA)
-- **`override`** — Manage finding resolution overrides (waive, FP, risk-accept)
-- **`feedback`** — Feedback operations; `feedback-daemon` for ADO comment reaction collection
-- **`webhook`** — Start webhook service + auto-register ADO subscriptions
 
 ## Finding Store
 SQLite-based persistence layer in `packages/finding-store`. Stores findings, override logs, and audit records. Uses SHA-256 content hashing for finding identity across PR iterations.

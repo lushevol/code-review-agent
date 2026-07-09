@@ -39,7 +39,7 @@ The installable CLI can be checked without contacting Azure DevOps:
 ```bash
 pnpm --filter ratan-code-review build
 node agents/ratan-code-review-agent/dist/cli.js --help
-node agents/ratan-code-review-agent/dist/cli.js init
+node agents/ratan-code-review-agent/dist/cli.js start --help
 pnpm --filter ratan-code-review pack --pack-destination /tmp
 ```
 
@@ -58,7 +58,7 @@ These commands connect to Azure DevOps and can create external side effects:
 ```bash
 pnpm agent:dev
 pnpm agent:demo
-ratan-code-review scan
+ratan-code-review start
 ```
 
 Do not run them without a valid `ADO_TOKEN` and explicit intent to scan PRs and post review comments.
@@ -75,21 +75,16 @@ Commands:
 
 | Command | Description |
 |---------|-------------|
-| `scan` | One-shot PR scan/review. `--watch` for 30-min polling, `--mode=service` for persistent webhook-driven operation |
-| `studio` | Launch pre-built Mastra Studio web UI |
-| `init` | Scaffold `.ratan/code-review-agent/config.json` with default template and prompt files |
+| `start` | Scaffold `.ratan/` config on first run, scan repos, process PR queue. `--watch` for 30-min polling with background feedback daemon. `--pr-id <id>` for single PR. |
 | `dashboard` | Start PR Guardian dashboard (Express REST API + React SPA) |
-| `override` | Manage finding resolution overrides (waive, false-positive, risk-accept) |
-| `feedback` | Feedback operations; `feedback-daemon` for ADO comment reaction collection |
-| `webhook` | Start webhook service + auto-register ADO event subscriptions |
 
-To scaffold a local config first:
+On first run, `start` creates the `.ratan/` folder with a default config and prompts
+shipped from `templates/`. Edit the generated `config.json` with your ADO
+organization and project before scanning.
 
-```bash
-ratan-code-review init
-```
-
-Then edit `.ratan/code-review-agent/config.json` with your ADO organization and project.
+Default config and prompt templates are at `templates/` in the package — they're
+copied to `.ratan/` on first `start` run. You can edit the generated files or
+customize the templates before re-running.
 
 The CLI accepts `ADO_TOKEN`, `ADO_ORGANIZATION`, `ADO_PROJECT` from the
 environment. Additional settings use `ADO_CONFIG_REPO`, `ADO_CONFIG_BRANCH`,
@@ -98,28 +93,28 @@ environment. Additional settings use `ADO_CONFIG_REPO`, `ADO_CONFIG_BRANCH`,
 Set `ADO_PROXY_URL=none` or pass `--ado-proxy-url none` when the machine should
 connect to Azure DevOps directly instead of using the packaged default proxy.
 
-To run a one-shot scan with a custom config path:
+To run a one-shot scan:
 
 ```bash
-ratan-code-review scan --config /path/to/config
+ratan-code-review start
 ```
 
 For a specific PR:
 
 ```bash
-ratan-code-review scan --pr-id 12345
+ratan-code-review start --pr-id 12345
 ```
 
-For continuous scanning (every 30 minutes):
+For continuous scanning with background feedback daemon (every 30 minutes):
 
 ```bash
-ratan-code-review scan --watch
+ratan-code-review start --watch
 ```
 
-For webhook-driven service mode:
+With a custom config path:
 
 ```bash
-ratan-code-review scan --mode=service
+ratan-code-review start --config /path/to/config
 ```
 
 To start the dashboard:
@@ -163,7 +158,7 @@ Three scanners run concurrently; individual failures are non-fatal:
 
 - React SPA (Vite + Recharts + React Router)
 - 4 pages: Overview (charts), Findings Explorer, PR Listing, Admin
-- Express backend: `/api/health`, `/api/findings`, `/api/audit`, `/api/stats`
+- Express backend: `/api/health`, `/api/queue`, `/api/findings`, `/api/audit`, `/api/stats`, `/api/prs`
 
 ## Azure DevOps MCP
 

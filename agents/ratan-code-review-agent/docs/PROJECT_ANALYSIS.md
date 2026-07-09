@@ -29,7 +29,7 @@ The project is structured as a pnpm workspace monorepo with the main package (`r
 - **Dashboard (v2):** React SPA with overview charts, findings explorer, PR listing, admin controls.
 - **Override management (v2):** Waive, false-positive, and risk-accept workflows with two-person approval and expiry.
 - **Audit trail (v2):** Append-only records of every review with commit hash, engine versions, model version.
-- **Feedback daemon (v2):** Semi-automated false-positive pattern collection from ADO comment reactions.
+- **Feedback daemon (v2):** Semi-automated false-positive pattern collection from ADO comment reactions. Runs as a background process inside `start --watch`.
 - Stores the reviewed PR iteration id to support incremental future reviews.
 - Provides early evaluation schemas and fixtures for regression testing review quality.
 
@@ -43,13 +43,8 @@ The public entry point in `src/index.ts` exports:
 
 The package also builds an npm CLI entry point `ratan-code-review` with commands:
 
-- `scan` — one-shot PR review scan (`--watch` for 30-min interval, `--mode=service` for webhook-driven).
-- `studio` — launches the pre-built Mastra Studio web UI.
-- `init` — scaffolds `.ratan/code-review-agent/config.json` with defaults.
+- `start` — unified entry point. On first run, scaffolds `.ratan/` folder with default config and prompts from `templates/`. Reads config, initializes PR queue, runs scan loop. `--watch` for 30-min polling with background feedback daemon. `--pr-id <id>` for single PR review.
 - `dashboard` — starts the PR Guardian dashboard (Express backend + React SPA).
-- `override` — manage finding resolution overrides.
-- `feedback` — feedback operations; `feedback-daemon` for reaction collection.
-- `webhook` — start webhook service + auto-register ADO subscriptions.
 
 Runtime work starts in `startup`. It creates an `agent-config-manager` session, scans for pending PRs, and starts a Mastra `prReviewWorkflow` run for each pending PR. Each run receives only a `configSessionId` in runtime context; steps use that id to recover the configured ADO and SonarQube clients.
 
@@ -196,15 +191,21 @@ src/
       session.ts                    -- AgentConfigSession singleton
       pr-scan.ts                    -- PR scanner (RxJS Observable, 24h repo cache)
     cli/
-      index.ts                      -- CLI entry point (commander, 7 commands)
+      index.ts                      -- CLI entry point (commander, start + dashboard)
       commands/
-        scan.ts, studio.ts, init.ts, dashboard.ts, webhook.ts
-        override.ts, feedback.ts, feedback-daemon.ts
+        start.ts                    -- Unified start: scaffold .ratan/, scan repos, PR queue, feedback daemon
+        dashboard.ts                -- Dashboard server
+      services/
+        auto-scan.ts                -- Auto-scan service (LLM health check, repo scanning)
+        pr-queue.ts                 -- PR review queue with build pipeline check
+      utils/
+        logger.ts                   -- Logging utility with log rotation
       config/
         loader.ts                   -- Config file reader + "env:VAR_NAME" resolution
         local-client.ts             -- LocalConfigClient
       dashboard/
-        index.ts                    -- Express dashboard app
+        index.ts                    -- Express dashboard app (/api/health, /api/queue, /api/findings, /api/audit, /api/stats, /api/prs)
+    templates/                      -- Default config and prompt template files (published to npm)
     webhooks/
       index.ts                      -- Express webhook receiver (HMAC validation)
       eligibility.ts                -- PR eligibility gate

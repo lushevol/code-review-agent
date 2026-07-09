@@ -72,7 +72,7 @@ This is a pnpm workspace monorepo (pnpm 9/11) containing **PR Guardian Copilot**
 
 The system connects to Azure DevOps (ADO) for PR data, calls OpenAI-compatible LLMs for AI review, queries SonarQube for security vulnerabilities, enforces compliance rules, and posts review results as ADO PR comments and status checks.
 
-Published as `ratan-code-review` on npm with a CLI binary for `scan`, `studio`, `init`, `dashboard`, `override`, `feedback`, and `webhook` commands.
+Published as `ratan-code-review` on npm with a CLI binary providing `start` and `dashboard` commands.
 
 ## Package Structure
 
@@ -117,20 +117,15 @@ ADO webhook (git.pullrequest.created / git.pullrequest.updated)
   → Dedup window (5 min)
   → Trigger prReviewWorkflow
 
-Fallback: polling every 30 min via scan --watch or scan --mode=service
-```
+Fallback: polling every 30 min via `start --watch`
+	```
 
 ### CLI Commands
 
-The `ratan-code-review` CLI has seven commands:
+The `ratan-code-review` CLI has two commands:
 
-- **`scan`** — One-shot PR scan and review. Reads config from `.ratan/code-review-agent/config.json`, creates the appropriate `ConfigProvider` (local or ADO), and runs the scan loop. Options: `--config <path>`, `--pr-id <id>`, `--watch` (30-min interval), `--mode <once|watch|service>`, `--feedback-daemon`.
-- **`studio`** — Launches the pre-built Mastra Studio web UI (`prepublish` builds `.mastra/output/`).
-- **`init`** — Scaffolds `.ratan/code-review-agent/config.json` with default template and prompt files.
-- **`dashboard`** — Starts the PR Guardian dashboard (Express REST API + React SPA). Serves `/api/health`, `/api/findings`, `/api/audit`, `/api/stats`.
-- **`override`** — Manage finding resolution overrides (waive, false-positive, risk-accept with two-person approval and expiry).
-- **`feedback`** — Feedback-related operations. Subcommand: `feedback-daemon` — background process collecting ADO comment reactions and aggregating false-positive patterns.
-- **`webhook`** — Start webhook service + auto-register ADO event subscriptions.
+- **`start`** — Unified entry point. On first run, scaffolds `.ratan/` folder with default config and prompts from template files. Reads config, initializes the PR queue, and starts the scan loop. Runs a background feedback daemon (ADO comment sync) automatically in `--watch` mode. Options: `--config <path>`, `--pr-id <id>`, `--watch` (30-min interval + feedback daemon), `--repo-pattern <patterns...>`.
+- **`dashboard`** — Starts the PR Guardian dashboard (Express REST API + React SPA). Serves `/api/health`, `/api/queue`, `/api/findings`, `/api/audit`, `/api/stats`, `/api/prs`.
 
 ### Scanner Pipeline
 
@@ -169,7 +164,7 @@ The wrapper config at `.ratan/code-review-agent/config.json` declares the mode (
 
 ### Webhooks
 
-An Express webhook receiver runs as part of `scan --mode=service` or the `webhook` command:
+An Express webhook receiver runs as part of the webhook service (separate from the `start` command):
 - HMAC-SHA256 signature validation against configured webhook secret
 - Dedup window (5 min) prevents duplicate processing
 - Auto-registration of `git.pullrequest.created` and `git.pullrequest.updated` subscriptions via ADO notification API
@@ -181,7 +176,7 @@ A React SPA (Vite + Recharts + React Router) served by an Express backend:
 - **Dashboard Overview** — Charts: findings by severity, category, trend over time
 - **Findings Explorer** — Filterable/sortable table of all findings (severity, category, engine, status)
 - **PR Listing** — All reviewed PRs with status and summary
-- **Admin** — Override management, service controls
+- **Admin** — Override management, PR queue management (manual add/cancel), service controls
 
 ### LLM Configuration
 
@@ -197,11 +192,13 @@ Diff text is masked via `maskSensitiveData()` using `redact-pii` (credentials on
 
 Prompt keys used: `review`, `review-rescore`, `issue-classification`, `summary`.
 
+Default config and prompt templates shipped with the package live at `templates/` (published to npm). On first `start` run, the CLI copies these to `.ratan/` for editing.
+
 ## Key Files
 
 ### Core Agent
-- `agents/ratan-code-review-agent/src/cli/index.ts` — CLI entry point with commander (scan/studio/init/dashboard/override/feedback/webhook)
-- `agents/ratan-code-review-agent/src/cli/commands/` — scan, studio, init, dashboard, webhook, override, feedback, feedback-daemon command implementations
+- `agents/ratan-code-review-agent/src/cli/index.ts` — CLI entry point with commander (start, dashboard)
+- `agents/ratan-code-review-agent/src/cli/commands/` — start, dashboard command implementations
 - `agents/ratan-code-review-agent/src/cli/config/loader.ts` — config file reader with `"env:VAR_NAME"` token resolution
 - `agents/ratan-code-review-agent/src/cli/config/local-client.ts` — `LocalConfigClient` implementation
 - `agents/ratan-code-review-agent/src/cli/dashboard/` — Express dashboard backend (health, findings, audit, stats APIs)
@@ -219,6 +216,7 @@ Prompt keys used: `review`, `review-rescore`, `issue-classification`, `summary`.
 - `agents/ratan-code-review-agent/src/bootstrap/` — startup, PR scanning, session handling
 - `agents/ratan-code-review-agent/src/webhooks/` — Express webhook receiver, HMAC validation, eligibility gate
 - `agents/ratan-code-review-agent/src/evaluation/` — evaluation types, dataset fixtures, judge agent
+- `agents/ratan-code-review-agent/templates/` — default config and prompt templates (published to npm)
 
 ### Dashboard (React SPA)
 - `agents/ratan-code-review-agent/dashboard/` — Vite + React + Recharts SPA (DashboardOverview, FindingsPage, PRsPage, AdminPage)
@@ -254,12 +252,10 @@ pnpm --filter ratan-code-review exec vitest run src/cli/config/local-client.spec
 
 # CLI usage (after build)
 node agents/ratan-code-review-agent/bin/ratan-code-review.cjs --help
-node agents/ratan-code-review-agent/bin/ratan-code-review.cjs init
-node agents/ratan-code-review-agent/bin/ratan-code-review.cjs scan
-node agents/ratan-code-review-agent/bin/ratan-code-review.cjs scan --watch
-node agents/ratan-code-review-agent/bin/ratan-code-review.cjs studio
+node agents/ratan-code-review-agent/bin/ratan-code-review.cjs start
+node agents/ratan-code-review-agent/bin/ratan-code-review.cjs start --watch
+node agents/ratan-code-review-agent/bin/ratan-code-review.cjs start --pr-id 12345
 node agents/ratan-code-review-agent/bin/ratan-code-review.cjs dashboard
-node agents/ratan-code-review-agent/bin/ratan-code-review.cjs override --help
 
 # Run Mastra dev mode (starts PR scanning — has side effects)
 pnpm agent:dev
@@ -295,7 +291,7 @@ DATABASE_URL=postgres_connection_string
 - `ADO_TOKEN` env var is required for Azure DevOps access.
 - `OPENAI_BASE_URL` and `OPENAI_API_KEY` are read from environment by `openai-client.ts` (previously hardcoded).
 - Workspace dependencies: `finding-store`, `agent-config-manager`, `ratan-ado-api`, `ratan-sonarqube-api` — defined in other packages in the monorepo.
-- The `scan` CLI command calls `startScanWithProvider()` which reads config via `ConfigProvider` and runs the scan loop.
+- The `start` CLI command scaffolds `.ratan/` from `templates/` on first run, then reads config via `ConfigProvider` and runs the scan loop.
 - The scanner pipeline uses `Promise.allSettled` for graceful degradation — individual scanner failures don't block the pipeline.
 - Merge gate sets ADO PR Status (`succeeded`/`failed`) based on policy. Errors are non-fatal.
 - Work item creation step handles errors gracefully (non-fatal).
