@@ -3,3 +3,4 @@ dist/
 .env
 skills-lock.json
 .ratan
+.worktrees/
