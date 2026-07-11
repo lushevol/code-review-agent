@@ -33,6 +33,26 @@ function createFinding(linkedTaskId: number | null) {
 }
 
 describe("FindingStore integration", () => {
+  it("stores OCR findings without a confidence score", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "finding-store-"));
+    const store = new FindingStore(path.join(dir, "findings.db"));
+    try {
+      store.init();
+      const finding = createFinding(null) as ReturnType<typeof createFinding> & {
+        confidence?: number;
+      };
+      delete finding.confidence;
+      finding.sourceEngine = "open-code-review";
+
+      store.upsertFinding(finding);
+
+      expect(store.getFindingsByPr(7, "repo")[0].confidence).toBe(0);
+    } finally {
+      store.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("updates linkedTaskId when an existing finding is upserted", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "finding-store-"));
     const store = new FindingStore(path.join(dir, "findings.db"));

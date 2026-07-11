@@ -12,7 +12,9 @@ const MergeGateInputSchema = z.object({
   workItemContext: z.string().optional(),
   correlationSummary: z.string(),
   changesSinceLastReview: z.string().optional(),
-  codeChangeSummary: z.string(),
+  reviewSummary: z.string(),
+  reviewExecutionStatus: z.enum(["complete", "incomplete"]),
+  reviewMetadata: z.record(z.string(), z.unknown()),
   measures: z.union([z.any(), z.null()]),
 });
 
@@ -58,7 +60,11 @@ export const mergeGate = defineStep({
     );
 
     const mergeDecision: "allowed" | "blocked" | "pending" =
-      blockingOpen.length > 0 ? "blocked" : "allowed";
+      inputData.reviewExecutionStatus === "incomplete"
+        ? "pending"
+        : blockingOpen.length > 0
+          ? "blocked"
+          : "allowed";
 
     // ── Set ADO pull request status ─────────────────────────────────────
     const statusDescription =
@@ -66,11 +72,7 @@ export const mergeGate = defineStep({
         ? `Merge blocked: ${blockingOpen.length} unresolved finding(s)`
         : mergeDecision === "allowed"
           ? "All checks passed — merge allowed"
-          : "Review in progress";
-
-    const iterationSuffix = prDetails.latestIterationId
-      ? `/ Iteration ${prDetails.latestIterationId}`
-      : "";
+          : "OpenCodeReview incomplete — manual review required";
     const commitHint = prDetails.latestSourceCommitId
       ? ` (commit: ${prDetails.latestSourceCommitId.slice(0, 8)})`
       : "";
@@ -89,7 +91,7 @@ export const mergeGate = defineStep({
         {
           state,
           description: statusDescription + commitHint,
-          contextName: "PR Guardian / Merge Gate" + iterationSuffix,
+          contextName: "PR Guardian / Merge Gate",
           genre: "PR Guardian",
         },
       );

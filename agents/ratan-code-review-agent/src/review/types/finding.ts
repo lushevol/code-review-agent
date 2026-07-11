@@ -6,6 +6,12 @@ import { z } from "zod";
 export const FindingCategory = z.enum([
   "bug",
   "security",
+  "performance",
+  "maintainability",
+  "test",
+  "style",
+  "documentation",
+  "other",
   "compliance",
   "cve",
   "dependency",
@@ -34,6 +40,7 @@ export type FindingResolution = z.infer<typeof FindingResolution>;
 
 export const EngineType = z.enum([
   "ai-review",
+  "open-code-review",
   "sonarqube-cve",
   "compliance",
 ]);
@@ -50,7 +57,7 @@ export const NormalizedFindingSchema = z.object({
   lineEnd: z.number().int().nullable(),
   category: FindingCategory,
   severity: FindingSeverity,
-  confidence: z.number().min(0).max(1),
+  confidence: z.number().min(0).max(1).optional(),
   title: z.string().min(1),
   description: z.string(),
   evidence: z.string(),

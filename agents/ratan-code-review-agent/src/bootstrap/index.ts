@@ -1,5 +1,5 @@
 import type { AgentConfigCreationOptions, ConfigProvider } from "agent-config-manager";
-import { reviewAgents } from "../review";
+import { codeReviewEvaluationJudgeAgent } from "../review/agents/code-review-evaluation-agent";
 import { runPrReviewWorkflow } from "../review/workflows/pr-review-workflow";
 import { RequestContext } from "../review/runtime";
 import type { CommonRequestContext } from "../review/types";
@@ -62,7 +62,6 @@ async function runReviewWorkflow(agentConfig: ConfigProvider, prId: number) {
       prId,
     },
     requestContext,
-    agents: reviewAgents,
   })) {
     console.log("PR Review Workflow Output:", output);
   }
@@ -78,10 +77,7 @@ export const startupEvaluation = async (
 
   console.log("[startup] Agent config session created:", agentConfig.id);
 
-  const codeReviewEvaluationJudgeAgent = reviewAgents.getAgent(
-    "codeReviewEvaluationJudgeAgent",
-  );
-
   // Here you can add code to run evaluations using codeReviewEvaluationJudgeAgent
+  void codeReviewEvaluationJudgeAgent;
   console.log("[startupEvaluation] Evaluation mode is not yet implemented.");
 };

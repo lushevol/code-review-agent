@@ -10,7 +10,9 @@ const CommentInputSchema = z.object({
   findings: z.array(NormalizedFindingSchema),
   correlationSummary: z.string(),
   changesSinceLastReview: z.string().optional(),
-  codeChangeSummary: z.string(),
+  reviewSummary: z.string(),
+  reviewExecutionStatus: z.enum(["complete", "incomplete"]),
+  reviewMetadata: z.record(z.string(), z.unknown()),
   measures: z.union([z.any(), z.null()]),
   mergeDecision: z.enum(["allowed", "blocked", "pending"]),
   createdWorkItems: z.number(),
@@ -69,7 +71,12 @@ export const comment = defineStep({
       }
     }
 
-    const mainCommentSummary = (inputData.changesSinceLastReview || "") +
+    const incompleteNotice =
+      inputData.reviewExecutionStatus === "incomplete"
+        ? "⚠️ **OpenCodeReview did not complete. Merge status is Pending; manual review is required.**\n\n"
+        : "";
+    const mainCommentSummary = incompleteNotice +
+      (inputData.changesSinceLastReview || "") +
       (inputData.correlationSummary || "No issues detected.");
     const mainCommentThread = await adoClient.addCommentForPR(
       prDetails.repoName,
@@ -78,7 +85,7 @@ export const comment = defineStep({
         approve: findings.length === 0,
         errors: [],
       },
-      `${mainCommentSummary}\n\n${inputData.codeChangeSummary}`,
+      `${mainCommentSummary}\n\n${inputData.reviewSummary}`,
       [],
       inputData.measures,
     );
@@ -88,7 +95,7 @@ export const comment = defineStep({
       prDetails.pullRequestId,
       {
         [`/${CODE_REVIEW_AGENT_LATEST_REVIEW_ID}`]: String(
-          prDetails.latestIterationId,
+          prDetails.latestSourceCommitId,
         ),
       },
     );

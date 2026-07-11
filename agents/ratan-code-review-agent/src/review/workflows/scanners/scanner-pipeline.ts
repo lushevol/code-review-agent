@@ -1,31 +1,38 @@
-import { defineStep } from "../../runtime";
+import type { FindingStore } from "finding-store";
 import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
+import { OpenCodeReviewRunner } from "../../open-code-review/runner";
+import { defineStep } from "../../runtime";
 import { type CommonRequestContext, PullRequestSchema } from "../../types";
-import { type NormalizedFinding, NormalizedFindingSchema } from "../../types/finding";
-import { AIReviewScanner } from "./ai-review-scanner";
+import {
+  type NormalizedFinding,
+  NormalizedFindingSchema,
+} from "../../types/finding";
+import type { ReviewWorkspace } from "../../workspace/types";
+import { reconcileFindings } from "../utils/finding-reconciler";
 import { CveScanner } from "./cve-scanner";
 import { complianceEngine } from "./compliance-engine";
-import type { FindingStore } from "finding-store";
-import type { Scanner } from "./types";
-import { reconcileFindings } from "../utils/finding-reconciler";
-
-// ─── Input/Output Schemas ─────────────────────────────────────────────────────
+import { OpenCodeReviewScanner } from "./open-code-review-scanner";
+import type { Scanner, ScannerResult } from "./types";
 
 const ScannerPipelineInputSchema = z.object({
   prDetails: PullRequestSchema,
   workItemContext: z.string().optional(),
+  workspace: z.custom<ReviewWorkspace>(),
 });
+
+const ReviewExecutionStatusSchema = z.enum(["complete", "incomplete"]);
 
 const ScannerPipelineOutputSchema = z.object({
   prDetails: PullRequestSchema,
   workItemContext: z.string().optional(),
   findings: z.array(NormalizedFindingSchema),
   correlationSummary: z.string(),
+  reviewSummary: z.string(),
+  reviewExecutionStatus: ReviewExecutionStatusSchema,
+  reviewMetadata: z.record(z.string(), z.unknown()),
   changesSinceLastReview: z.string().optional(),
 });
-
-// ─── Severity Priority Map ────────────────────────────────────────────────────
 
 const SEVERITY_ORDER: Record<string, number> = {
   critical: 0,
@@ -35,111 +42,71 @@ const SEVERITY_ORDER: Record<string, number> = {
   informational: 4,
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * Deduplicate findings by contentHash.
- * When the same hash appears from multiple engines, keep the one with the
- * higher severity (lower order number) and merge evidence strings.
- */
 function correlateFindings(findings: NormalizedFinding[]): NormalizedFinding[] {
   const map = new Map<string, NormalizedFinding>();
-
-  for (const f of findings) {
-    const existing = map.get(f.contentHash);
+  for (const finding of findings) {
+    const existing = map.get(finding.contentHash);
     if (!existing) {
-      map.set(f.contentHash, f);
+      map.set(finding.contentHash, finding);
       continue;
     }
-
     const existingRank = SEVERITY_ORDER[existing.severity] ?? 99;
-    const currentRank = SEVERITY_ORDER[f.severity] ?? 99;
-
+    const currentRank = SEVERITY_ORDER[finding.severity] ?? 99;
     if (currentRank < existingRank) {
-      // Current finding has higher severity — replace, but merge evidence
-      f.evidence = [existing.evidence, f.evidence]
+      finding.evidence = [existing.evidence, finding.evidence]
         .filter(Boolean)
         .join("\n---\n");
-      map.set(f.contentHash, f);
+      map.set(finding.contentHash, finding);
     } else {
-      // Keep the existing one, merge current evidence into it
-      existing.evidence = [existing.evidence, f.evidence]
+      existing.evidence = [existing.evidence, finding.evidence]
         .filter(Boolean)
         .join("\n---\n");
     }
   }
-
   return Array.from(map.values());
 }
 
-/**
- * Sort findings by severity (critical first), then by confidence (highest first).
- * Returns at most MAX_FINDINGS results.
- */
 function prioritizeFindings(findings: NormalizedFinding[]): NormalizedFinding[] {
-  const MAX_FINDINGS = 100;
-
   return findings
-    .sort((a, b) => {
-      const sevDiff = (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99);
-      if (sevDiff !== 0) return sevDiff;
-      return b.confidence - a.confidence;
-    })
-    .slice(0, MAX_FINDINGS);
+    .sort(
+      (a, b) =>
+        (SEVERITY_ORDER[a.severity] ?? 99) -
+        (SEVERITY_ORDER[b.severity] ?? 99),
+    )
+    .slice(0, 100);
 }
 
-/**
- * Count findings at each severity level for the summary.
- */
 function severityCounts(findings: NormalizedFinding[]): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const f of findings) {
-    const sev = f.severity || "unknown";
-    counts[sev] = (counts[sev] ?? 0) + 1;
+  for (const finding of findings) {
+    counts[finding.severity] = (counts[finding.severity] ?? 0) + 1;
   }
   return counts;
 }
 
-// ─── Step ─────────────────────────────────────────────────────────────────────
-
 export const scannerPipeline = defineStep({
   id: "scanner-pipeline",
-  description: "Run all configured scanners in parallel and correlate results",
+  description: "Run OpenCodeReview and optional local-range scanners",
   inputSchema: ScannerPipelineInputSchema,
   outputSchema: ScannerPipelineOutputSchema,
   execute: async ({ inputData, agents, requestContext }) => {
-    if (!inputData) {
-      throw new Error("Input data not found");
-    }
+    if (!inputData) throw new Error("Input data not found");
 
-    const { prDetails, workItemContext } = inputData;
-
+    const { prDetails, workItemContext, workspace } = inputData;
     const agentConfig = extractAgentConfig(
       requestContext as unknown as CommonRequestContext,
     );
-
     const adoClient = agentConfig.getAdoClient();
     const rootConfig = await agentConfig.getRootConfig();
-
-    // ── Initialise FindingStore ─────────────────────────────────────────
     const findingStore: FindingStore = new (await import("finding-store")).FindingStore();
-    const findingStorePath = rootConfig.findingStorePath ?? ".ratan/data/findings.db";
-    findingStore.init(findingStorePath);
+    findingStore.init(rootConfig.findingStorePath ?? ".ratan/data/findings.db");
 
-    // ── Build scanner list ──────────────────────────────────────────────
-    const scanners: Scanner[] = [];
-
-    scanners.push(new AIReviewScanner());
-
+    const ocrRunner = new OpenCodeReviewRunner();
+    const scanners: Scanner[] = [new OpenCodeReviewScanner(ocrRunner)];
     const scannerSettings = rootConfig.scannerSettings ?? {};
-    if (scannerSettings.cve?.enabled !== false) {
-      scanners.push(new CveScanner());
-    }
-    if (scannerSettings.compliance?.enabled === true) {
-      scanners.push(complianceEngine);
-    }
+    if (scannerSettings.cve?.enabled !== false) scanners.push(new CveScanner());
+    if (scannerSettings.compliance?.enabled === true) scanners.push(complianceEngine);
 
-    // ── Run all scanners in parallel ────────────────────────────────────
     const scanContext = {
       provider: agentConfig,
       adoClient,
@@ -147,104 +114,91 @@ export const scannerPipeline = defineStep({
       findingStore,
       agents,
       workItemContext,
+      workspace,
+      ocrRunner,
     };
-
-    const results = await Promise.allSettled(
-      scanners.map((scanner) =>
-        scanner.scan(prDetails, scanContext).then((r) => ({
-          findings: r.findings,
-          engine: r.engine,
-          durationMs: r.durationMs,
-        })),
-      ),
+    const settled = await Promise.allSettled(
+      scanners.map((scanner) => scanner.scan(prDetails, scanContext)),
     );
 
-    // ── Collect results ─────────────────────────────────────────────────
     const allFindings: NormalizedFinding[] = [];
+    let reviewExecutionStatus: "complete" | "incomplete" = "complete";
+    let reviewMetadata: Record<string, unknown> = {
+      status: "failed",
+      durationMs: 0,
+    };
 
-    for (const result of results) {
-      if (result.status === "fulfilled") {
-        allFindings.push(...(result.value.findings as NormalizedFinding[]));
-      } else {
-        console.warn(
-          `[scanner-pipeline] Scanner failed: ${(result.reason as Error).message}`,
-        );
+    settled.forEach((result, index) => {
+      const scanner = scanners[index];
+      if (result.status === "rejected") {
+        console.warn(`[scanner-pipeline] ${scanner.id} failed`);
+        if (scanner.engine === "open-code-review") reviewExecutionStatus = "incomplete";
+        return;
       }
-    }
+      const value = result.value as ScannerResult;
+      allFindings.push(...value.findings);
+      if (scanner.engine === "open-code-review") {
+        reviewExecutionStatus = value.executionStatus ?? "complete";
+        reviewMetadata = {
+          ...(value.metadata ?? {}),
+          durationMs: value.durationMs,
+        };
+      }
+    });
 
-    // ── Correlate & prioritise ──────────────────────────────────────────
-    const correlated = correlateFindings(allFindings);
-    const prioritized = prioritizeFindings(correlated);
-
+    const prioritized = prioritizeFindings(correlateFindings(allFindings));
     let changesSinceLastReview = "";
     try {
-      const previousFindings = findingStore.getFindingsByPr(
+      const previous = findingStore.getFindingsByPr(
         prDetails.pullRequestId,
         prDetails.repoName,
       ) as unknown as NormalizedFinding[];
-      if (previousFindings.length > 0 && prioritized.length > 0) {
-        const reconciled = reconcileFindings(previousFindings, prioritized);
-        const parts: string[] = ["#### Changes since last review\n"];
-        if (reconciled.findingsToResolve.length > 0) {
-          parts.push(`**${reconciled.findingsToResolve.length}** findings resolved`);
-        }
-        if (reconciled.findingsToSupersede.length > 0) {
-          parts.push(`**${reconciled.findingsToSupersede.length}** findings updated`);
-        }
-        if (reconciled.findingsToCreate.length > 0) {
-          parts.push(`**${reconciled.findingsToCreate.length}** new findings`);
-        }
-        if (parts.length > 1) {
-          changesSinceLastReview = parts.join("\n- ") + "\n\n";
-        }
+      if (previous.length > 0) {
+        const reconciled = reconcileFindings(previous, prioritized);
+        const lines = ["#### Changes since last review"];
+        if (reconciled.findingsToResolve.length)
+          lines.push(`- **${reconciled.findingsToResolve.length}** findings resolved`);
+        if (reconciled.findingsToSupersede.length)
+          lines.push(`- **${reconciled.findingsToSupersede.length}** findings updated`);
+        if (reconciled.findingsToCreate.length)
+          lines.push(`- **${reconciled.findingsToCreate.length}** new findings`);
+        if (lines.length > 1) changesSinceLastReview = `${lines.join("\n")}\n\n`;
       }
     } catch {
       changesSinceLastReview = "";
     }
 
-    // ── Persist ─────────────────────────────────────────────────────────
     try {
-      findingStore.batchUpsert(prioritized as Parameters<typeof findingStore.batchUpsert>[0]);
-    } catch (err) {
-      console.error("[scanner-pipeline] Failed to persist findings:", err);
-      // Non-fatal — return findings regardless
+      findingStore.batchUpsert(
+        prioritized as Parameters<typeof findingStore.batchUpsert>[0],
+      );
+    } catch {
+      console.error("[scanner-pipeline] Failed to persist findings");
     }
 
-    // ── Generate summary ────────────────────────────────────────────────
     const counts = severityCounts(prioritized);
-    const summaryParts: string[] = [];
-    const total = prioritized.length;
-    const scannerCount = results.filter((r) => r.status === "fulfilled").length;
-
-    summaryParts.push(`Found ${total} issues across ${scannerCount} scanner(s)`);
-
-    const sevLabels: Record<string, string> = {
-      critical: "critical",
-      high: "high",
-      medium: "medium",
-      low: "low",
-      informational: "informational",
-    };
-
-    const severitySegments: string[] = [];
-    for (const label of ["critical", "high", "medium", "low", "informational"]) {
-      const n = counts[label] ?? 0;
-      if (n > 0) {
-        severitySegments.push(`${n} ${sevLabels[label]}`);
-      }
-    }
-
-    if (severitySegments.length > 0) {
-      summaryParts.push(`(${severitySegments.join(", ")})`);
-    }
-
-    const correlationSummary = summaryParts.join(" ");
+    const severitySummary = ["critical", "high", "medium", "low", "informational"]
+      .map((severity) => `${severity}: ${counts[severity] ?? 0}`)
+      .join(", ");
+    const reviewedFiles = Number(reviewMetadata.filesReviewed ?? 0);
+    const ocrStatus = String(reviewMetadata.status ?? "failed");
+    const reviewSummary = [
+      `Base: ${workspace.mergeBaseCommit}`,
+      `Head: ${workspace.headCommit}`,
+      `Changed files: ${workspace.changes.length}`,
+      `OCR reviewed files: ${reviewedFiles}`,
+      `OCR status: ${ocrStatus}`,
+      `Findings: ${severitySummary}`,
+    ].join("\n");
 
     return {
       prDetails,
       workItemContext,
       findings: prioritized,
-      correlationSummary,
+      correlationSummary: `Found ${prioritized.length} issues (${severitySummary})`,
+      reviewSummary,
+      reviewExecutionStatus,
+      reviewMetadata,
       changesSinceLastReview,
     };
   },

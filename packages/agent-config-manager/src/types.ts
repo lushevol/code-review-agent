@@ -91,6 +91,10 @@ const FeedbackDaemonConfigSchema = z.object({
   intervalMs: z.number().optional(),
 });
 
+const OpenCodeReviewConfigSchema = z.object({
+  workspaceRoot: z.string().optional(),
+});
+
 /**
  * Full agent config with defaults and optional repo-specific overrides.
  */
@@ -100,7 +104,8 @@ export const RootAgentConfigSchema = z.object({
   filePathsAllowlist: z.array(z.string()).optional(),
   filePathsBlocklist: z.array(z.string()).optional(),
   defaultAgentConfig: AgentConfigSchema.optional(),
-  agents: z.record(z.string(), AgentConfigSchema),
+  agents: z.record(z.string(), AgentConfigSchema).optional().default({}),
+  openCodeReview: OpenCodeReviewConfigSchema.optional(),
   findingStorePath: z.string().optional(),
   scannerSettings: ScannerSettingsSchema.optional(),
   mergePolicy: MergePolicySchema.optional(),
