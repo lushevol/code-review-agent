@@ -1,8 +1,7 @@
 import { minimatch } from "minimatch";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { CodeChangeSchema } from "ratan-ado-api";
-import type { z } from "zod";
+import type { ChangedFile } from "../../workspace/types";
 import {
   type NormalizedFinding,
   type EngineType,
@@ -10,8 +9,6 @@ import {
   generateFindingId,
 } from "../../types/finding";
 import type { Scanner, ScanContext } from "./types";
-
-type CodeChange = z.infer<typeof CodeChangeSchema>;
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -74,14 +71,8 @@ function isSourceFile(filePath: string): boolean {
 /**
  * Count total changed lines across all diff blocks in a file change entry.
  */
-function countChangedLines(change: CodeChange): number {
-  let total = 0;
-  for (const block of change.blocks) {
-    // Skip pure deletions
-    if (block.changeType === 2) continue;
-    total += block.mLines.length;
-  }
-  return total;
+function countChangedLines(change: ChangedFile): number {
+  return change.addedLines.length;
 }
 
 /**
@@ -189,9 +180,9 @@ export const complianceEngine: Scanner = {
     const findings: NormalizedFinding[] = [];
     const now = new Date().toISOString();
 
-    const { codeDiffsArray = [] } = prDetails;
+    const changes = context.workspace.changes;
 
-    if (codeDiffsArray.length === 0) {
+    if (changes.length === 0) {
       return {
         findings: [],
         engine: "compliance" as EngineType,
@@ -209,21 +200,16 @@ export const complianceEngine: Scanner = {
       // Config reading is optional; proceed without rule files
     }
 
-    for (const change of codeDiffsArray) {
-      const targetFilePath = change.newFilePath || change.oldFilePath;
+    for (const change of changes) {
+      const targetFilePath = change.path;
 
       // ── Built-in Check 1: TODO / FIXME / HACK / XXX ─────────────────
-      for (const block of change.blocks) {
-        // Only check blocks that contain added or modified lines
-        if (block.changeType === 2) continue;
-
-        const mLines = block.mLines ?? [];
-        for (let i = 0; i < mLines.length; i++) {
-          const line = mLines[i];
+      for (const addedLine of change.addedLines) {
+          const line = addedLine.text;
           const matchedPattern = TODO_PATTERNS.find((p) => p.test(line));
           if (!matchedPattern) continue;
 
-          const lineNumber = block.mLine + i;
+          const lineNumber = addedLine.line;
           const lineText = line.trim();
           const patternName = matchedPattern.source.replace(/\\b/g, "");
 
@@ -236,7 +222,6 @@ export const complianceEngine: Scanner = {
             lineEnd: lineNumber,
             category: "compliance",
             severity: "low",
-            confidence: 1.0,
             title: `${patternName} found in ${targetFilePath ?? "unknown"}`,
             description: `The file contains a "${patternName}" marker at line ${lineNumber}.`,
             evidence: lineText,
@@ -257,7 +242,6 @@ export const complianceEngine: Scanner = {
             createdAt: now,
             resolvedAt: null,
           });
-        }
       }
 
       // ── Built-in Check 2: Large file warning ─────────────────────────
@@ -272,7 +256,6 @@ export const complianceEngine: Scanner = {
           lineEnd: null,
           category: "compliance",
           severity: "informational",
-          confidence: 1.0,
           title: `Large file change in ${targetFilePath ?? "unknown"}`,
           description: `This file has ${totalChanged} changed lines, exceeding the ${LARGE_FILE_THRESHOLD}-line threshold.`,
           evidence: `${totalChanged} lines changed`,
@@ -301,18 +284,14 @@ export const complianceEngine: Scanner = {
         isSourceFile(targetFilePath) &&
         !isTestFile(targetFilePath)
       ) {
-        for (const block of change.blocks) {
-          if (block.changeType === 2) continue;
-
-          const mLines = block.mLines ?? [];
-          for (let i = 0; i < mLines.length; i++) {
-            const line = mLines[i];
+        for (const addedLine of change.addedLines) {
+            const line = addedLine.text;
             const matchedConsolePattern = CONSOLE_PATTERNS.find((p) =>
               p.test(line),
             );
             if (!matchedConsolePattern) continue;
 
-            const lineNumber = block.mLine + i;
+            const lineNumber = addedLine.line;
             const lineText = line.trim();
 
             findings.push({
@@ -324,7 +303,6 @@ export const complianceEngine: Scanner = {
               lineEnd: lineNumber,
               category: "compliance",
               severity: "low",
-              confidence: 1.0,
               title: `Console statement in source file`,
               description: `Source file ${targetFilePath} contains a console statement at line ${lineNumber}.`,
               evidence: lineText,
@@ -342,7 +320,6 @@ export const complianceEngine: Scanner = {
               createdAt: now,
               resolvedAt: null,
             });
-          }
         }
       }
 
@@ -354,18 +331,14 @@ export const complianceEngine: Scanner = {
           );
           if (!matchesFilePattern) continue;
 
-          for (const block of change.blocks) {
-            if (block.changeType === 2) continue;
-
-            const mLines = block.mLines ?? [];
-            for (let i = 0; i < mLines.length; i++) {
-              const line = mLines[i];
+          for (const addedLine of change.addedLines) {
+              const line = addedLine.text;
               const matchedForbidden = rule.forbidden_patterns.find((p) =>
                 line.toLowerCase().includes(p.toLowerCase()),
               );
               if (!matchedForbidden) continue;
 
-              const lineNumber = block.mLine + i;
+              const lineNumber = addedLine.line;
               const lineText = line.trim();
 
               findings.push({
@@ -377,7 +350,6 @@ export const complianceEngine: Scanner = {
                 lineEnd: lineNumber,
                 category: "compliance",
                 severity: normalizeSeverity(rule.severity),
-                confidence: 1.0,
                 title: `Compliance rule: ${rule["rule-id"]}`,
                 description: rule.description,
                 evidence: lineText,
@@ -395,7 +367,6 @@ export const complianceEngine: Scanner = {
                 createdAt: now,
                 resolvedAt: null,
               });
-            }
           }
         }
       }

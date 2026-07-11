@@ -16,6 +16,7 @@
   ],
   "scripts": {
     "build": "rslib build",
+    "test": "vitest run",
     "dev": "rslib build --watch",
     "clear": "rimraf node_modules"
   },
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@rslib/core": "^0.18.6",
     "@types/node": "^25.9.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.10"
   }
 }

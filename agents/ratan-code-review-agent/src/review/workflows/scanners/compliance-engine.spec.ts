@@ -14,6 +14,12 @@ import { complianceEngine } from "./compliance-engine";
  * @param startLine Starting line number in the new file (default 1)
  * @param changeType 1 = Add, 2 = Delete, 3 = Edit (default 1)
  */
+let currentChanges: Array<{
+  path: string;
+  status: "added" | "modified" | "deleted";
+  addedLines: Array<{ line: number; text: string }>;
+}> = [];
+
 function createCodeChange(
   filePath: string,
   mLines: string[],
@@ -21,21 +27,12 @@ function createCodeChange(
   changeType = 1,
 ) {
   return {
-    newFilePath: filePath,
-    oldFilePath: filePath,
-    changeType: "Edit",
-    blocks: [
-      {
-        changeType,
-        oLine: startLine,
-        oLinesCount: 0,
-        mLine: startLine,
-        mLinesCount: mLines.length,
-        oLines: [],
-        mLines,
-      },
-    ],
-    changes: mLines.join("\n"),
+    path: filePath,
+    status: changeType === 2 ? ("deleted" as const) : ("modified" as const),
+    addedLines:
+      changeType === 2
+        ? []
+        : mLines.map((text, index) => ({ line: startLine + index, text })),
   };
 }
 
@@ -43,10 +40,14 @@ function createCodeChange(
  * Create a minimal mock PR with a single code change entry.
  */
 function createMockPR(filePath: string, mLines: string[], startLine = 1, blockChangeType = 1) {
+  currentChanges = [createCodeChange(filePath, mLines, startLine, blockChangeType)];
   return {
     repoId: "repo-1",
     repoName: "test-repo",
-    repoUrl: "https://dev.azure.com/org/test-repo",
+    cloneUrl: "https://dev.azure.com/org/test-repo",
+    sourceRepoId: "repo-1",
+    sourceRepoName: "test-repo",
+    sourceCloneUrl: "https://dev.azure.com/org/test-repo",
     projectName: "test-project",
     pullRequestId: 42,
     latestTargetCommitId: "abc",
@@ -54,6 +55,7 @@ function createMockPR(filePath: string, mLines: string[], startLine = 1, blockCh
     title: "Test PR",
     description: "Test",
     status: 0,
+    isDraft: false,
     authorName: "Tester",
     authorId: "tester@test.com",
     creationDate: "2024-01-01T00:00:00.000Z",
@@ -62,11 +64,6 @@ function createMockPR(filePath: string, mLines: string[], startLine = 1, blockCh
     sourceBranch: "feature",
     targetBranch: "main",
     reviewers: [],
-    latestIterationId: 1,
-    workItemIds: [],
-    commentThreads: [],
-    codeDiffs: "",
-    codeDiffsArray: [createCodeChange(filePath, mLines, startLine, blockChangeType)],
   };
 }
 
@@ -82,6 +79,14 @@ function createMockContext() {
     adoClient: {},
     findingStore: {},
     agents: {},
+    workspace: {
+      repoPath: "",
+      runDirectory: "",
+      mergeBaseCommit: "abc",
+      headCommit: "def",
+      changes: currentChanges,
+    },
+    ocrRunner: {},
   };
 }
 
@@ -104,7 +109,7 @@ describe("complianceEngine", () => {
     expect(todoFinding).toBeDefined();
     expect(todoFinding!.severity).toBe("low");
     expect(todoFinding!.category).toBe("compliance");
-    expect(todoFinding!.confidence).toBe(1.0);
+    expect(todoFinding!.confidence).toBeUndefined();
   });
 
   it("loads YAML compliance rules from the configured rules path", async () => {
@@ -200,60 +205,8 @@ describe("complianceEngine", () => {
   });
 
   it("returns a finding when a file has more than 400 changed lines", async () => {
-    // Build 2 blocks each with 250 lines → 500 total
-    const lines = Array.from({ length: 250 }, (_, i) => `line ${i + 1}`);
-    const pr = {
-      repoId: "repo-1",
-      repoName: "test-repo",
-      repoUrl: "https://dev.azure.com/org/test-repo",
-      projectName: "test-project",
-      pullRequestId: 42,
-      latestTargetCommitId: "abc",
-      latestSourceCommitId: "def",
-      title: "Test PR",
-      description: "Test",
-      status: 0,
-      authorName: "Tester",
-      authorId: "tester@test.com",
-      creationDate: "2024-01-01T00:00:00.000Z",
-      sourceRefName: "refs/heads/feature",
-      targetRefName: "refs/heads/main",
-      sourceBranch: "feature",
-      targetBranch: "main",
-      reviewers: [],
-      latestIterationId: 1,
-      workItemIds: [],
-      commentThreads: [],
-      codeDiffs: "",
-      codeDiffsArray: [
-        {
-          newFilePath: "src/huge-file.ts",
-          oldFilePath: "src/huge-file.ts",
-          changeType: "Edit",
-          blocks: [
-            {
-              changeType: 1,
-              oLine: 1,
-              oLinesCount: 0,
-              mLine: 1,
-              mLinesCount: lines.length,
-              oLines: [],
-              mLines: lines,
-            },
-            {
-              changeType: 1,
-              oLine: 251,
-              oLinesCount: 0,
-              mLine: 251,
-              mLinesCount: lines.length,
-              oLines: [],
-              mLines: lines,
-            },
-          ],
-          changes: lines.concat(lines).join("\n"),
-        },
-      ],
-    };
+    const lines = Array.from({ length: 500 }, (_, i) => `line ${i + 1}`);
+    const pr = createMockPR("src/huge-file.ts", lines);
     const context = createMockContext();
 
     const result = await complianceEngine.scan(pr, context);
@@ -313,31 +266,8 @@ describe("complianceEngine", () => {
   });
 
   it("returns no findings when the PR has no code diffs", async () => {
-    const pr = {
-      repoId: "repo-1",
-      repoName: "test-repo",
-      repoUrl: "https://dev.azure.com/org/test-repo",
-      projectName: "test-project",
-      pullRequestId: 42,
-      latestTargetCommitId: "abc",
-      latestSourceCommitId: "def",
-      title: "Test PR",
-      description: "Test",
-      status: 0,
-      authorName: "Tester",
-      authorId: "tester@test.com",
-      creationDate: "2024-01-01T00:00:00.000Z",
-      sourceRefName: "refs/heads/feature",
-      targetRefName: "refs/heads/main",
-      sourceBranch: "feature",
-      targetBranch: "main",
-      reviewers: [],
-      latestIterationId: 1,
-      workItemIds: [],
-      commentThreads: [],
-      codeDiffs: "",
-      codeDiffsArray: [],
-    };
+    const pr = createMockPR("src/empty.ts", []);
+    currentChanges = [];
     const context = createMockContext();
 
     const result = await complianceEngine.scan(pr, context);
@@ -411,53 +341,12 @@ describe("complianceEngine", () => {
   });
 
   it("ignores deleted-only blocks (changeType === 2)", async () => {
-    // A block with changeType 2 (Delete) should be skipped entirely
-    const pr = {
-      repoId: "repo-1",
-      repoName: "test-repo",
-      repoUrl: "https://dev.azure.com/org/test-repo",
-      projectName: "test-project",
-      pullRequestId: 42,
-      latestTargetCommitId: "abc",
-      latestSourceCommitId: "def",
-      title: "Test PR",
-      description: "Test",
-      status: 0,
-      authorName: "Tester",
-      authorId: "tester@test.com",
-      creationDate: "2024-01-01T00:00:00.000Z",
-      sourceRefName: "refs/heads/feature",
-      targetRefName: "refs/heads/main",
-      sourceBranch: "feature",
-      targetBranch: "main",
-      reviewers: [],
-      latestIterationId: 1,
-      workItemIds: [],
-      commentThreads: [],
-      codeDiffs: "",
-      codeDiffsArray: [
-        {
-          newFilePath: "src/deleted-file.ts",
-          oldFilePath: "src/deleted-file.ts",
-          changeType: "Delete",
-          blocks: [
-            {
-              changeType: 2,
-              oLine: 1,
-              oLinesCount: 3,
-              mLine: 0,
-              mLinesCount: 0,
-              oLines: [
-                "// TODO: this was never finished",
-                "function oldCode() {}",
-              ],
-              mLines: [],
-            },
-          ],
-          changes: "",
-        },
-      ],
-    };
+    const pr = createMockPR(
+      "src/deleted-file.ts",
+      ["// TODO: this was never finished", "function oldCode() {}"],
+      1,
+      2,
+    );
 
     const context = createMockContext();
     const result = await complianceEngine.scan(pr, context);

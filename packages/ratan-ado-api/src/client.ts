@@ -35,6 +35,7 @@ import {
   getLatestPullRequestStatus,
   getPullRequestStatuses,
   getPullRequestById,
+  getPullRequestMetadataById,
   getPullRequestChangesFiles,
   getPullRequestIterationChangesFiles,
   getPullRequestIterations,
@@ -191,6 +192,7 @@ export class AzureDevOps {
 
   getPullRequestListByRepoName = getPullRequestListByRepoName;
   getPullRequestById = getPullRequestById;
+  getPullRequestMetadataById = getPullRequestMetadataById;
   getRepos = getRepos;
   getBranchLatestCommit = getBranchLatestCommit;
   getCommitsBatch = getCommitsBatch;

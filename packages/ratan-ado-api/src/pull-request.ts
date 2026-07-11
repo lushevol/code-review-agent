@@ -17,11 +17,63 @@ import {
   getCodeDiffFromHierarchyQuery,
 } from "./extension/CodeDiff";
 import type { ChangeJsonWithDiff } from "./extension/interfaces";
-import type { AdoPullRequest, AdoWebApi, CommentThread } from "./interfaces";
+import type {
+  AdoPullRequest,
+  AdoPullRequestMetadata,
+  AdoWebApi,
+  CommentThread,
+} from "./interfaces";
 import {
   dateToDateString,
   plainWorkItemPayload2JsonPatchDocument,
 } from "./utils";
+
+export async function getPullRequestMetadataById(
+  pullRequestId: number | string,
+): Promise<AdoPullRequestMetadata> {
+  const webApi = this.adoWebApi as AdoWebApi;
+  const gitApi = await webApi.getGitApi();
+  const pr = await gitApi.getPullRequestById(Number(pullRequestId));
+
+  const repository = pr.repository;
+  const cloneUrl = repository?.remoteUrl ?? "";
+  const sourceRepository = pr.forkSource?.repository ?? repository;
+  const sourceCloneUrl = sourceRepository?.remoteUrl ?? cloneUrl;
+  if (!repository?.id || !repository.name || !cloneUrl) {
+    throw new Error(`Pull request ${pullRequestId} has no cloneable target repository`);
+  }
+  if (!sourceRepository?.id || !sourceCloneUrl) {
+    throw new Error(`Pull request ${pullRequestId} has no cloneable source repository`);
+  }
+
+  const sourceRefName = pr.sourceRefName ?? "";
+  const targetRefName = pr.targetRefName ?? "";
+
+  return {
+    repoId: repository.id,
+    repoName: repository.name,
+    cloneUrl,
+    sourceRepoId: sourceRepository.id,
+    sourceRepoName: sourceRepository.name ?? repository.name,
+    sourceCloneUrl,
+    projectName: repository.project?.name ?? "",
+    pullRequestId: Number(pullRequestId),
+    latestTargetCommitId: pr.lastMergeTargetCommit?.commitId ?? "",
+    latestSourceCommitId: pr.lastMergeSourceCommit?.commitId ?? "",
+    title: pr.title ?? "",
+    description: pr.description ?? "",
+    status: pr.status ?? 0,
+    isDraft: pr.isDraft ?? false,
+    authorName: pr.createdBy?.displayName ?? "",
+    authorId: pr.createdBy?.uniqueName ?? "",
+    creationDate: dateToDateString(pr.creationDate),
+    sourceRefName,
+    targetRefName,
+    sourceBranch: sourceRefName.replace("refs/heads/", ""),
+    targetBranch: targetRefName.replace("refs/heads/", ""),
+    reviewers: pr.reviewers ?? [],
+  };
+}
 
 export async function getPullRequestById(
   pullRequestId: number | string,

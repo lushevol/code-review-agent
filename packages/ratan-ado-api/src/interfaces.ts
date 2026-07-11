@@ -559,6 +559,34 @@ export const AdoPullRequestSchema = z.object({
 });
 export type AdoPullRequest = z.infer<typeof AdoPullRequestSchema>;
 
+export const AdoPullRequestMetadataSchema = z.object({
+  repoId: z.string(),
+  repoName: z.string(),
+  cloneUrl: z.string().url(),
+  sourceRepoId: z.string(),
+  sourceRepoName: z.string(),
+  sourceCloneUrl: z.string().url(),
+  projectName: z.string(),
+  pullRequestId: z.number(),
+  latestTargetCommitId: z.string(),
+  latestSourceCommitId: z.string(),
+  title: z.string(),
+  description: z.string(),
+  status: z.number(),
+  isDraft: z.boolean(),
+  authorName: z.string(),
+  authorId: z.string(),
+  creationDate: z.string(),
+  sourceRefName: z.string(),
+  targetRefName: z.string(),
+  sourceBranch: z.string(),
+  targetBranch: z.string(),
+  reviewers: z.array(AdoPullRequestReviewerSchema),
+});
+export type AdoPullRequestMetadata = z.infer<
+  typeof AdoPullRequestMetadataSchema
+>;
+
 const AdoProjectTypeSchema = z.object({
   abbreviation: z.string().optional(),
   defaultTeamImageUrl: z.string().optional(),

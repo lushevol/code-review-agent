@@ -44,6 +44,7 @@
     "vitest": "^4.0.10"
   },
   "dependencies": {
+    "@alibaba-group/open-code-review": "1.7.7",
     "@ai-sdk/openai": "^3.0.65",
     "agent-config-manager": "workspace:*",
     "ai": "^6.0.191",

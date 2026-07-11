@@ -1,4 +1,7 @@
-import { type AdoPullRequest, AdoPullRequestSchema } from "ratan-ado-api";
+import {
+  type AdoPullRequestMetadata,
+  AdoPullRequestMetadataSchema,
+} from "ratan-ado-api";
 import z from "zod";
 import type { RequestContext } from "../runtime";
 
@@ -76,5 +79,5 @@ export type CodeReviewIssueClassification = z.infer<
   typeof CodeReviewIssueClassificationSchema
 >;
 
-export const PullRequestSchema = AdoPullRequestSchema;
-export type PullRequest = AdoPullRequest;
+export const PullRequestSchema = AdoPullRequestMetadataSchema;
+export type PullRequest = AdoPullRequestMetadata;

@@ -13,7 +13,7 @@ export interface NormalizedFinding {
   lineEnd: number | null;
   category: string;
   severity: string;
-  confidence: number;
+  confidence?: number;
   title: string;
   description: string;
   evidence: string;
@@ -620,7 +620,7 @@ function findingToRow(f: NormalizedFinding): FindingRow {
     line_end: f.lineEnd,
     category: f.category,
     severity: f.severity,
-    confidence: f.confidence,
+    confidence: f.confidence ?? 0,
     title: f.title,
     description: f.description,
     evidence: f.evidence,

@@ -13,7 +13,9 @@ const RecordAuditInputSchema = z.object({
   findings: z.array(NormalizedFindingSchema),
   correlationSummary: z.string(),
   changesSinceLastReview: z.string().optional(),
-  codeChangeSummary: z.string(),
+  reviewSummary: z.string(),
+  reviewExecutionStatus: z.enum(["complete", "incomplete"]),
+  reviewMetadata: z.record(z.string(), z.unknown()),
   measures: z.union([z.any(), z.null()]),
   mergeDecision: z.enum(["allowed", "blocked", "pending"]),
 });
@@ -59,10 +61,15 @@ export const recordAudit = defineStep({
         reviewEndTimestamp: now,
         scanners: engines.map((engine) => ({
           engine,
-          version: "1.0.0",
-          durationMs: 0,
+          version:
+            inputData.findings.find((finding) => finding.sourceEngine === engine)
+              ?.sourceVersion ?? "unknown",
+          durationMs:
+            engine === "open-code-review"
+              ? Number(inputData.reviewMetadata.durationMs ?? 0)
+              : 0,
         })),
-        modelVersion: "gpt-5-mini",
+        modelVersion: process.env.OCR_LLM_MODEL ?? "unknown",
         findingsCount: inputData.findings.length,
         blockingFindingsCount: inputData.findings.filter(
           (finding) => finding.blocking && finding.resolution === "open",
@@ -70,6 +77,8 @@ export const recordAudit = defineStep({
         mergePolicyDecision: inputData.mergeDecision,
         supersedesReviewId: null,
         rawScannerOutputs: {
+          reviewExecutionStatus: inputData.reviewExecutionStatus,
+          ocr: inputData.reviewMetadata,
           correlationSummary: inputData.correlationSummary,
         },
       });

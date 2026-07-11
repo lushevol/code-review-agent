@@ -28,12 +28,7 @@ export const fetchPR = defineStep({
     );
 
     const adoClient = agentConfig.getAdoClient();
-    const prDetails = await adoClient.getPullRequestById(
-      inputData.prId,
-      false,
-      false,
-      true,
-    );
+    const prDetails = await adoClient.getPullRequestMetadataById(inputData.prId);
 
     return {
       prDetails,
