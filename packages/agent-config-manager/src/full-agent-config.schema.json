@@ -37,15 +37,13 @@
               "minLength": 1
             },
             "useAnthropic": {
-              "default": false,
               "type": "boolean"
             }
           },
           "required": [
             "url",
             "token",
-            "model",
-            "useAnthropic"
+            "model"
           ],
           "additionalProperties": false
         }

@@ -24,10 +24,19 @@ let options: ResolvedLoggingOptions = {
   console: true,
   file: true,
 };
+const consoleSink = { log: console.log.bind(console), warn: console.warn.bind(console), error: console.error.bind(console) };
+let consoleCaptureInstalled = false;
+
+function redactString(value: string): string {
+  return value
+    .replace(/(bearer\s+)[^\s]+/gi, "$1[REDACTED]")
+    .replace(/([?&](?:token|password|secret|api[_-]?key)=)[^&\s]+/gi, "$1[REDACTED]")
+    .replace(/((?:token|password|secret|api[_-]?key)\s*[:=]\s*)[^,\s}]+/gi, "$1[REDACTED]");
+}
 
 function redact(value: unknown, key?: string): unknown {
   if (key && /token|password|secret|authorization|api[_-]?key/i.test(key)) return "[REDACTED]";
-  if (value instanceof Error) return { name: value.name, message: value.message, stack: value.stack };
+  if (value instanceof Error) return { name: value.name, message: redactString(value.message), stack: value.stack ? redactString(value.stack) : undefined };
   if (Array.isArray(value)) return value.map((item) => redact(item));
   if (value && typeof value === "object") {
     return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, redact(item, name)]));
@@ -53,9 +62,9 @@ export class Logger {
     const json = JSON.stringify(record);
     const output = options.format === "json" ? json : `${record.timestamp} [${level.toUpperCase()}] [${this.name}] ${message}${args.length ? ` ${JSON.stringify(record.data)}` : ""}`;
     if (options.console) {
-      if (level === "error") console.error(output);
-      else if (level === "warn") console.warn(output);
-      else console.log(output);
+      if (level === "error") consoleSink.error(output);
+      else if (level === "warn") consoleSink.warn(output);
+      else consoleSink.log(output);
     }
     if (options.file) {
       try {
@@ -71,6 +80,16 @@ export class Logger {
   warn(message: string, ...args: unknown[]) { this.log("warn", message, args); }
   error(message: string, ...args: unknown[]) { this.log("error", message, args); }
   child(name: string) { return new Logger(`${this.name}:${name}`); }
+}
+
+/** Routes legacy console calls through the configured structured logger. */
+export function installConsoleCapture(): void {
+  if (consoleCaptureInstalled) return;
+  consoleCaptureInstalled = true;
+  const logger = getLogger("console");
+  console.log = (...args: unknown[]) => logger.info(String(args[0] ?? ""), ...args.slice(1));
+  console.warn = (...args: unknown[]) => logger.warn(String(args[0] ?? ""), ...args.slice(1));
+  console.error = (...args: unknown[]) => logger.error(String(args[0] ?? ""), ...args.slice(1));
 }
 
 let rootLogger: Logger | undefined;

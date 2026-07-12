@@ -81,7 +81,7 @@ const OpenCodeReviewLlmConfigSchema = z.object({
   url: z.string().url(),
   token: z.string().min(1),
   model: z.string().min(1),
-  useAnthropic: z.boolean().optional().default(false),
+  useAnthropic: z.boolean().optional(),
 });
 
 const OpenCodeReviewConfigSchema = z.object({

@@ -1,16 +1,20 @@
 import { FindingStore } from "finding-store";
 import { createDashboardApp } from "../dashboard";
 import { getLogger } from "../utils/logger";
+import { loadConfig } from "../config/loader";
 
 export interface DashboardOptions {
   port?: number;
   findingStorePath?: string;
+  config?: string;
 }
 
 export async function startDashboard(options: DashboardOptions) {
+  const { provider } = await loadConfig(options.config);
+  const rootConfig = await provider.getRootConfig();
   const logger = getLogger("dashboard");
-  const port = options.port ?? 3099;
-  const dbPath = options.findingStorePath ?? ".ratan/data/findings.db";
+  const port = options.port ?? rootConfig.dashboard?.port ?? 3099;
+  const dbPath = options.findingStorePath ?? rootConfig.findingStorePath ?? ".ratan/data/findings.db";
 
   // Initialize FindingStore
   const findingStore = new FindingStore(dbPath);

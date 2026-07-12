@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { FindingStore } from "finding-store";
 import { loadConfig } from "../config/loader";
-import { getLogger, cleanOldLogs, configureLogging } from "../utils/logger";
+import { getLogger, cleanOldLogs, configureLogging, installConsoleCapture } from "../utils/logger";
 import { getPRQueue } from "../services/pr-queue";
 import { getAutoScanService } from "../services/auto-scan";
 import { startReviewPrWithProvider } from "../../bootstrap";
@@ -87,7 +87,7 @@ async function startFeedbackDaemon(
   if (rootConfig.feedbackDaemon?.enabled === false) return;
   const FEEDBACK_INTERVAL_MS = rootConfig.feedbackDaemon?.intervalMs ?? 15 * 60 * 1000;
 
-  const findingStorePath = path.join(ratanDir, "data/findings.db");
+  const findingStorePath = rootConfig.findingStorePath ?? path.join(ratanDir, "data/findings.db");
   let findingStore: FindingStore;
 
   try {
@@ -173,6 +173,7 @@ export async function startCommand(options: StartOptions) {
     directory: path.resolve(ratanDir, logging?.directory ?? "logs"),
   });
   cleanOldLogs(logging?.retentionDays);
+  installConsoleCapture();
   await provider.connect();
 
   // 4. Initialize PR queue with build pipeline check
