@@ -12,6 +12,7 @@ describe("ratan config scaffold", () => {
   it("creates a loadable local wrapper config with a native OCR rule file", async () => {
     vi.stubEnv("OCR_LLM_URL", "https://llm.example/v1");
     vi.stubEnv("OCR_LLM_TOKEN", "secret");
+    vi.stubEnv("ADO_TOKEN", "ado-token");
     const dir = await mkdtemp(path.join(tmpdir(), "ratan-scaffold-"));
     try {
       const ratanDir = ensureRatanFolder(path.join(dir, ".ratan"));

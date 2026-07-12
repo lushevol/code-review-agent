@@ -4,6 +4,21 @@ import { LocalConfigClient } from "./local-client";
 import { SonarQubeClient } from "ratan-sonarqube-api";
 
 const config = {
+  logging: {
+    level: "debug" as const,
+    directory: ".ratan/logs",
+    retentionDays: 14,
+  },
+  retry: {
+    maxAttempts: 4,
+    baseDelayMs: 50,
+    maxDelayMs: 500,
+    jitterMs: 0,
+  },
+  sonarQube: {
+    url: "https://sonar.example/api",
+    token: "token",
+  },
   openCodeReview: {
     rulesPath: "opencodereview/rule.json",
     llm: {
@@ -50,21 +65,17 @@ describe("LocalConfigClient", () => {
     );
   });
 
-  it("skips Sonar validation when the connection cannot be established", async () => {
+  it("uses the root SonarQube and retry settings", async () => {
     vi.spyOn(SonarQubeClient.prototype, "connect").mockResolvedValue(false);
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const client = new LocalConfigClient({
       configDir: "/tmp/ratan",
       config,
       ado: { organization: "o", project: "p" },
-      sonarQubeToken: "token",
     });
 
     await client.connect();
 
     expect(client.getSonarQubeClient()).toBeNull();
-    expect(warn).toHaveBeenCalledWith(
-      "[config] SonarQube connection unavailable; skipping Sonar validation.",
-    );
+    expect(SonarQubeClient.prototype.connect).toHaveBeenCalledWith("token");
   });
 });

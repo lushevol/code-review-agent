@@ -10,6 +10,27 @@ const CveScannerSettingsSchema = z.object({
   sonarqubeProjectKey: z.string().optional(),
 });
 
+const RetryConfigSchema = z.object({
+  maxAttempts: z.number().int().min(1).max(10).optional(),
+  baseDelayMs: z.number().int().min(0).optional(),
+  maxDelayMs: z.number().int().min(0).optional(),
+  jitterMs: z.number().int().min(0).optional(),
+}).strict();
+
+const LoggingConfigSchema = z.object({
+  level: z.enum(["debug", "info", "warn", "error"]).optional(),
+  directory: z.string().min(1).optional(),
+  retentionDays: z.number().int().min(1).optional(),
+  format: z.enum(["pretty", "json"]).optional(),
+  console: z.boolean().optional(),
+  file: z.boolean().optional(),
+}).strict();
+
+const SonarQubeConfigSchema = z.object({
+  url: z.string().url(),
+  token: z.string().min(1).optional(),
+}).strict();
+
 const ComplianceScannerSettingsSchema = z.object({
   enabled: z.boolean().optional(),
   rulesPath: z.string().optional(),
@@ -52,6 +73,10 @@ const FeedbackDaemonConfigSchema = z.object({
   intervalMs: z.number().optional(),
 });
 
+const WatchConfigSchema = z.object({
+  intervalMs: z.number().int().min(1_000).optional(),
+}).strict();
+
 const OpenCodeReviewLlmConfigSchema = z.object({
   url: z.string().url(),
   token: z.string().min(1),
@@ -73,6 +98,9 @@ export const RootAgentConfigSchema = z.object({
   scanRepoNames: z.array(z.string()).optional(),
   openCodeReview: OpenCodeReviewConfigSchema,
   findingStorePath: z.string().optional(),
+  logging: LoggingConfigSchema.optional(),
+  retry: RetryConfigSchema.optional(),
+  sonarQube: SonarQubeConfigSchema.optional(),
   scannerSettings: ScannerSettingsSchema.optional(),
   mergePolicy: MergePolicySchema.optional(),
   webhook: WebhookConfigSchema.optional(),
@@ -80,7 +108,8 @@ export const RootAgentConfigSchema = z.object({
   remediationTasks: RemediationTasksConfigSchema.optional(),
   audit: AuditConfigSchema.optional(),
   feedbackDaemon: FeedbackDaemonConfigSchema.optional(),
-});
+  watch: WatchConfigSchema.optional(),
+}).strict();
 
 export type RootAgentConfig = z.infer<typeof RootAgentConfigSchema>;
 

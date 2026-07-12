@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { FindingStore } from "finding-store";
 import { loadConfig } from "../config/loader";
-import { getLogger, cleanOldLogs } from "../utils/logger";
+import { getLogger, cleanOldLogs, configureLogging } from "../utils/logger";
 import { getPRQueue } from "../services/pr-queue";
 import { getAutoScanService } from "../services/auto-scan";
 import { startReviewPrWithProvider } from "../../bootstrap";
@@ -83,7 +83,9 @@ async function startFeedbackDaemon(
   ratanDir: string,
 ) {
   const logger = getLogger("feedback-daemon");
-  const FEEDBACK_INTERVAL_MS = 15 * 60 * 1000; // every 15 minutes
+  const rootConfig = await provider.getRootConfig();
+  if (rootConfig.feedbackDaemon?.enabled === false) return;
+  const FEEDBACK_INTERVAL_MS = rootConfig.feedbackDaemon?.intervalMs ?? 15 * 60 * 1000;
 
   const findingStorePath = path.join(ratanDir, "data/findings.db");
   let findingStore: FindingStore;
@@ -155,18 +157,22 @@ async function startFeedbackDaemon(
 export async function startCommand(options: StartOptions) {
   const logger = getLogger("start");
 
-  // 1. Clean old logs (>30 days)
-  cleanOldLogs(30);
-
-  // 2. Setup .ratan folder
+  // 1. Setup .ratan folder
   const ratanDir = options.config
     ? path.resolve(options.config)
     : path.resolve(process.cwd(), RATAN_DIR);
   ensureRatanFolder(ratanDir);
 
-  // 3. Load config
+  // 2. Load config and apply logging before any service is started.
   logger.info("Loading configuration...");
   const { provider } = await loadConfig(ratanDir);
+  const rootConfig = await provider.getRootConfig();
+  const logging = rootConfig.logging;
+  configureLogging({
+    ...logging,
+    directory: path.resolve(ratanDir, logging?.directory ?? "logs"),
+  });
+  cleanOldLogs(logging?.retentionDays);
   await provider.connect();
 
   // 4. Initialize PR queue with build pipeline check
@@ -195,7 +201,7 @@ export async function startCommand(options: StartOptions) {
   // 7. Handle --watch mode: scan every 30 minutes, daemon keeps running
   if (options.watch) {
     startFeedbackDaemon(provider, ratanDir);
-    const INTERVAL_MS = 30 * 60 * 1000;
+    const INTERVAL_MS = rootConfig.watch?.intervalMs ?? 30 * 60 * 1000;
 
     const runScan = async () => {
       const autoScan = getAutoScanService();

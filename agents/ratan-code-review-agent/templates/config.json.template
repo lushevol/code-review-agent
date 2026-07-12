@@ -9,6 +9,25 @@
     "scanRepoNames": [],
     "scanPRCreatedDaysAgo": 7,
     "findingStorePath": ".ratan/data/findings.db",
+    "logging": {
+      "level": "info",
+      "directory": "logs",
+      "retentionDays": 30,
+      "format": "pretty",
+      "console": true,
+      "file": true
+    },
+    "retry": {
+      "maxAttempts": 3,
+      "baseDelayMs": 1000,
+      "maxDelayMs": 30000,
+      "jitterMs": 1000
+    },
+    "sonarQube": {
+      "url": "https://sonarqube.example.com/api"
+    },
+    "watch": { "intervalMs": 1800000 },
+    "feedbackDaemon": { "enabled": true, "intervalMs": 300000 },
     "scannerSettings": {
       "cve": { "enabled": false },
       "compliance": { "enabled": true }

@@ -6,6 +6,7 @@ import type {
   ConfigProvider,
   RootAgentConfig,
 } from "agent-config-manager";
+import { getLogger } from "ratan-logger";
 
 export interface LocalConfigOptions {
   configDir: string;
@@ -13,7 +14,6 @@ export interface LocalConfigOptions {
   ado: { organization: string; project: string };
   adoToken?: string;
   adoProxyUrl?: string;
-  sonarQubeToken?: string;
   /** Reserved for future ORM support. Not currently used. */
   databaseUrl?: string;
 }
@@ -23,6 +23,7 @@ export class LocalConfigClient implements ConfigProvider {
   private options: LocalConfigOptions;
   private adoClient: AzureDevOps | null = null;
   private sonarQubeClient: SonarQubeClient | null = null;
+  private logger = getLogger("config");
 
   constructor(options: LocalConfigOptions) {
     if (!options.configDir) {
@@ -47,14 +48,13 @@ export class LocalConfigClient implements ConfigProvider {
       });
       await this.adoClient.connect(this.options.adoToken);
     }
-    if (this.options.sonarQubeToken) {
-      const sonarClient = new SonarQubeClient();
-      if (await sonarClient.connect(this.options.sonarQubeToken)) {
+    const sonarConfig = this.options.config.sonarQube;
+    if (sonarConfig?.token) {
+      const sonarClient = new SonarQubeClient({ url: sonarConfig.url });
+      if (await sonarClient.connect(sonarConfig.token)) {
         this.sonarQubeClient = sonarClient;
       } else {
-        console.warn(
-          "[config] SonarQube connection unavailable; skipping Sonar validation.",
-        );
+        this.logger.warn("SonarQube connection unavailable; skipping Sonar validation.");
       }
     }
   }

@@ -3,7 +3,9 @@ import path from "node:path";
 import {
   type ConfigProvider,
   type RootAgentConfig,
+  RootAgentConfigSchema,
 } from "agent-config-manager";
+import { configureLogging } from "ratan-logger";
 import { LocalConfigClient } from "./local-client";
 
 const DEFAULT_CONFIG_DIR = ".ratan/code-review-agent";
@@ -16,7 +18,6 @@ interface RawWrapperConfig {
     token?: string;
   };
   adoProxyUrl?: string;
-  sonarQubeToken?: string;
   databaseUrl?: string;
   config?: RootAgentConfig;
 }
@@ -91,13 +92,25 @@ export async function loadConfig(
   }
 
   const resolved = resolveSecrets(raw);
+  let config: RootAgentConfig;
+  try {
+    config = RootAgentConfigSchema.parse(resolved.config);
+  } catch (err) {
+    throw new Error(`Invalid configuration in ${configFile}: ${(err as Error).message}`);
+  }
+  const logging = config.logging;
+  configureLogging({
+    ...logging,
+    directory: logging?.directory
+      ? path.resolve(configDir, logging.directory)
+      : path.resolve(configDir, "logs"),
+  });
   const provider: ConfigProvider = new LocalConfigClient({
     configDir,
-    config: resolved.config!,
+    config,
     ado: resolved.ado,
     adoToken: resolved.ado.token,
     adoProxyUrl: resolved.adoProxyUrl,
-    sonarQubeToken: resolved.sonarQubeToken,
     databaseUrl: resolved.databaseUrl,
   });
 

@@ -446,6 +446,18 @@ describe("Scanner Pipeline Integration", () => {
         sonarClient,
         findingStore,
         agents: createMockAgents(),
+        workspace: {
+          changes: [
+            {
+              path: "src/app.ts",
+              status: "modified",
+              addedLines: [
+                { line: 1, text: "// TODO: remove" },
+                { line: 2, text: "console.log('debug')" },
+              ],
+            },
+          ],
+        },
       };
 
       // Run both real scanners

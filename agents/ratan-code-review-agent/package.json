@@ -60,6 +60,7 @@
     "ratan-code-review-agent-orm": "workspace:*",
     "ratan-markdown-tool": "workspace:*",
     "ratan-sonarqube-api": "workspace:*",
+    "ratan-logger": "workspace:*",
     "readable-stream": "^4.7.0",
     "redact-pii": "^3.4.0",
     "request": "^2.88.2",
