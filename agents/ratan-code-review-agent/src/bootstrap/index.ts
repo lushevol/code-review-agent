@@ -1,22 +1,10 @@
-import type { AgentConfigCreationOptions, ConfigProvider } from "agent-config-manager";
-import { codeReviewEvaluationJudgeAgent } from "../review/agents/code-review-evaluation-agent";
+import type { ConfigProvider } from "agent-config-manager";
 import { runPrReviewWorkflow } from "../review/workflows/pr-review-workflow";
 import { RequestContext } from "../review/runtime";
 import type { CommonRequestContext } from "../review/types";
 import { scanPRs } from "./pr-scan";
 import { getAgentConfigSessions } from "./session";
 
-// Keep the original startup for backwards compat (demo.ts, evaluation)
-export const startup = async (startupOptions: AgentConfigCreationOptions) => {
-  console.log("[startup] Starting up agent ...");
-
-  const agentConfig =
-    await getAgentConfigSessions().createAgentConfigSession(startupOptions);
-
-  await runScanLoop(agentConfig);
-};
-
-// New function for CLI — accepts a pre-created ConfigProvider
 export const startScanWithProvider = async (provider: ConfigProvider) => {
   console.log("[startScanWithProvider] Starting scan with provider ...");
 
@@ -67,17 +55,3 @@ async function runReviewWorkflow(agentConfig: ConfigProvider, prId: number) {
   }
   console.log(`[startup] Finished processing PR: ${prId}`);
 }
-
-export const startupEvaluation = async (
-  startupOptions: AgentConfigCreationOptions,
-) => {
-  console.log("[startupEvaluation] Starting up evaluation mode...");
-  const agentConfig =
-    await getAgentConfigSessions().createAgentConfigSession(startupOptions);
-
-  console.log("[startup] Agent config session created:", agentConfig.id);
-
-  // Here you can add code to run evaluations using codeReviewEvaluationJudgeAgent
-  void codeReviewEvaluationJudgeAgent;
-  console.log("[startupEvaluation] Evaluation mode is not yet implemented.");
-};

@@ -36,7 +36,7 @@ export function ensureRatanFolder(ratanDirPath: string) {
 
   if (!fs.existsSync(ratanDir)) {
     console.log(`[start] Creating .ratan folder at: ${ratanDir}`);
-    fs.mkdirSync(path.join(ratanDir, "prompts"), { recursive: true });
+    fs.mkdirSync(path.join(ratanDir, "opencodereview"), { recursive: true });
     fs.mkdirSync(path.join(ratanDir, "logs"), { recursive: true });
     fs.mkdirSync(path.join(ratanDir, "data"), { recursive: true });
 
@@ -51,29 +51,22 @@ export function ensureRatanFolder(ratanDirPath: string) {
       console.log(`[start] Created default config at: ${configPath}`);
     }
 
-    // Write default prompts from templates
-    const promptsDir = path.join(ratanDir, "prompts");
-    const promptTemplates = [
-      { name: "review.md", template: "review.md.template" },
-      { name: "review-rescore.md", template: "review-rescore.md.template" },
-      {
-        name: "issue-classification.md",
-        template: "issue-classification.md.template",
-      },
-      { name: "summary.md", template: "summary.md.template" },
-    ];
-    for (const { name, template } of promptTemplates) {
-      const promptPath = path.join(promptsDir, name);
-      if (!fs.existsSync(promptPath)) {
-        const content = fs.readFileSync(
-          path.join(TEMPLATES_DIR, "prompts", template),
-          "utf-8",
-        );
-        fs.writeFileSync(promptPath, content, "utf-8");
-      }
+    const rulePath = path.join(ratanDir, "opencodereview", "rule.json");
+    if (!fs.existsSync(rulePath)) {
+      const content = fs.readFileSync(
+        path.join(TEMPLATES_DIR, "opencodereview", "rule.json.template"),
+        "utf-8",
+      );
+      fs.writeFileSync(rulePath, content, "utf-8");
     }
 
     console.log(`[start] .ratan folder initialized at: ${ratanDir}`);
+  }
+
+  if (fs.existsSync(path.join(ratanDir, "prompts"))) {
+    throw new Error(
+      "Legacy prompts are no longer supported. Configure config.openCodeReview and use opencodereview/rule.json.",
+    );
   }
 
   return ratanDir;

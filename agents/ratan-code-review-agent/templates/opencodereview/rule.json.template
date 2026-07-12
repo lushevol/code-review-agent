@@ -1,0 +1,10 @@
+{
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["**/*.test.*", "**/*.spec.*", "**/generated/**"],
+  "rules": [
+    {
+      "path": "**/*",
+      "rule": "Report correctness, security, reliability, and maintainability issues. Do not report formatting-only suggestions."
+    }
+  ]
+}

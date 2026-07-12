@@ -19,6 +19,8 @@ describe("OpenCodeReviewScanner", () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ocr-scanner-"));
     fs.mkdirSync(path.join(tempDir, "src"));
     fs.writeFileSync(path.join(tempDir, "src/file.ts"), "first\nproblem\nlast\n");
+    const ruleFile = path.join(tempDir, "rule.json");
+    fs.writeFileSync(ruleFile, JSON.stringify({ rules: [] }));
     const workspace: ReviewWorkspace = {
       repoPath: tempDir,
       runDirectory: tempDir,
@@ -27,7 +29,6 @@ describe("OpenCodeReviewScanner", () => {
       changes: [],
     };
     const runner: OcrReviewRunner = {
-      checkHealth: async () => true,
       review: async () => ({
         status: "success",
         complete: true,
@@ -55,10 +56,16 @@ describe("OpenCodeReviewScanner", () => {
       workItemContext: "Context",
       provider: {
         getRootConfig: async () => ({
-          agents: {},
-          filePathsAllowlist: ["**/*.ts"],
-          filePathsBlocklist: [],
+          openCodeReview: {
+            rulesPath: "rule.json",
+            llm: {
+              url: "https://llm.example/v1",
+              token: "secret",
+              model: "model",
+            },
+          },
         }),
+        resolveConfigPath: (relativePath: string) => path.join(tempDir!, relativePath),
       },
     } as never);
 

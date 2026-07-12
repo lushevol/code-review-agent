@@ -1,3 +1,0 @@
-You are an expert at categorizing code review issues.
-Classify each issue into a category and sub-category.
-Return JSON: { issues: [{ no: 0, category: '...', sub_category: '...' }] }

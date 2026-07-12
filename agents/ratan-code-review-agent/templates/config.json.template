@@ -13,33 +13,14 @@
       "cve": { "enabled": false },
       "compliance": { "enabled": true }
     },
-    "filePathsAllowlist": [
-      "**/*.ts",
-      "**/*.tsx",
-      "**/*.js",
-      "**/*.jsx",
-      "**/*.java",
-      "**/*.sql"
-    ],
-    "filePathsBlocklist": [
-      "**/*.test.*",
-      "**/*.spec.*",
-      "**/__tests__/**",
-      "**/test/**",
-      "**/generated/**"
-    ],
-    "agents": {
-      "review": {
-        "prompts": ["prompts/review.md"]
-      },
-      "review-rescore": {
-        "prompts": ["prompts/review-rescore.md"]
-      },
-      "issue-classification": {
-        "prompts": ["prompts/issue-classification.md"]
-      },
-      "summary": {
-        "prompts": ["prompts/summary.md"]
+    "openCodeReview": {
+      "workspaceRoot": ".ratan/workspaces",
+      "rulesPath": "opencodereview/rule.json",
+      "llm": {
+        "url": "env:OCR_LLM_URL",
+        "token": "env:OCR_LLM_TOKEN",
+        "model": "your-review-model",
+        "useAnthropic": false
       }
     }
   }
