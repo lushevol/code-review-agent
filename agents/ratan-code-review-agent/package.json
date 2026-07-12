@@ -1,6 +1,6 @@
 {
   "name": "ratan-code-review",
-  "version": "0.1.2",
+  "version": "0.1.6",
   "private": false,
   "license": "ISC",
   "type": "module",
@@ -17,13 +17,15 @@
   "files": [
     "dist",
     "bin",
-    "templates"
+    "templates",
+    "dashboard/dist"
   ],
   "scripts": {
     "dev": "tsx src/cli/index.ts start --watch",
     "demo": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 tsx src/demo.ts",
     "test-api": "tsx src/review/agents/test-api.ts",
-    "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 rslib build",
+    "build": "pnpm build:dashboard && cross-env NODE_OPTIONS=--max-old-space-size=4096 rslib build",
+    "build:dashboard": "cd dashboard && npx vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "node ./bin/ratan-code-review.cjs start",
     "codegen": "tsx ./src/evaluation/json-schema-generator.ts",

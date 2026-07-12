@@ -8,7 +8,8 @@ import {
 import { configureLogging } from "ratan-logger";
 import { LocalConfigClient } from "./local-client";
 
-const DEFAULT_CONFIG_DIR = ".ratan/code-review-agent";
+const DEFAULT_CONFIG_DIR = ".ratan";
+const LEGACY_CONFIG_DIR = ".ratan/code-review-agent";
 
 interface RawWrapperConfig {
   mode: "local";
@@ -19,7 +20,7 @@ interface RawWrapperConfig {
   };
   adoProxyUrl?: string;
   databaseUrl?: string;
-  config?: RootAgentConfig;
+  config?: RootAgentConfig & Record<string, unknown>;
 }
 
 function resolveEnvToken(value: string): string {
@@ -65,8 +66,25 @@ export async function loadConfig(
   try {
     const content = await readFile(configFile, "utf-8");
     raw = JSON.parse(content) as RawWrapperConfig;
+    return await finalizeConfig(raw, configDir, configFile);
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      // Fallback: try old config location
+      if (!configPath) {
+        const legacyDir = path.resolve(process.cwd(), LEGACY_CONFIG_DIR);
+        const legacyFile = path.resolve(legacyDir, "config.json");
+        try {
+          const content = await readFile(legacyFile, "utf-8");
+          console.warn(
+            `\n  [config] Found config at legacy location: ${legacyFile}` +
+            `\n  [config] Consider moving it to ${configFile} or running \`ratan-code-review start\` to create a fresh config.\n`,
+          );
+          raw = JSON.parse(content) as RawWrapperConfig;
+          return await finalizeConfig(raw, legacyDir, legacyFile);
+        } catch {
+          // Legacy location also missing — fall through to error
+        }
+      }
       console.error(
         `\n  Error: No config found at ${configFile}\n` +
         `  Run ratan-code-review start once to create a default .ratan folder.\n`
@@ -75,7 +93,14 @@ export async function loadConfig(
     }
     throw new Error(`Failed to parse ${configFile}: ${(err as Error).message}`);
   }
+}
 
+// Shared config resolution used by both primary and legacy fallback paths.
+async function finalizeConfig(
+  raw: RawWrapperConfig,
+  configDir: string,
+  configFile: string,
+): Promise<LoadConfigResult> {
   if (raw.mode !== "local") {
     throw new Error(`Invalid mode "${raw.mode}" in ${configFile}. Only "local" is supported.`);
   }
@@ -83,12 +108,30 @@ export async function loadConfig(
   if (!raw.config) {
     throw new Error(`Missing "config" field in ${configFile}.`);
   }
-  for (const key of ["agents", "defaultAgentConfig"] as const) {
-    if (key in raw.config) {
-      throw new Error(
-        `Legacy config.${key} is no longer supported. Configure config.openCodeReview and create opencodereview/rule.json.`,
-      );
+
+  // Auto-migrate legacy config format to openCodeReview-based config
+  const hasLegacyKeys = ["agents", "defaultAgentConfig"].some((k) => k in raw.config!);
+  if (hasLegacyKeys) {
+    console.warn(
+      `\n  [config] Detected legacy config format in ${configFile}.` +
+      "\n  [config] Auto-migrating to the new openCodeReview-based format.\n",
+    );
+    const cfg = raw.config as Record<string, unknown>;
+    const oldModel = (cfg.defaultAgentConfig as Record<string, unknown> | undefined)?.model as string | undefined;
+    delete cfg.agents;
+    delete cfg.defaultAgentConfig;
+    if (!cfg.openCodeReview) {
+      cfg.openCodeReview = {
+        workspaceRoot: ".ratan/workspaces",
+        rulesPath: "opencodereview/rule.json",
+        llm: {
+          url: "http://set-your-llm-endpoint/v1",
+          token: "set-your-llm-token",
+          model: oldModel ?? "your-review-model",
+        },
+      };
     }
+    raw.config = cfg as RootAgentConfig;
   }
 
   const resolved = resolveSecrets(raw);

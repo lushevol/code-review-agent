@@ -40,16 +40,36 @@ describe("loadConfig", () => {
     expect((await provider.getRootConfig()).openCodeReview?.llm.token).toBe("secret");
   });
 
-  it("rejects legacy agent configuration", async () => {
+  it("auto-migrates legacy agent configuration", async () => {
     const directory = await writeConfig({
       mode: "local",
       ado: { organization: "org", project: "project" },
       config: { agents: {} },
     });
 
-    await expect(loadConfig(directory)).rejects.toThrow(
-      "Legacy config.agents is no longer supported",
-    );
+    const { provider } = await loadConfig(directory);
+    const config = await provider.getRootConfig();
+    // Legacy agents key should be removed and openCodeReview added with defaults
+    expect((config as Record<string, unknown>).agents).toBeUndefined();
+    expect(config.openCodeReview?.rulesPath).toBe("opencodereview/rule.json");
+    expect(config.openCodeReview?.llm.model).toBe("your-review-model");
+  });
+
+  it("auto-migrates legacy config with defaultAgentConfig.model", async () => {
+    const directory = await writeConfig({
+      mode: "local",
+      ado: { organization: "org", project: "project" },
+      config: {
+        agents: { review: { prompts: ["prompts/review/principles.md"] } },
+        defaultAgentConfig: { model: "gpt-5-mini" },
+      },
+    });
+
+    const { provider } = await loadConfig(directory);
+    const config = await provider.getRootConfig();
+    expect((config as Record<string, unknown>).agents).toBeUndefined();
+    expect((config as Record<string, unknown>).defaultAgentConfig).toBeUndefined();
+    expect(config.openCodeReview?.llm.model).toBe("gpt-5-mini");
   });
 
   it("resolves nested secret references and validates operational settings", async () => {

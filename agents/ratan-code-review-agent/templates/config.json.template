@@ -36,8 +36,8 @@
       "workspaceRoot": ".ratan/workspaces",
       "rulesPath": "opencodereview/rule.json",
       "llm": {
-        "url": "env:OCR_LLM_URL",
-        "token": "env:OCR_LLM_TOKEN",
+        "url": "http://your-llm-endpoint.example.com/v1",
+        "token": "set-your-llm-token",
         "model": "your-review-model",
         "useAnthropic": false
       }

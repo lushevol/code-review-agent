@@ -1,8 +1,24 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
 import type { FindingStore } from "finding-store";
 import { getPRQueue } from "../services/pr-queue";
 import { getLogger } from "../utils/logger";
+
+/**
+ * Resolve the dashboard SPA build directory. Works in both tsx (dev) and
+ * compiled dist (published) contexts.
+ */
+function resolveDashboardDir(): string | null {
+  const dirname = path.dirname(fileURLToPath(import.meta.url));
+  for (const rel of ["../dashboard/dist", "../../dashboard/dist"]) {
+    const candidate = path.resolve(dirname, rel);
+    if (fs.existsSync(path.join(candidate, "index.html"))) return candidate;
+  }
+  return null;
+}
 
 export function createDashboardApp(findingStore: FindingStore) {
   const app = express();
@@ -10,6 +26,14 @@ export function createDashboardApp(findingStore: FindingStore) {
 
   app.use(cors());
   app.use(express.json());
+
+  // ── Dashboard SPA ─────────────────────────────────────────────────────
+  const dashboardDist = resolveDashboardDir();
+  if (dashboardDist) {
+    app.use(express.static(dashboardDist));
+  } else {
+    logger.warn("Dashboard SPA not found — API-only mode");
+  }
 
   // ── Health ────────────────────────────────────────────────────────────
 
@@ -239,6 +263,14 @@ export function createDashboardApp(findingStore: FindingStore) {
       return res.status(500).json({ error: String(err) });
     }
   });
+
+  // ── SPA fallback — all non-API routes serve index.html for client-side routing ─
+
+  if (dashboardDist) {
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(dashboardDist, "index.html"));
+    });
+  }
 
   return app;
 }
