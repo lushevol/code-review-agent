@@ -1,6 +1,6 @@
 {
   "name": "ratan-ado-api",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "type": "module",
   "exports": {
     ".": {
@@ -23,7 +23,7 @@
   "author": "Shuai,Lu(shuai.lu@sc.com)",
   "dependencies": {
     "azure-devops-node-api": "^15.1.0",
-    "ratan-markdown-tool": "workspace:*",
+    "ratan-markdown-tool": "0.0.1",
     "typed-rest-client": "^2.1.0"
   },
   "peerDependencies": {
