@@ -45,6 +45,7 @@ program
   .command("dashboard")
   .description("Start the PR Guardian dashboard with PR queue management")
   .option("--port <number>", "Port for the dashboard server")
+  .option("--config <path>", "Config directory path (default: .ratan)")
   .option(
     "--finding-store <path>",
     "Path to the FindingStore SQLite database",
@@ -53,6 +54,7 @@ program
     await startDashboard({
       port: opts.port ? Number(opts.port) : undefined,
       findingStorePath: opts.findingStore,
+      config: opts.config,
     });
   });
 

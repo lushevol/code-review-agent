@@ -12,6 +12,9 @@ import {
 import { IssuesStatus } from "sonarqube-webapis/dist/src/resources/index.js";
 import { MeasuresAdditionalFields } from "sonarqube-webapis/dist/src/resources/index.js";
 import type { MeasuresComponent, ParsedMeasuresComponent } from "./interfaces";
+import { getLogger } from "ratan-logger";
+
+export interface SonarQubeClientOptions { url?: string; }
 
 export interface SonarIssueSearchResult {
   total: number;
@@ -46,11 +49,14 @@ export interface SonarIssue {
 
 export class SonarQubeClient {
   private sonar!: Sonar;
+  private logger = getLogger("sonarqube");
+
+  constructor(private readonly options: SonarQubeClientOptions = {}) {}
 
   // response indecate whether login is successful or not.
   public async connect(token: string): Promise<boolean> {
     if (!token) {
-      console.error("SonarQube token is required.");
+      this.logger.error("SonarQube token is required.");
       return false;
     }
     let SonarClass = Sonar;
@@ -66,19 +72,19 @@ export class SonarQubeClient {
         password: "",
       },
       // You can use sonarcloud / sonarqube web api url.
-      baseURL: "https://sonarqube.vx.standardchartered.com/api",
+      baseURL: this.options.url ?? "https://sonarqube.vx.standardchartered.com/api",
     });
     try {
       // {@link https://sonarcloud.io/web_api/api/authentication/validate}
       const result = await this.sonar.authentication.validate();
       if (result.data.valid) {
-        console.log("\n\nSonarQube Login Successfully\n\n");
+        this.logger.info("SonarQube login succeeded");
         return true;
       }
       return false;
     } catch (error) {
       // This is to show error messages from sonar.
-      console.error("Errors: ", (error as AxiosError).response?.data);
+      this.logger.error("SonarQube login failed", (error as AxiosError).response?.data);
       return false;
     }
   }
@@ -148,7 +154,7 @@ export class SonarQubeClient {
 
       return this.parseIssuesResponse(resp.data);
     } catch (error) {
-      console.error("Error searching SonarQube issues:", (error as AxiosError).message);
+      this.logger.error("Error searching SonarQube issues", error);
       throw error;
     }
   }
@@ -291,7 +297,7 @@ export class SonarQubeClient {
 
       return result;
     } catch (error) {
-      console.error("Error fetching measures: ", (error as AxiosError).message);
+      this.logger.error("Error fetching SonarQube measures", error);
       throw error;
     }
   }

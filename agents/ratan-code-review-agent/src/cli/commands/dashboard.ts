@@ -1,36 +1,42 @@
 import { FindingStore } from "finding-store";
 import { createDashboardApp } from "../dashboard";
+import { getLogger } from "../utils/logger";
+import { loadConfig } from "../config/loader";
 
 export interface DashboardOptions {
   port?: number;
   findingStorePath?: string;
+  config?: string;
 }
 
 export async function startDashboard(options: DashboardOptions) {
-  const port = options.port ?? 3099;
-  const dbPath = options.findingStorePath ?? ".ratan/data/findings.db";
+  const { provider } = await loadConfig(options.config);
+  const rootConfig = await provider.getRootConfig();
+  const logger = getLogger("dashboard");
+  const port = options.port ?? rootConfig.dashboard?.port ?? 3099;
+  const dbPath = options.findingStorePath ?? rootConfig.findingStorePath ?? ".ratan/data/findings.db";
 
   // Initialize FindingStore
   const findingStore = new FindingStore(dbPath);
   try {
     findingStore.init();
-    console.log(`FindingStore initialized at: ${dbPath}`);
+    logger.info(`FindingStore initialized at: ${dbPath}`);
   } catch (err) {
-    console.error(`Warning: Could not open FindingStore at ${dbPath}:`, err);
-    console.log("Starting dashboard without persistence — findings API will return empty.");
+    logger.error(`Could not open FindingStore at ${dbPath}`, err);
+    logger.warn("Starting dashboard without persistence — findings API will return empty.");
   }
 
   const app = createDashboardApp(findingStore);
 
   app.listen(port, () => {
-    console.log(`PR Guardian Dashboard listening on http://localhost:${port}`);
-    console.log(`  API: http://localhost:${port}/api/health`);
+    logger.info(`PR Guardian Dashboard listening on http://localhost:${port}`);
+    logger.info(`API: http://localhost:${port}/api/health`);
   });
 
   // Keep running until SIGTERM
   await new Promise<void>((resolve) => {
     process.on("SIGTERM", () => {
-      console.log("Dashboard shutting down...");
+      logger.info("Dashboard shutting down...");
       findingStore.close();
       resolve();
     });

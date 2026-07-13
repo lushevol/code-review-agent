@@ -79,13 +79,17 @@ export type OcrReviewOutput = z.infer<typeof OcrOutputSchema> & {
 export interface OcrReviewInput {
   workspace: ReviewWorkspace;
   background: string;
-  include: string[];
-  exclude: string[];
+  llm: {
+    url: string;
+    token: string;
+    model: string;
+    useAnthropic: boolean;
+  };
+  ruleFile: string;
 }
 
 export interface OcrReviewRunner {
   review(input: OcrReviewInput): Promise<OcrReviewOutput>;
-  checkHealth(): Promise<boolean>;
 }
 
 export interface OpenCodeReviewRunnerOptions {
@@ -115,15 +119,26 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
       input.workspace.runDirectory,
       "review-background.md",
     );
-    const ruleFile = path.join(input.workspace.runDirectory, "ocr-rule.json");
     fs.mkdirSync(stateHome, { recursive: true, mode: 0o700 });
     fs.writeFileSync(backgroundFile, input.background, { mode: 0o600 });
+    if (!fs.existsSync(input.ruleFile)) {
+      throw new Error("OpenCodeReview rule file not found");
+    }
+    try {
+      JSON.parse(fs.readFileSync(input.ruleFile, "utf8"));
+    } catch {
+      throw new Error("OpenCodeReview rule file is invalid");
+    }
+    const configPath = path.join(stateHome, "config.json");
     fs.writeFileSync(
-      ruleFile,
+      configPath,
       JSON.stringify({
-        rules: [],
-        include: input.include,
-        exclude: input.exclude,
+        llm: {
+          url: input.llm.url,
+          auth_token: input.llm.token,
+          model: input.llm.model,
+          use_anthropic: input.llm.useAnthropic,
+        },
       }),
       { mode: 0o600 },
     );
@@ -145,11 +160,13 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
           "--background-file",
           backgroundFile,
           "--rule",
-          ruleFile,
+          input.ruleFile,
           "--concurrency",
           String(this.concurrency),
         ],
         stateHome,
+        configPath,
+        input.llm.useAnthropic,
       );
       let json: unknown;
       try {
@@ -168,20 +185,13 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
     }
   }
 
-  async checkHealth(): Promise<boolean> {
-    const home = fs.mkdtempSync(path.join(process.cwd(), ".ocr-health-"));
-    try {
-      await this.execute(["llm", "test"], home);
-      return true;
-    } catch {
-      return false;
-    } finally {
-      fs.rmSync(home, { recursive: true, force: true });
-    }
-  }
-
-  private execute(args: string[], home: string): Promise<string> {
-    const env = this.buildEnvironment(home);
+  private execute(
+    args: string[],
+    home: string,
+    configPath: string,
+    useAnthropic: boolean,
+  ): Promise<string> {
+    const env = this.buildEnvironment(home, configPath, useAnthropic);
     return new Promise((resolve, reject) => {
       const child = spawn(this.binaryPath, args, {
         env,
@@ -226,26 +236,18 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
     });
   }
 
-  private buildEnvironment(home: string): NodeJS.ProcessEnv {
-    const source = this.environment;
-    const url = source.OCR_LLM_URL ?? source.OPENAI_BASE_URL;
-    const token = source.OCR_LLM_TOKEN ?? source.OPENAI_API_KEY;
-    const model = source.OCR_LLM_MODEL;
-    if (!url || !token || !model) {
-      throw new Error(
-        "OpenCodeReview requires OCR_LLM_MODEL and an OCR or OPENAI endpoint/token",
-      );
-    }
+  private buildEnvironment(
+    home: string,
+    configPath: string,
+    useAnthropic: boolean,
+  ): NodeJS.ProcessEnv {
     return {
       ...process.env,
-      ...source,
+      ...this.environment,
       HOME: home,
-      OCR_CONFIG_PATH: path.join(home, "config.json"),
+      OCR_CONFIG_PATH: configPath,
       OCR_NO_UPDATE: "1",
-      OCR_LLM_URL: url,
-      OCR_LLM_TOKEN: token,
-      OCR_LLM_MODEL: model,
-      OCR_USE_ANTHROPIC: "false",
+      OCR_USE_ANTHROPIC: String(useAnthropic),
     };
   }
 }

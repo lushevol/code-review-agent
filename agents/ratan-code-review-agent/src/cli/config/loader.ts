@@ -3,26 +3,24 @@ import path from "node:path";
 import {
   type ConfigProvider,
   type RootAgentConfig,
-  createAgentConfigClient,
+  RootAgentConfigSchema,
 } from "agent-config-manager";
+import { configureLogging } from "ratan-logger";
 import { LocalConfigClient } from "./local-client";
 
-const DEFAULT_CONFIG_DIR = ".ratan/code-review-agent";
+const DEFAULT_CONFIG_DIR = ".ratan";
+const LEGACY_CONFIG_DIR = ".ratan/code-review-agent";
 
 interface RawWrapperConfig {
-  mode: "local" | "ado";
+  mode: "local";
   ado: {
     organization: string;
     project: string;
     token?: string;
   };
   adoProxyUrl?: string;
-  sonarQubeToken?: string;
   databaseUrl?: string;
-  config?: RootAgentConfig;
-  configRepo?: string;
-  configBranch?: string;
-  configBasePath?: string;
+  config?: RootAgentConfig & Record<string, unknown>;
 }
 
 function resolveEnvToken(value: string): string {
@@ -39,12 +37,15 @@ function resolveEnvToken(value: string): string {
   return value;
 }
 
-function resolveSecrets(raw: RawWrapperConfig): RawWrapperConfig {
-  const resolved = { ...raw, ado: { ...raw.ado } };
-  if (raw.ado.token) resolved.ado.token = resolveEnvToken(raw.ado.token);
-  if (raw.sonarQubeToken) resolved.sonarQubeToken = resolveEnvToken(raw.sonarQubeToken);
-  if (raw.databaseUrl) resolved.databaseUrl = resolveEnvToken(raw.databaseUrl);
-  return resolved;
+function resolveSecrets<T>(value: T): T {
+  if (typeof value === "string") return resolveEnvToken(value) as T;
+  if (Array.isArray(value)) return value.map(resolveSecrets) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [key, resolveSecrets(nested)]),
+    ) as T;
+  }
+  return value;
 }
 
 export interface LoadConfigResult {
@@ -65,8 +66,25 @@ export async function loadConfig(
   try {
     const content = await readFile(configFile, "utf-8");
     raw = JSON.parse(content) as RawWrapperConfig;
+    return await finalizeConfig(raw, configDir, configFile);
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      // Fallback: try old config location
+      if (!configPath) {
+        const legacyDir = path.resolve(process.cwd(), LEGACY_CONFIG_DIR);
+        const legacyFile = path.resolve(legacyDir, "config.json");
+        try {
+          const content = await readFile(legacyFile, "utf-8");
+          console.warn(
+            `\n  [config] Found config at legacy location: ${legacyFile}` +
+            `\n  [config] Consider moving it to ${configFile} or running \`ratan-code-review start\` to create a fresh config.\n`,
+          );
+          raw = JSON.parse(content) as RawWrapperConfig;
+          return await finalizeConfig(raw, legacyDir, legacyFile);
+        } catch {
+          // Legacy location also missing — fall through to error
+        }
+      }
       console.error(
         `\n  Error: No config found at ${configFile}\n` +
         `  Run ratan-code-review start once to create a default .ratan folder.\n`
@@ -75,49 +93,69 @@ export async function loadConfig(
     }
     throw new Error(`Failed to parse ${configFile}: ${(err as Error).message}`);
   }
+}
 
-  if (raw.mode !== "local" && raw.mode !== "ado") {
-    throw new Error(`Invalid mode "${raw.mode}" in ${configFile}. Must be "local" or "ado".`);
+// Shared config resolution used by both primary and legacy fallback paths.
+async function finalizeConfig(
+  raw: RawWrapperConfig,
+  configDir: string,
+  configFile: string,
+): Promise<LoadConfigResult> {
+  if (raw.mode !== "local") {
+    throw new Error(`Invalid mode "${raw.mode}" in ${configFile}. Only "local" is supported.`);
+  }
+
+  if (!raw.config) {
+    throw new Error(`Missing "config" field in ${configFile}.`);
+  }
+
+  // Auto-migrate legacy config format to openCodeReview-based config
+  const hasLegacyKeys = ["agents", "defaultAgentConfig"].some((k) => k in raw.config!);
+  if (hasLegacyKeys) {
+    console.warn(
+      `\n  [config] Detected legacy config format in ${configFile}.` +
+      "\n  [config] Auto-migrating to the new openCodeReview-based format.\n",
+    );
+    const cfg = raw.config as Record<string, unknown>;
+    const oldModel = (cfg.defaultAgentConfig as Record<string, unknown> | undefined)?.model as string | undefined;
+    delete cfg.agents;
+    delete cfg.defaultAgentConfig;
+    if (!cfg.openCodeReview) {
+      cfg.openCodeReview = {
+        workspaceRoot: ".ratan/workspaces",
+        rulesPath: "opencodereview/rule.json",
+        llm: {
+          url: "http://set-your-llm-endpoint/v1",
+          token: "set-your-llm-token",
+          model: oldModel ?? "your-review-model",
+        },
+      };
+    }
+    raw.config = cfg as RootAgentConfig;
   }
 
   const resolved = resolveSecrets(raw);
-
-  let provider: ConfigProvider;
-
-  if (resolved.mode === "local") {
-    if (!resolved.config) {
-      throw new Error(
-        `Missing "config" field in ${configFile}. In local mode, the config must be inline.`,
-      );
-    }
-    provider = new LocalConfigClient({
-      configDir,
-      config: resolved.config,
-      ado: resolved.ado,
-      adoToken: resolved.ado.token,
-      adoProxyUrl: resolved.adoProxyUrl,
-      sonarQubeToken: resolved.sonarQubeToken,
-      databaseUrl: resolved.databaseUrl,
-    });
-  } else {
-    // ADO mode
-    if (!resolved.configRepo || !resolved.configBranch) {
-      throw new Error(
-        `Missing "configRepo" or "configBranch" in ${configFile}. These are required in ADO mode.`,
-      );
-    }
-    provider = await createAgentConfigClient({
-      adoToken: resolved.ado.token || "",
-      organization: resolved.ado.organization,
-      project: resolved.ado.project,
-      repoName: resolved.configRepo,
-      branch: resolved.configBranch,
-      basePath: resolved.configBasePath,
-      adoProxyUrl: resolved.adoProxyUrl,
-      sonarQubeToken: resolved.sonarQubeToken,
-      ormConnectionUrl: resolved.databaseUrl,
-    });
+  let config: RootAgentConfig;
+  try {
+    config = RootAgentConfigSchema.parse(resolved.config);
+  } catch (err) {
+    throw new Error(`Invalid configuration in ${configFile}: ${(err as Error).message}`);
   }
+  const logging = config.logging;
+  configureLogging({
+    ...logging,
+    directory: logging?.directory
+      ? path.resolve(configDir, logging.directory)
+      : path.resolve(configDir, "logs"),
+  });
+  const provider: ConfigProvider = new LocalConfigClient({
+    configDir,
+    config,
+    ado: resolved.ado,
+    adoToken: resolved.ado.token,
+    adoProxyUrl: resolved.adoProxyUrl,
+    databaseUrl: resolved.databaseUrl,
+  });
 
   return { provider, configDir };
 }

@@ -4,6 +4,7 @@ import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
 import { type CommonRequestContext, PullRequestSchema } from "../../types";
 import { NormalizedFindingSchema } from "../../types/finding";
+import { withRetry } from "../../utils/retry";
 
 const PRDetailsInputSchema = z.object({
   prDetails: PullRequestSchema,
@@ -46,9 +47,10 @@ export const sonarqubeMeasures = defineStep({
     }
 
     try {
-      const measures = await sonarQubeClient.getMeasures(
-        pullRequestId,
-        repoName,
+      const rootConfig = await agentConfig.getRootConfig();
+      const measures = await withRetry(
+        () => sonarQubeClient.getMeasures(pullRequestId, repoName),
+        rootConfig.retry,
       );
       return {
         measures,

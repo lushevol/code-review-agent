@@ -69,20 +69,21 @@ Commands:
 | `start` | Scaffold `.ratan/` config on first run, scan repos, process PR queue. `--watch` for 30-min polling with background feedback daemon. `--pr-id <id>` for single PR. |
 | `dashboard` | Start PR Guardian dashboard (Express REST API + React SPA) |
 
-On first run, `start` creates the `.ratan/` folder with a default config and prompts
-shipped from `templates/`. Edit the generated `config.json` with your ADO
-organization and project before scanning.
+On first run, `start` creates `.ratan/config.json`, `.ratan/opencodereview/rule.json`,
+`data/`, and `logs/`. Edit `config.json` with your ADO organization and project
+before scanning.
 
 Default config and prompt templates are at `templates/` in the package — they're
 copied to `.ratan/` on first `start` run. You can edit the generated files or
 customize the templates before re-running.
 
-The CLI accepts `ADO_TOKEN`, `ADO_ORGANIZATION`, `ADO_PROJECT` from the
-environment. Additional settings use `ADO_CONFIG_REPO`, `ADO_CONFIG_BRANCH`,
-`ADO_CONFIG_BASE_PATH`, and `ADO_PROXY_URL`; optional integrations use
-`SONARQUBE_TOKEN`, `DATABASE_URL`, `OPENAI_BASE_URL`, and `OPENAI_API_KEY`.
-Set `ADO_PROXY_URL=none` or pass `--ado-proxy-url none` when the machine should
-connect to Azure DevOps directly instead of using the packaged default proxy.
+All operational settings live under the root `config` object. Secrets use
+`env:NAME` references and are resolved only at runtime. `sonarQube.url` and
+`sonarQube.token`, retry backoff, polling/feedback intervals, ports, merge policy,
+and structured logging are root settings; no Sonar or retry setting is hard-coded.
+Logs are JSONL files in `.ratan/logs` by default, redact secret-like fields, and
+can be configured through `config.logging` (`level`, `format`, `console`, `file`,
+`directory`, and `retentionDays`).
 
 To run a one-shot scan:
 

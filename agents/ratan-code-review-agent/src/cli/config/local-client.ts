@@ -1,15 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
-import Handlebars from "handlebars";
 import { AzureDevOps } from "ratan-ado-api";
 import { SonarQubeClient } from "ratan-sonarqube-api";
 import type {
-  AgentConfig,
   ConfigProvider,
-  PromptContext,
   RootAgentConfig,
 } from "agent-config-manager";
+import { getLogger } from "ratan-logger";
 
 export interface LocalConfigOptions {
   configDir: string;
@@ -17,7 +14,6 @@ export interface LocalConfigOptions {
   ado: { organization: string; project: string };
   adoToken?: string;
   adoProxyUrl?: string;
-  sonarQubeToken?: string;
   /** Reserved for future ORM support. Not currently used. */
   databaseUrl?: string;
 }
@@ -27,6 +23,7 @@ export class LocalConfigClient implements ConfigProvider {
   private options: LocalConfigOptions;
   private adoClient: AzureDevOps | null = null;
   private sonarQubeClient: SonarQubeClient | null = null;
+  private logger = getLogger("config");
 
   constructor(options: LocalConfigOptions) {
     if (!options.configDir) {
@@ -51,9 +48,14 @@ export class LocalConfigClient implements ConfigProvider {
       });
       await this.adoClient.connect(this.options.adoToken);
     }
-    if (this.options.sonarQubeToken) {
-      this.sonarQubeClient = new SonarQubeClient();
-      await this.sonarQubeClient.connect(this.options.sonarQubeToken);
+    const sonarConfig = this.options.config.sonarQube;
+    if (sonarConfig?.token) {
+      const sonarClient = new SonarQubeClient({ url: sonarConfig.url });
+      if (await sonarClient.connect(sonarConfig.token)) {
+        this.sonarQubeClient = sonarClient;
+      } else {
+        this.logger.warn("SonarQube connection unavailable; skipping Sonar validation.");
+      }
     }
   }
 
@@ -61,53 +63,8 @@ export class LocalConfigClient implements ConfigProvider {
     return this.options.config;
   }
 
-  async getAgentConfig(agentName: string): Promise<AgentConfig> {
-    const fullConfig = await this.getRootConfig();
-    const defaultConfig: AgentConfig = fullConfig.defaultAgentConfig || {};
-    const agentConfig = fullConfig.agents[agentName];
-    if (!agentConfig) {
-      throw new Error(
-        `Agent "${agentName}" not found in local configuration.`,
-      );
-    }
-    return { ...defaultConfig, ...agentConfig };
-  }
-
-  async buildPrompt(
-    promptKey: string,
-    context?: PromptContext,
-  ): Promise<string> {
-    const agentConfig = await this.getAgentConfig(promptKey);
-    const promptDefinition = agentConfig.prompts;
-    if (!promptDefinition) {
-      throw new Error(`Prompt key "${promptKey}" not found for agent.`);
-    }
-
-    const filePaths = Array.isArray(promptDefinition)
-      ? promptDefinition
-      : [promptDefinition];
-    const resolvedContents: string[] = [];
-
-    for (const pathTemplate of filePaths) {
-      // Resolve path variables (e.g. prompts/{repo}/rule.md)
-      const interpolatedPath = context?.pathVars
-        ? Handlebars.compile(pathTemplate)(context.pathVars)
-        : pathTemplate;
-
-      const fullPath = path.resolve(
-        this.options.configDir,
-        interpolatedPath,
-      );
-      const rawContent = await readFile(fullPath, "utf-8");
-
-      // Resolve content variables (e.g. {{diff}})
-      const finalContent = context?.contentVars
-        ? Handlebars.compile(rawContent)(context.contentVars)
-        : rawContent;
-
-      resolvedContents.push(finalContent);
-    }
-    return resolvedContents.join("\n\n");
+  resolveConfigPath(relativePath: string): string {
+    return path.resolve(this.options.configDir, relativePath);
   }
 
   getAdoClient(): AzureDevOps {

@@ -21,8 +21,8 @@ importers:
         specifier: 1.7.7
         version: 1.7.7
       agent-config-manager:
-        specifier: workspace:*
-        version: link:../../packages/agent-config-manager
+        specifier: 0.0.2
+        version: 0.0.2(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(dayjs@1.11.20)(zod@4.4.3)
       ai:
         specifier: ^6.0.191
         version: 6.0.191(zod@4.4.3)
@@ -36,8 +36,8 @@ importers:
         specifier: ^4.21.0
         version: 4.22.2
       finding-store:
-        specifier: workspace:*
-        version: link:../../packages/finding-store
+        specifier: 0.1.0
+        version: 0.1.0
       handlebars:
         specifier: ^4.7.8
         version: 4.7.9
@@ -51,17 +51,20 @@ importers:
         specifier: ^8.4.2
         version: 8.4.2
       ratan-ado-api:
-        specifier: workspace:*
-        version: link:../../packages/ratan-ado-api
+        specifier: 0.0.3
+        version: 0.0.3(dayjs@1.11.20)(zod@4.4.3)
       ratan-code-review-agent-orm:
-        specifier: workspace:*
-        version: link:../../packages/ratan-code-review-agent-orm
+        specifier: 0.0.1
+        version: 0.0.1(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@11.10.0)
+      ratan-logger:
+        specifier: 0.1.0
+        version: 0.1.0
       ratan-markdown-tool:
-        specifier: workspace:*
-        version: link:../../packages/ratan-markdown-tool
+        specifier: 0.0.1
+        version: 0.0.1
       ratan-sonarqube-api:
-        specifier: workspace:*
-        version: link:../../packages/ratan-sonarqube-api
+        specifier: 0.0.3
+        version: 0.0.3
       readable-stream:
         specifier: ^4.7.0
         version: 4.7.0
@@ -121,14 +124,14 @@ importers:
         specifier: ^4.7.8
         version: 4.7.9
       ratan-ado-api:
-        specifier: workspace:*
-        version: link:../ratan-ado-api
+        specifier: 0.0.3
+        version: 0.0.3(dayjs@1.11.20)(zod@4.4.3)
       ratan-code-review-agent-orm:
-        specifier: workspace:*
-        version: link:../ratan-code-review-agent-orm
+        specifier: 0.0.1
+        version: 0.0.1(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@11.10.0)
       ratan-sonarqube-api:
-        specifier: workspace:*
-        version: link:../ratan-sonarqube-api
+        specifier: 0.0.3
+        version: 0.0.3
       uuid:
         specifier: ^14.0.0
         version: 14.0.0
@@ -186,8 +189,8 @@ importers:
         specifier: ^1.11.13
         version: 1.11.20
       ratan-markdown-tool:
-        specifier: workspace:*
-        version: link:../ratan-markdown-tool
+        specifier: 0.0.1
+        version: 0.0.1
       typed-rest-client:
         specifier: ^2.1.0
         version: 2.3.1
@@ -233,6 +236,18 @@ importers:
         specifier: ^0.31.4
         version: 0.31.10
 
+  packages/ratan-logger:
+    devDependencies:
+      '@rslib/core':
+        specifier: ^0.18.6
+        version: 0.18.6(typescript@5.9.3)
+      '@types/node':
+        specifier: ^25.9.1
+        version: 25.9.1
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/ratan-markdown-tool:
     dependencies:
       json2md:
@@ -266,6 +281,9 @@ importers:
 
   packages/ratan-sonarqube-api:
     dependencies:
+      ratan-logger:
+        specifier: 0.1.0
+        version: 0.1.0
       sonarqube-webapis:
         specifier: ^1.0.2
         version: 1.0.2
@@ -1308,6 +1326,12 @@ packages:
     resolution: {integrity: sha512-RZNwNclF7+MS/8bDg70amg32dyeZGZxiDuQmZxKLAlQjr3jGyLx+4Kkk58UO7D2QdgFIQCovuSuZESne6RG6XQ==}
     engines: {node: '>= 6.0.0'}
 
+  agent-config-manager@0.0.2:
+    resolution: {integrity: sha512-Gv7jizPreUTLFYfeQN03vw18ytZXDKQ5Aha0NQheQdX2Zcsz2RA2tiEz7W/gzYSDsUvPf6eeoGRTB/JK7S/k3Q==}
+    peerDependencies:
+      dayjs: ^1.11.13
+      zod: ^4.1.12
+
   ai@6.0.191:
     resolution: {integrity: sha512-zAxvjKebQE7YkSyyNIl0OM7i6/zygnKeF+yNUjD4nWOelYrG+LpDd6RnH6mjySI4zUpZ7o4wbnmAy8jc6u98vQ==}
     engines: {node: '>=18'}
@@ -1823,6 +1847,9 @@ packages:
   finalhandler@1.3.2:
     resolution: {integrity: sha512-aA4RyPcd3badbdABGDuTXCMTtOneUCAYH/gxoYRTZlIJdF0YPWuGqiAsIrhNnnqdXGswYk6dGujem4w80UJFhg==}
     engines: {node: '>= 0.8'}
+
+  finding-store@0.1.0:
+    resolution: {integrity: sha512-lZlnjcmfnHeBZx9XoZi9gpsVZDmRQfEHAYJKt7oVq6M+kPmFWWGQZqFvKnc9h55BaDjeigsxLdtlrq8SUjI72g==}
 
   follow-redirects@1.16.0:
     resolution: {integrity: sha512-y5rN/uOsadFT/JfYwhxRS5R7Qce+g3zG97+JrtFZlC9klX/W5hD7iiLzScI4nZqUS7DNUdhPgw4xI8W2LuXlUw==}
@@ -2500,6 +2527,24 @@ packages:
   range-parser@1.2.1:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
     engines: {node: '>= 0.6'}
+
+  ratan-ado-api@0.0.3:
+    resolution: {integrity: sha512-CV46c7siufjyEGRFu/So74sW8Gro1jsDAw5M7Af/LtCLcBrv6w/kTwReQPdsSQ/HGx928z2Uec8D3CzyEexPyg==}
+    peerDependencies:
+      dayjs: ^1.11.13
+      zod: ^4.1.12
+
+  ratan-code-review-agent-orm@0.0.1:
+    resolution: {integrity: sha512-mbEqVpF458PhnS2ogWgukF7wCMuXckr00cJPyq/FOtA6/jvG4A+bWrnDXTkbqBxsP77JwR2YwM4yxSSE/kzT6g==}
+
+  ratan-logger@0.1.0:
+    resolution: {integrity: sha512-8jq0jF6TQeMNriTpElnKZ3dijSXEUqox2ARxlFe84sew83WRLBH11M6WgoALEdqs2Xw4kp4IoCyXxTXg9zKeuw==}
+
+  ratan-markdown-tool@0.0.1:
+    resolution: {integrity: sha512-BgiEMkjSk+qAoe9ndN0wZ96URdwd3lGQvrB2zN13szKuyzp12nNdWqVjDRz0mJZ49tQdJXgF49DOXsIz+5ehTw==}
+
+  ratan-sonarqube-api@0.0.3:
+    resolution: {integrity: sha512-74zZGVxjlJR+AuxmGB6g7CL7LLf9tO5Siy7yJ/LOS9EAALW1CbSyNaFwOIxl6sSfRe1Uf0JDcDB627wH2hgZBg==}
 
   raw-body@2.5.3:
     resolution: {integrity: sha512-s4VSOf6yN0rvbRZGxs8Om5CWj6seneMwK3oDb4lWDH0UPhWcxwOWw5+qk24bxq87szX1ydrwylIOp2uG1ojUpA==}
@@ -3704,6 +3749,48 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  agent-config-manager@0.0.2(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(dayjs@1.11.20)(zod@4.4.3):
+    dependencies:
+      dayjs: 1.11.20
+      handlebars: 4.7.9
+      ratan-ado-api: 0.0.3(dayjs@1.11.20)(zod@4.4.3)
+      ratan-code-review-agent-orm: 0.0.1(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@11.10.0)
+      ratan-sonarqube-api: 0.0.3
+      uuid: 14.0.0
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - '@aws-sdk/client-rds-data'
+      - '@cloudflare/workers-types'
+      - '@electric-sql/pglite'
+      - '@libsql/client'
+      - '@libsql/client-wasm'
+      - '@neondatabase/serverless'
+      - '@op-engineering/op-sqlite'
+      - '@opentelemetry/api'
+      - '@planetscale/database'
+      - '@prisma/client'
+      - '@tidbcloud/serverless'
+      - '@types/better-sqlite3'
+      - '@types/pg'
+      - '@types/sql.js'
+      - '@upstash/redis'
+      - '@vercel/postgres'
+      - '@xata.io/client'
+      - better-sqlite3
+      - bun-types
+      - debug
+      - expo-sqlite
+      - gel
+      - knex
+      - kysely
+      - mysql2
+      - pg-native
+      - postgres
+      - prisma
+      - sql.js
+      - sqlite3
+      - supports-color
+
   ai@6.0.191(zod@4.4.3):
     dependencies:
       '@ai-sdk/gateway': 3.0.120(zod@4.4.3)
@@ -4203,6 +4290,10 @@ snapshots:
       unpipe: 1.0.0
     transitivePeerDependencies:
       - supports-color
+
+  finding-store@0.1.0:
+    dependencies:
+      better-sqlite3: 11.10.0
 
   follow-redirects@1.16.0: {}
 
@@ -4869,6 +4960,69 @@ snapshots:
   qs@6.5.5: {}
 
   range-parser@1.2.1: {}
+
+  ratan-ado-api@0.0.3(dayjs@1.11.20)(zod@4.4.3):
+    dependencies:
+      azure-devops-node-api: 15.1.2
+      dayjs: 1.11.20
+      ratan-markdown-tool: 0.0.1
+      typed-rest-client: 2.3.1
+      zod: 4.4.3
+
+  ratan-code-review-agent-orm@0.0.1(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@11.10.0):
+    dependencies:
+      dayjs: 1.11.20
+      dotenv: 17.4.2
+      drizzle-orm: 0.44.7(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@11.10.0)(pg@8.21.0)
+      pg: 8.21.0
+    transitivePeerDependencies:
+      - '@aws-sdk/client-rds-data'
+      - '@cloudflare/workers-types'
+      - '@electric-sql/pglite'
+      - '@libsql/client'
+      - '@libsql/client-wasm'
+      - '@neondatabase/serverless'
+      - '@op-engineering/op-sqlite'
+      - '@opentelemetry/api'
+      - '@planetscale/database'
+      - '@prisma/client'
+      - '@tidbcloud/serverless'
+      - '@types/better-sqlite3'
+      - '@types/pg'
+      - '@types/sql.js'
+      - '@upstash/redis'
+      - '@vercel/postgres'
+      - '@xata.io/client'
+      - better-sqlite3
+      - bun-types
+      - expo-sqlite
+      - gel
+      - knex
+      - kysely
+      - mysql2
+      - pg-native
+      - postgres
+      - prisma
+      - sql.js
+      - sqlite3
+
+  ratan-logger@0.1.0: {}
+
+  ratan-markdown-tool@0.0.1:
+    dependencies:
+      json2md: 2.0.3
+      marked: 16.4.2
+      turndown: 7.2.4
+      turndown-plugin-gfm: 1.0.2
+
+  ratan-sonarqube-api@0.0.3:
+    dependencies:
+      ratan-logger: 0.1.0
+      sonarqube-webapis: 1.0.2
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - debug
+      - supports-color
 
   raw-body@2.5.3:
     dependencies:

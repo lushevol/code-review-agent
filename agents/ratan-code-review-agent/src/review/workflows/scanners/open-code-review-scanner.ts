@@ -23,11 +23,15 @@ export class OpenCodeReviewScanner implements Scanner {
     context: ScanContext,
   ) {
     const rootConfig = await context.provider.getRootConfig();
+    const openCodeReview = rootConfig.openCodeReview;
     const output = await this.runner.review({
       workspace: context.workspace,
       background: buildBackground(prDetails, context.workItemContext),
-      include: rootConfig.filePathsAllowlist ?? [],
-      exclude: rootConfig.filePathsBlocklist ?? [],
+      llm: {
+        ...openCodeReview.llm,
+        useAnthropic: openCodeReview.llm.useAnthropic ?? false,
+      },
+      ruleFile: context.provider.resolveConfigPath(openCodeReview.rulesPath),
     });
     const findings = output.comments.map((comment) =>
       this.toFinding(prDetails, context.workspace, comment),

@@ -1,11 +1,11 @@
 {
   "name": "ratan-code-review",
-  "version": "0.1.0",
+  "version": "0.1.6",
   "private": false,
   "license": "ISC",
   "type": "module",
   "bin": {
-    "ratan-code-review": "./bin/ratan-code-review.cjs"
+    "ratan-code-review": "bin/ratan-code-review.cjs"
   },
   "exports": {
     ".": {
@@ -17,13 +17,15 @@
   "files": [
     "dist",
     "bin",
-    "templates"
+    "templates",
+    "dashboard/dist"
   ],
   "scripts": {
     "dev": "tsx src/cli/index.ts start --watch",
     "demo": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 tsx src/demo.ts",
     "test-api": "tsx src/review/agents/test-api.ts",
-    "build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 rslib build",
+    "build": "pnpm build:dashboard && cross-env NODE_OPTIONS=--max-old-space-size=4096 rslib build",
+    "build:dashboard": "cd dashboard && npx vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "node ./bin/ratan-code-review.cjs start",
     "codegen": "tsx ./src/evaluation/json-schema-generator.ts",
@@ -46,20 +48,21 @@
   "dependencies": {
     "@alibaba-group/open-code-review": "1.7.7",
     "@ai-sdk/openai": "^3.0.65",
-    "agent-config-manager": "workspace:*",
+    "agent-config-manager": "0.0.2",
     "ai": "^6.0.191",
     "commander": "^13.0.0",
     "cors": "^2.8.5",
     "express": "^4.21.0",
-    "finding-store": "workspace:*",
+    "finding-store": "0.1.0",
     "handlebars": "^4.7.8",
     "minimatch": "^10.1.1",
     "openai": "^6.9.0",
     "protobufjs": "^8.4.2",
-    "ratan-ado-api": "workspace:*",
-    "ratan-code-review-agent-orm": "workspace:*",
-    "ratan-markdown-tool": "workspace:*",
-    "ratan-sonarqube-api": "workspace:*",
+    "ratan-ado-api": "0.0.3",
+    "ratan-code-review-agent-orm": "0.0.1",
+    "ratan-markdown-tool": "0.0.1",
+    "ratan-sonarqube-api": "0.0.3",
+    "ratan-logger": "0.1.0",
     "readable-stream": "^4.7.0",
     "redact-pii": "^3.4.0",
     "request": "^2.88.2",

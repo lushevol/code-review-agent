@@ -38,6 +38,12 @@ function workspace(root: string): ReviewWorkspace {
   };
 }
 
+function ruleFile(root: string) {
+  const file = path.join(root, "rule.json");
+  fs.writeFileSync(file, JSON.stringify({ rules: [] }));
+  return file;
+}
+
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -79,8 +85,8 @@ describe("OpenCodeReviewRunner", () => {
     const result = await runner.review({
       workspace: reviewWorkspace,
       background: "PR context",
-      include: ["**/*.ts"],
-      exclude: ["**/*.spec.ts"],
+      llm: { url: "https://llm.example/v1", token: "secret", model: "model", useAnthropic: false },
+      ruleFile: ruleFile(fixture.dir),
     });
 
     expect(result.status).toBe("success");
@@ -129,8 +135,8 @@ describe("OpenCodeReviewRunner", () => {
     const result = await runner.review({
       workspace: workspace(fixture.dir),
       background: "",
-      include: [],
-      exclude: [],
+      llm: { url: "https://llm.example/v1", token: "secret", model: "model", useAnthropic: false },
+      ruleFile: ruleFile(fixture.dir),
     });
 
     expect(result.complete).toBe(false);
@@ -153,8 +159,8 @@ describe("OpenCodeReviewRunner", () => {
       runner.review({
         workspace: workspace(fixture.dir),
         background: "",
-        include: [],
-        exclude: [],
+        llm: { url: "https://llm.example/v1", token: "secret", model: "model", useAnthropic: false },
+        ruleFile: ruleFile(fixture.dir),
       }),
     ).rejects.toThrow("invalid JSON output");
   });

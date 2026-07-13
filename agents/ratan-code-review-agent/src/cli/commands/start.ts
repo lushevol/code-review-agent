@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { FindingStore } from "finding-store";
 import { loadConfig } from "../config/loader";
-import { getLogger, cleanOldLogs } from "../utils/logger";
+import { getLogger, cleanOldLogs, configureLogging, installConsoleCapture } from "../utils/logger";
 import { getPRQueue } from "../services/pr-queue";
 import { getAutoScanService } from "../services/auto-scan";
 import { startReviewPrWithProvider } from "../../bootstrap";
@@ -13,12 +14,23 @@ import { FeedbackService } from "../../review/workflows/services/feedback-servic
 
 const RATAN_DIR = ".ratan";
 
-// Template files live at <package-root>/templates/. Resolve path relative to
-// this source file, which works in both tsx (dev) and compiled (dist) contexts
-// since both maintain the same depth from the package root.
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const TEMPLATES_DIR = path.resolve(__dirname, "../../../templates");
+/**
+ * Find the templates/ directory. Works in both tsx (dev, file at
+ * src/cli/commands/) and compiled dist (flattened to dist/cli.js by rslib).
+ */
+function resolveTemplatesDir(): string {
+  const startDirname = path.dirname(fileURLToPath(import.meta.url));
+  // Try compiled first (dist/ → ../templates), then source (src/cli/commands/ → ../../../templates)
+  for (const rel of ["../templates", "../../../templates"]) {
+    const dir = path.resolve(startDirname, rel);
+    if (fs.existsSync(path.join(dir, "config.json.template"))) return dir;
+  }
+  throw new Error(
+    "Could not find templates/ directory. Ensure ratan-code-review is properly installed.\n" +
+    "If running locally, ensure you're at the package root or run `pnpm build` first.",
+  );
+}
+const TEMPLATES_DIR = resolveTemplatesDir();
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -31,49 +43,54 @@ export interface StartOptions {
 
 // ─── Ratan Folder Setup ─────────────────────────────────────────────────────
 
+function writeDefaultConfig(ratanDir: string) {
+  const configPath = path.join(ratanDir, "config.json");
+  if (!fs.existsSync(configPath)) {
+    const configTemplate = fs.readFileSync(
+      path.join(TEMPLATES_DIR, "config.json.template"),
+      "utf-8",
+    );
+    fs.writeFileSync(configPath, configTemplate, "utf-8");
+    console.log(`[start] Created default config at: ${configPath}`);
+  }
+}
+
+function writeDefaultRules(ratanDir: string) {
+  const rulePath = path.join(ratanDir, "opencodereview", "rule.json");
+  if (!fs.existsSync(rulePath)) {
+    const content = fs.readFileSync(
+      path.join(TEMPLATES_DIR, "opencodereview", "rule.json.template"),
+      "utf-8",
+    );
+    fs.writeFileSync(rulePath, content, "utf-8");
+  }
+}
+
 export function ensureRatanFolder(ratanDirPath: string) {
   const ratanDir = path.resolve(ratanDirPath);
 
   if (!fs.existsSync(ratanDir)) {
     console.log(`[start] Creating .ratan folder at: ${ratanDir}`);
-    fs.mkdirSync(path.join(ratanDir, "prompts"), { recursive: true });
+    fs.mkdirSync(path.join(ratanDir, "opencodereview"), { recursive: true });
     fs.mkdirSync(path.join(ratanDir, "logs"), { recursive: true });
     fs.mkdirSync(path.join(ratanDir, "data"), { recursive: true });
-
-    // Write default config from template
-    const configPath = path.join(ratanDir, "config.json");
-    if (!fs.existsSync(configPath)) {
-      const configTemplate = fs.readFileSync(
-        path.join(TEMPLATES_DIR, "config.json.template"),
-        "utf-8",
-      );
-      fs.writeFileSync(configPath, configTemplate, "utf-8");
-      console.log(`[start] Created default config at: ${configPath}`);
-    }
-
-    // Write default prompts from templates
-    const promptsDir = path.join(ratanDir, "prompts");
-    const promptTemplates = [
-      { name: "review.md", template: "review.md.template" },
-      { name: "review-rescore.md", template: "review-rescore.md.template" },
-      {
-        name: "issue-classification.md",
-        template: "issue-classification.md.template",
-      },
-      { name: "summary.md", template: "summary.md.template" },
-    ];
-    for (const { name, template } of promptTemplates) {
-      const promptPath = path.join(promptsDir, name);
-      if (!fs.existsSync(promptPath)) {
-        const content = fs.readFileSync(
-          path.join(TEMPLATES_DIR, "prompts", template),
-          "utf-8",
-        );
-        fs.writeFileSync(promptPath, content, "utf-8");
-      }
-    }
-
+    writeDefaultConfig(ratanDir);
+    writeDefaultRules(ratanDir);
     console.log(`[start] .ratan folder initialized at: ${ratanDir}`);
+    return ratanDir;
+  }
+
+  // Existing .ratan/ — ensure config files exist (handles upgrades from old layout)
+  fs.mkdirSync(path.join(ratanDir, "opencodereview"), { recursive: true });
+  fs.mkdirSync(path.join(ratanDir, "logs"), { recursive: true });
+  fs.mkdirSync(path.join(ratanDir, "data"), { recursive: true });
+  writeDefaultConfig(ratanDir);
+  writeDefaultRules(ratanDir);
+
+  if (fs.existsSync(path.join(ratanDir, "prompts"))) {
+    throw new Error(
+      "Legacy prompts are no longer supported. Configure config.openCodeReview and use opencodereview/rule.json.",
+    );
   }
 
   return ratanDir;
@@ -90,9 +107,11 @@ async function startFeedbackDaemon(
   ratanDir: string,
 ) {
   const logger = getLogger("feedback-daemon");
-  const FEEDBACK_INTERVAL_MS = 15 * 60 * 1000; // every 15 minutes
+  const rootConfig = await provider.getRootConfig();
+  if (rootConfig.feedbackDaemon?.enabled === false) return;
+  const FEEDBACK_INTERVAL_MS = rootConfig.feedbackDaemon?.intervalMs ?? 15 * 60 * 1000;
 
-  const findingStorePath = path.join(ratanDir, "data/findings.db");
+  const findingStorePath = rootConfig.findingStorePath ?? path.join(ratanDir, "data/findings.db");
   let findingStore: FindingStore;
 
   try {
@@ -157,24 +176,138 @@ async function startFeedbackDaemon(
   }, 30_000);
 }
 
+// ─── Config wizard ───────────────────────────────────────────────────────────
+
+const PLACEHOLDER_PATTERNS: Array<{ path: string[]; label: string; envVar?: string }> = [
+  { path: ["ado", "organization"], label: "Azure DevOps organization" },
+  { path: ["ado", "project"], label: "Azure DevOps project" },
+  { path: ["openCodeReview", "llm", "url"], label: "LLM endpoint URL", envVar: "OCR_LLM_URL" },
+  { path: ["openCodeReview", "llm", "token"], label: "LLM API token", envVar: "OCR_LLM_TOKEN" },
+  { path: ["openCodeReview", "llm", "model"], label: "LLM model name" },
+];
+
+function isPlaceholder(value: unknown): boolean {
+  return (
+    value === "your-organization" ||
+    value === "your-project" ||
+    value === "set-your-llm-token" ||
+    String(value).startsWith("http://your-llm-endpoint") ||
+    String(value).startsWith("your-")
+  );
+}
+
+function getNested(obj: Record<string, unknown>, pathArr: string[]): unknown {
+  let current: unknown = obj;
+  for (const key of pathArr) {
+    if (!current || typeof current !== "object") return undefined;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
+function setNested(obj: Record<string, unknown>, pathArr: string[], value: string): void {
+  let current = obj;
+  for (let i = 0; i < pathArr.length - 1; i++) {
+    if (!current[pathArr[i]] || typeof current[pathArr[i]] !== "object") {
+      current[pathArr[i]] = {};
+    }
+    current = current[pathArr[i]] as Record<string, unknown>;
+  }
+  current[pathArr[pathArr.length - 1]] = value;
+}
+
+async function promptValue(label: string, currentValue: string, envVar?: string): Promise<string | null> {
+  const envHint = envVar ? ` (or set ${envVar} environment variable)` : "";
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(`  ${label}${envHint} [${currentValue}]: `, (answer) => {
+      rl.close();
+      resolve(answer.trim() || null);
+    });
+  });
+}
+
+async function configureDefaults(ratanDir: string): Promise<void> {
+  const configPath = path.join(ratanDir, "config.json");
+  if (!fs.existsSync(configPath)) return;
+
+  if (!process.stdin.isTTY) return; // Non-interactive — skip prompts
+
+  let config: Record<string, unknown>;
+  try {
+    config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  } catch {
+    return; // Can't parse — skip
+  }
+
+  // Check if any placeholders exist
+  const hasDefaults = PLACEHOLDER_PATTERNS.some((p) => {
+    const val = getNested(config, p.path);
+    return typeof val === "string" && isPlaceholder(val);
+  });
+  if (!hasDefaults) return; // Already configured — skip
+
+  console.log("\n── First-time setup ──────────────────────────────");
+  console.log("  Some configuration values still have default placeholders.");
+  console.log("  Press Enter to keep a value, or type a new one.\n");
+
+  for (const field of PLACEHOLDER_PATTERNS) {
+    const val = getNested(config, field.path);
+    if (typeof val !== "string" || !isPlaceholder(val)) continue;
+
+    // If env var is set, use it automatically
+    if (field.envVar && process.env[field.envVar]) {
+      setNested(config, field.path, `env:${field.envVar}`);
+      console.log(`  ${field.label} ← env:${field.envVar} (from environment)`);
+      continue;
+    }
+
+    const answer = await promptValue(field.label, val, field.envVar);
+    if (answer) {
+      setNested(config, field.path, answer);
+    }
+  }
+
+  // Write updated config back
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
+  console.log("  Config updated.\n");
+}
+
 // ─── Start Command ───────────────────────────────────────────────────────────
 
 export async function startCommand(options: StartOptions) {
   const logger = getLogger("start");
 
-  // 1. Clean old logs (>30 days)
-  cleanOldLogs(30);
-
-  // 2. Setup .ratan folder
+  // 1. Setup .ratan folder
   const ratanDir = options.config
     ? path.resolve(options.config)
     : path.resolve(process.cwd(), RATAN_DIR);
   ensureRatanFolder(ratanDir);
 
-  // 3. Load config
+  // 1b. Interactive config prompts for first-time setup
+  await configureDefaults(ratanDir);
+
+  // 2. Load config and apply logging before any service is started.
   logger.info("Loading configuration...");
   const { provider } = await loadConfig(ratanDir);
-  await provider.connect();
+  const rootConfig = await provider.getRootConfig();
+  const logging = rootConfig.logging;
+  configureLogging({
+    ...logging,
+    directory: path.resolve(ratanDir, logging?.directory ?? "logs"),
+  });
+  cleanOldLogs(logging?.retentionDays);
+  installConsoleCapture();
+
+  try {
+    await provider.connect();
+  } catch (err) {
+    logger.error(
+      `Could not connect to Azure DevOps: ${(err as Error).message}. ` +
+      `Check that ADO_TOKEN is set and your config has the correct org/project.`,
+    );
+    process.exit(1);
+  }
 
   // 4. Initialize PR queue with build pipeline check
   const queue = getPRQueue();
@@ -202,7 +335,7 @@ export async function startCommand(options: StartOptions) {
   // 7. Handle --watch mode: scan every 30 minutes, daemon keeps running
   if (options.watch) {
     startFeedbackDaemon(provider, ratanDir);
-    const INTERVAL_MS = 30 * 60 * 1000;
+    const INTERVAL_MS = rootConfig.watch?.intervalMs ?? 30 * 60 * 1000;
 
     const runScan = async () => {
       const autoScan = getAutoScanService();

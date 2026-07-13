@@ -9,37 +9,37 @@
     "scanRepoNames": [],
     "scanPRCreatedDaysAgo": 7,
     "findingStorePath": ".ratan/data/findings.db",
+    "logging": {
+      "level": "info",
+      "directory": "logs",
+      "retentionDays": 30,
+      "format": "pretty",
+      "console": true,
+      "file": true
+    },
+    "retry": {
+      "maxAttempts": 3,
+      "baseDelayMs": 1000,
+      "maxDelayMs": 30000,
+      "jitterMs": 1000
+    },
+    "sonarQube": {
+      "url": "https://sonarqube.example.com/api"
+    },
+    "watch": { "intervalMs": 1800000 },
+    "feedbackDaemon": { "enabled": true, "intervalMs": 300000 },
     "scannerSettings": {
       "cve": { "enabled": false },
       "compliance": { "enabled": true }
     },
-    "filePathsAllowlist": [
-      "**/*.ts",
-      "**/*.tsx",
-      "**/*.js",
-      "**/*.jsx",
-      "**/*.java",
-      "**/*.sql"
-    ],
-    "filePathsBlocklist": [
-      "**/*.test.*",
-      "**/*.spec.*",
-      "**/__tests__/**",
-      "**/test/**",
-      "**/generated/**"
-    ],
-    "agents": {
-      "review": {
-        "prompts": ["prompts/review.md"]
-      },
-      "review-rescore": {
-        "prompts": ["prompts/review-rescore.md"]
-      },
-      "issue-classification": {
-        "prompts": ["prompts/issue-classification.md"]
-      },
-      "summary": {
-        "prompts": ["prompts/summary.md"]
+    "openCodeReview": {
+      "workspaceRoot": ".ratan/workspaces",
+      "rulesPath": "opencodereview/rule.json",
+      "llm": {
+        "url": "http://your-llm-endpoint.example.com/v1",
+        "token": "set-your-llm-token",
+        "model": "your-review-model",
+        "useAnthropic": false
       }
     }
   }
