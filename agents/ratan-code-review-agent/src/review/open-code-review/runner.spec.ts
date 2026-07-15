@@ -146,6 +146,114 @@ describe("OpenCodeReviewRunner", () => {
     expect(result.warnings[0]?.type).toBe("subtask_error");
   });
 
+  it("maps unknown OCR comment categories to other", async () => {
+    const fixture = fakeBinary(
+      JSON.stringify({
+        status: "success",
+        comments: [
+          {
+            path: "src/file.ts",
+            content: "Handle this edge case",
+            start_line: 3,
+            end_line: 3,
+            category: "correctness",
+            severity: "high",
+          },
+        ],
+      }),
+    );
+    const runner = new OpenCodeReviewRunner({
+      binaryPath: fixture.binary,
+      environment: { OCR_TEST_CAPTURE: fixture.capture },
+    });
+
+    const result = await runner.review({
+      workspace: workspace(fixture.dir),
+      background: "",
+      llm: {
+        url: "https://llm.example/v1",
+        token: "secret",
+        model: "model",
+        useAnthropic: false,
+      },
+      ruleFile: ruleFile(fixture.dir),
+    });
+
+    expect(result.comments[0]?.category).toBe("other");
+  });
+
+  it("preserves shared finding categories returned by OCR", async () => {
+    const fixture = fakeBinary(
+      JSON.stringify({
+        status: "success",
+        comments: [
+          {
+            path: "src/file.ts",
+            content: "Update this dependency",
+            start_line: 3,
+            end_line: 3,
+            category: "dependency",
+            severity: "medium",
+          },
+        ],
+      }),
+    );
+    const runner = new OpenCodeReviewRunner({
+      binaryPath: fixture.binary,
+      environment: { OCR_TEST_CAPTURE: fixture.capture },
+    });
+
+    const result = await runner.review({
+      workspace: workspace(fixture.dir),
+      background: "",
+      llm: {
+        url: "https://llm.example/v1",
+        token: "secret",
+        model: "model",
+        useAnthropic: false,
+      },
+      ruleFile: ruleFile(fixture.dir),
+    });
+
+    expect(result.comments[0]?.category).toBe("dependency");
+  });
+
+  it("rejects non-string OCR comment categories", async () => {
+    const fixture = fakeBinary(
+      JSON.stringify({
+        status: "success",
+        comments: [
+          {
+            path: "src/file.ts",
+            content: "Malformed category",
+            start_line: 3,
+            end_line: 3,
+            category: 7,
+            severity: "high",
+          },
+        ],
+      }),
+    );
+    const runner = new OpenCodeReviewRunner({
+      binaryPath: fixture.binary,
+      environment: { OCR_TEST_CAPTURE: fixture.capture },
+    });
+
+    await expect(
+      runner.review({
+        workspace: workspace(fixture.dir),
+        background: "",
+        llm: {
+          url: "https://llm.example/v1",
+          token: "secret",
+          model: "model",
+          useAnthropic: false,
+        },
+        ruleFile: ruleFile(fixture.dir),
+      }),
+    ).rejects.toThrow();
+  });
+
   it("rejects malformed JSON without logging its contents", async () => {
     const fixture = fakeBinary("not-json");
     const runner = new OpenCodeReviewRunner({

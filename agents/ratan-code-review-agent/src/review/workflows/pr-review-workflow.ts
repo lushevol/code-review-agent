@@ -1,4 +1,8 @@
 import { extractAgentConfig } from "../../bootstrap/session";
+import {
+  selectReviewFocuses,
+  type ReviewFocusSelection,
+} from "../open-code-review/review-focus-router";
 import type { RequestContext } from "../runtime";
 import { runSteps } from "../runtime";
 import type { CommonRequestContext } from "../types";
@@ -53,16 +57,21 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
     workspaceRoot: rootConfig.openCodeReview?.workspaceRoot,
     adoToken: agentConfig.getAdoClient().getAdoToken(),
   });
+  let attemptedReviewFocuses: ReviewFocusSelection[] = [];
+  let reviewAttemptStartedAt: number | undefined;
 
   try {
     current = await workspaceProvider.withWorkspace(
       current.prDetails,
-      async (workspace) =>
-        (await runSteps(
+      async (workspace) => {
+        attemptedReviewFocuses = selectReviewFocuses(workspace.changes);
+        reviewAttemptStartedAt = Date.now();
+        return (await runSteps(
           [scannerPipeline],
           { ...current, workspace },
           stepOptions,
-        )) as Record<string, any>,
+        )) as Record<string, any>;
+      },
     );
   } catch {
     current = {
@@ -75,7 +84,14 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
         "OCR status: failed",
       ].join("\n"),
       reviewExecutionStatus: "incomplete",
-      reviewMetadata: { status: "failed", durationMs: 0 },
+      reviewMetadata: {
+        status: "failed",
+        durationMs:
+          reviewAttemptStartedAt === undefined
+            ? 0
+            : Math.max(1, Date.now() - reviewAttemptStartedAt),
+        reviewFocuses: attemptedReviewFocuses,
+      },
       changesSinceLastReview: "",
     };
     stepResults.set(scannerPipeline.id, current);

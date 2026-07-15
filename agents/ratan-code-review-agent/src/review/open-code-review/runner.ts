@@ -3,10 +3,18 @@ import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { FindingCategory } from "../types/finding";
 import type { ReviewWorkspace } from "../workspace/types";
 
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000;
+const OcrCommentCategorySchema = z.preprocess(
+  (value) =>
+    typeof value === "string" && !FindingCategory.safeParse(value).success
+      ? "other"
+      : value,
+  FindingCategory,
+);
 
 const OcrCommentSchema = z.object({
   path: z.string(),
@@ -16,18 +24,7 @@ const OcrCommentSchema = z.object({
   start_line: z.number().int(),
   end_line: z.number().int(),
   thinking: z.string().optional(),
-  category: z
-    .enum([
-      "bug",
-      "security",
-      "performance",
-      "maintainability",
-      "test",
-      "style",
-      "documentation",
-      "other",
-    ])
-    .optional(),
+  category: OcrCommentCategorySchema.optional(),
   severity: z.enum(["critical", "high", "medium", "low"]).optional(),
 });
 

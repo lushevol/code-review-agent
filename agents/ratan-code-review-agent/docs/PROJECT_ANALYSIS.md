@@ -170,15 +170,17 @@ production PR-review engine.
 
 ## Verification State
 
-- `pnpm test` passes with 177 tests.
+- `pnpm test` passes with 181 tests.
 - `pnpm build` passes.
 - Tests cover OCR configuration and native rule pass-through, focus routing,
   scanner integration, finding/thread persistence, feedback synchronization,
   comment linkage, CLI configuration, and supporting scanners/utilities.
 - No live PR scan should be claimed from local verification alone; a configured
   target repository and dedicated test PR are still required.
-- The routed-review pilot and post-pilot policy decision remain pending explicit
-  authorization and a bounded target cohort.
+- The first routed-review attempt on `example-repo` PR `#4` was incomplete and
+  exposed an OCR category-contract mismatch. The adapter fix is locally
+  verified; a successful live cohort and post-pilot policy decision remain
+  pending because the corrected external-LLM retry was blocked.
 
 ## Risks And Gaps
 

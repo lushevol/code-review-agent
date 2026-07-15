@@ -151,6 +151,9 @@ focuses and reasons, OCR status/warnings/duration/reviewed-file count, postable
 finding count, and duplicate/inline suppression counts. The payload is an
 explicit allowlist and excludes arbitrary model configuration. It is available
 through `/api/audit`; no focus/status dashboard controls are enabled yet.
+Unknown string categories returned by OpenCodeReview are normalized to `other`
+so one upstream vocabulary change cannot discard an otherwise valid review.
+Failure audit records retain any focuses selected before the failure.
 
 ### Webhooks
 
@@ -194,13 +197,16 @@ OpenCodeReview configuration is scaffolded locally under `.ratan/`:
 
 As of the latest local verification:
 
-- `pnpm test` passes — 177 tests.
+- `pnpm test` passes — 181 tests.
 - `pnpm build` passes.
 - The OpenCodeReview runner passes the native rule file through unchanged and isolates its generated runtime configuration.
 - Review-focus routing and finding-to-ADO-thread feedback linkage are covered by automated tests.
 - Audit pilot metrics and their API export are covered without exposing secret configuration.
 
-The end-to-end goal is therefore not complete yet: the starter config still needs a real `scanRepoNames` target, and a controlled live test PR review must be run before claiming full ADO review operation.
+The end-to-end goal is therefore not complete yet. A controlled ADO attempt on
+`example-repo` PR `#4` produced an incomplete audit/comment and exposed an OCR
+category-contract bug; the fix is locally verified, but the environment blocked
+the ADO-to-external-LLM retry. Do not claim a successful live review from it.
 
 ## Environment
 

@@ -110,6 +110,9 @@ duplicate-suppression counts, inline-suppression counts, and review execution
 status. Arbitrary scanner metadata and model credentials are not copied. The
 existing `/api/audit` endpoint exports the stored payload; the dashboard does
 not add focus/status filters until operator consumption justifies them.
+Unknown string categories in OCR comments are normalized to `other`. If a
+failure escapes the scanner pipeline after workspace routing, the workflow
+fallback retains the focuses already selected for that workspace.
 
 ## Work Item Creation Flow
 

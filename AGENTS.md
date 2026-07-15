@@ -166,6 +166,8 @@ The main PR comment presents correlated findings as `blocking`, `important`, and
 
 Pilot observability is stored in `audit_records.raw_scanner_outputs` without a schema migration. The allowlisted payload contains review focuses/reasons, OCR status/warnings/duration/reviewed-file count, postable count, duplicate-suppression reasons, inline-suppression reasons, and execution status. Arbitrary OCR/config metadata is not persisted. The existing `/api/audit` endpoint exports this data; do not add focus/status UI controls until operators demonstrate a need.
 
+OpenCodeReview string categories outside the local finding vocabulary are normalized to `other`; non-string malformed values still fail validation. If review execution fails after workspace focus selection, the incomplete audit fallback must retain those selected focuses and reasons.
+
 ### Config Provider
 
 The `ConfigProvider` interface (in `agent-config-manager`) is implemented by:
@@ -319,6 +321,7 @@ DATABASE_URL=postgres_connection_string
 - OpenCodeReview output does not expose a calibrated confidence score; do not restore the obsolete confidence-rescore/filter path or invent confidence values.
 - The test suite covers CLI config/scaffolding, OpenCodeReview configuration and focus routing, finding/thread persistence, feedback synchronization, scanners, workflow integration, sensitive-data masking, retry logic, and eligibility gates.
 - A live pilot can post ADO comments and statuses. Do not run the Phase 3 pilot without explicit user authorization, a target cohort, and scoped credentials; do not change merge policy before the pilot report is reviewed.
+- The 2026-07-15 `example-repo` PR `#4` attempt is incomplete, not a successful pilot: it exposed an OCR category-contract mismatch, and the corrected live retry was blocked by the environment's external-data policy.
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence

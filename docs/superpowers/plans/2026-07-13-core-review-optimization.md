@@ -181,8 +181,11 @@ the existing 30-comment limit.
 **Implementation status 2026-07-15:** local observability and audit API export
 are implemented. Audit raw outputs use an explicit allowlist for focus/routing,
 OCR execution, postability, and suppression metrics. No dashboard filter or
-merge-policy change was added. The live ADO pilot and written post-pilot policy
-decision remain pending explicit authorization and a bounded target cohort; see
+merge-policy change was added. A bounded ADO attempt on `example-repo` PR `#4`
+was incomplete and exposed an OCR category-contract mismatch; the adapter and
+failure-focus fallback fixes are locally verified, but the corrected live retry
+was blocked by the environment's external-data policy. The successful pilot and
+written post-pilot policy decision therefore remain pending; see
 `docs/research/2026-07-15-core-review-focus-pilot-report.md`.
 
 **Files:**

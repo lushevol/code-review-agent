@@ -1,6 +1,6 @@
 # Core Review Focus Pilot Report
 
-**Status:** Pending live-pilot authorization and target cohort
+**Status:** Attempted; insufficient live results
 **Policy status:** No merge-policy or confidence-threshold change approved
 
 ## Purpose
@@ -31,7 +31,23 @@ incomplete reviews, or review duration enough to harm adoption.
 
 ## Cohort Results
 
-Not collected. Local tests and builds do not constitute a live pilot.
+One isolated PR was created: `example-repo` PR `#4`, source branch
+`codex/core-review-pilot-20260715131825`, targeting `main`. It adds only a
+generated `review-pilot/sample.ts` file and is marked “Do not merge.”
+
+The standard CLI skipped the PR because the repository has no build pipeline.
+The directly invoked review workflow then recorded an incomplete audit
+(`bd7095a8-206a-44bd-a240-f4ed3bf0cf7c`) and posted main comment `2`; it created
+no findings, inline comments, or work items. Diagnosis against byte-identical,
+Codex-authored synthetic content showed that OpenCodeReview can emit string
+categories outside the adapter enum, causing the otherwise valid output to be
+discarded. The adapter now maps unknown string categories to `other`, and the
+outer workflow fallback retains focuses selected before failure.
+
+The corrected live retry was not run because the execution environment blocked
+exporting ADO repository content to the external DeepSeek endpoint. Synthetic
+OCR completed successfully, but synthetic results and local tests do not
+constitute a live cohort and provide no reviewer-reaction or override data.
 
 ## Required Post-Pilot Decisions
 
@@ -49,4 +65,6 @@ After the cohort is complete and reviewed, record:
 ## Current Decision
 
 Defer all focus-retention, confidence, security-specialist, and blocking-policy
-changes until live results are available and this report is reviewed.
+changes. This attempt is useful failure-path evidence but is insufficient for
+any policy decision; a successful approved cohort in an environment permitted
+to send the repository diff to its configured model is still required.
