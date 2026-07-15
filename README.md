@@ -31,7 +31,16 @@ These commands do not scan live pull requests or post comments:
 ```bash
 pnpm build
 pnpm test
+pnpm --filter ratan-code-review test:coverage
+pnpm --filter ratan-code-review evaluate:golden --dry-run
 ```
+
+The golden review corpus contains 25 synthetic PR changes across TypeScript,
+JavaScript, Python, Java, Go, C#, Dockerfile, and Kubernetes YAML. The offline
+test validates fixture structure and deterministic finding matching. A live
+single-case evaluation, which calls the configured OCR endpoint but never ADO,
+can be run explicitly with
+`pnpm --filter ratan-code-review evaluate:golden --case ts-sql-injection`.
 
 The installable CLI can be checked without contacting Azure DevOps:
 
@@ -197,11 +206,17 @@ OpenCodeReview configuration is scaffolded locally under `.ratan/`:
 
 As of the latest local verification:
 
-- `pnpm test` passes — 181 tests.
+- `pnpm test` passes — 32 files and 213 tests.
+- Package coverage is 62.35% statements, 51.1% branches, 67.55% functions,
+  and 63.37% lines.
+- The offline suite includes golden finding-quality controls plus mocked merge
+  gate, work-item, and SonarQube failure-path coverage.
 - `pnpm build` passes.
 - The OpenCodeReview runner passes the native rule file through unchanged and isolates its generated runtime configuration.
 - Review-focus routing and finding-to-ADO-thread feedback linkage are covered by automated tests.
 - Audit pilot metrics and their API export are covered without exposing secret configuration.
+- The synthetic `ts-sql-injection` live golden case passes with recall `1.0`
+  and precision `1.0` against the configured OCR endpoint.
 
 The end-to-end goal is therefore not complete yet. A controlled ADO attempt on
 `example-repo` PR `#4` produced an incomplete audit/comment and exposed an OCR

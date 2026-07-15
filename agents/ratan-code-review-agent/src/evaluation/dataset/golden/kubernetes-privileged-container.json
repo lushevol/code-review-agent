@@ -1,0 +1,9 @@
+{
+  "id": "kubernetes-privileged-container",
+  "language": "yaml",
+  "title": "Deploy report worker",
+  "description": "Adds a Kubernetes deployment for report generation.",
+  "files": [{ "path": "deploy/worker.yaml", "changeType": "added", "after": "apiVersion: v1\nkind: Pod\nspec:\n  containers:\n    - name: worker\n      securityContext:\n        privileged: true" }],
+  "expectedFindings": [{ "id": "privileged-container", "filePath": "deploy/worker.yaml", "lineStart": 6, "lineEnd": 7, "category": "security", "allowedSeverities": ["critical", "high"], "messageIncludes": ["privileged", "security"] }],
+  "allowedExtraFindings": 0
+}

@@ -97,6 +97,12 @@ pnpm build
 # Run tests
 pnpm test
 
+# Run package coverage without external service calls
+pnpm --filter ratan-code-review test:coverage
+
+# Validate all golden fixtures without calling an LLM
+pnpm --filter ratan-code-review evaluate:golden --dry-run
+
 # Regenerate evaluation JSON schema
 pnpm --filter ratan-code-review codegen
 
@@ -136,45 +142,65 @@ Then test workflow steps with mocked runtime context and mocked clients:
 
 Do not use real ADO or SonarQube clients in automated tests.
 
-## Evaluation Harness
+## Golden PR Finding Harness
 
-The evaluation data model lives in `src/evaluation/type.ts`.
+The deterministic scorer lives in `src/evaluation/golden-evaluator.ts`; its
+fixtures live under `src/evaluation/dataset/golden/`. The corpus currently has
+25 synthetic PR changes across eight languages/formats, including three clean
+changes that detect hallucinated findings. It covers bugs, security,
+performance, maintainability, tests, and documentation findings.
 
-Current fixture format:
+Golden fixture format:
 
 ```json
 {
-  "id": "tc-java-001",
-  "input": {
-    "codeChange": {
-      "changes": "...",
-      "newFilePath": "src/Example.java",
-      "oldFilePath": "src/Example.java",
-      "changeType": "MODIFY"
+  "id": "ts-sql-injection",
+  "language": "typescript",
+  "title": "Find user by request id",
+  "description": "Adds a database lookup endpoint.",
+  "files": [
+    {
+      "path": "src/users.ts",
+      "changeType": "added",
+      "after": "..."
     }
-  },
-  "expectedOutput": {
-    "issues": [
-      {
-        "file": "src/Example.java",
-        "line": 4,
-        "message": "...",
-        "suggestion": "...",
-        "suggestion_code": "..."
-      }
-    ]
-  }
+  ],
+  "expectedFindings": [
+    {
+      "id": "sql-injection",
+      "filePath": "src/users.ts",
+      "lineStart": 4,
+      "lineEnd": 4,
+      "category": "security",
+      "allowedSeverities": ["critical", "high"],
+      "messageIncludes": ["sql", "parameter"]
+    }
+  ],
+  "allowedExtraFindings": 0
 }
 ```
 
-A complete evaluation harness should:
+Golden files currently support `added` and `modified` changes. Add rename or
+deletion support only together with representative fixtures and materialization
+tests.
 
-1. Load each fixture from `src/evaluation/dataset`.
-2. Run only the review path against `input.codeChange`, not the full PR-commenting workflow.
-3. Normalize actual issues to the test schema.
-4. Fuzzy-match issue file and line against expected issues.
-5. Use `codeReviewEvaluationJudgeAgent` only for evaluation; it is not part of production review.
-6. Emit metrics matching `codeChangesReviewEvaluationResultSchema`.
+`evaluateGoldenCase` uses one-to-one matching across normalized file path,
+line overlap with tolerance, category, allowed severity, and required message
+concepts. It reports per-case recall and precision and fails on missed findings
+or excess findings. A single actual finding cannot satisfy two expectations.
+
+`evaluate:golden --dry-run` only validates and lists fixtures. Without
+`--dry-run`, the runner materializes each selected case as an isolated two-commit
+Git repository and calls `OpenCodeReviewRunner`; it does not initialize ADO,
+SonarQube, persistence, merge gates, or comment publication. Select cases with
+repeatable `--case <id>` options; at least one `--case` is mandatory in live
+mode. This mode sends synthetic source to the
+configured external LLM endpoint, so it must remain explicit and opt-in.
+`skipped` and `completed_with_errors` OCR outcomes fail the case even when a
+clean fixture receives no comments.
+
+The corrected `ts-sql-injection` case has been live-verified with one expected
+critical finding, recall `1.0`, and precision `1.0`.
 
 ## OpenCodeReview Harness
 
@@ -197,7 +223,12 @@ Before allowing live PR review:
 - Confirm OCR rule scope and merge-policy configuration.
 - Run against a dedicated test PR before enabling broad scanning.
 
-Current status: local build and test checks pass. The scanner pipeline, OpenCodeReview runner and focus router, FindingStore finding/thread associations, feedback synchronization, webhook receiver, merge gate, work-item creation, and dashboard are implemented. Do not claim end-to-end ADO review operation until a target repository is configured and a dedicated live test PR review has been completed.
+Current status: 32 test files and 213 tests pass. Package coverage is 62.35% statements,
+51.1% branches, 67.55% functions, and 63.37% lines. The scanner pipeline,
+OpenCodeReview runner and focus router, FindingStore finding/thread associations,
+feedback synchronization, webhook receiver, merge gate, work-item creation, and
+dashboard are implemented. Do not claim end-to-end ADO review operation until a
+target repository is configured and a dedicated live test PR review has been completed.
 
 The Phase 3 live pilot is side-effectful. Require explicit authorization, a
 bounded repository/PR cohort, and scoped credentials before running it. Do not
@@ -208,7 +239,7 @@ the pilot report has been reviewed.
 
 - [DONE] Move production model URL, token, model, and provider mode to `config.openCodeReview.llm`, with `env:` references for secrets.
 - [DONE] Add focused Vitest coverage for OCR configuration, focus routing, persistence, and workflow integration.
-- Implement `src/evaluation/scorer.ts` and `startupEvaluation`.
+- [DONE] Add a deterministic golden PR finding scorer and opt-in live OCR runner.
 - Align `pr-review-workflow` output schema with the `comment-review-results` step.
 - Log inline comment failures with enough context to debug without exposing secrets.
 - Add dry-run mode so the full workflow can execute without writing PR comments.

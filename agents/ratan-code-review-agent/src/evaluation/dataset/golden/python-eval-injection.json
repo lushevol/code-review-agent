@@ -1,0 +1,9 @@
+{
+  "id": "python-eval-injection",
+  "language": "python",
+  "title": "Evaluate pricing expression",
+  "description": "Evaluates an expression supplied by an administrator.",
+  "files": [{ "path": "pricing/evaluate.py", "changeType": "added", "after": "def evaluate(expression: str):\n    return eval(expression)" }],
+  "expectedFindings": [{ "id": "eval-injection", "filePath": "pricing/evaluate.py", "lineStart": 2, "lineEnd": 2, "category": "security", "allowedSeverities": ["critical", "high"], "messageIncludes": ["eval", "untrusted"] }],
+  "allowedExtraFindings": 0
+}

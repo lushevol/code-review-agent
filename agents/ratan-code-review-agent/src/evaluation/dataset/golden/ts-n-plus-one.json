@@ -1,0 +1,9 @@
+{
+  "id": "ts-n-plus-one",
+  "language": "typescript",
+  "title": "Load order customers",
+  "description": "Loads each customer in a loop.",
+  "files": [{ "path": "src/orders.ts", "changeType": "added", "after": "export async function hydrate(orders: Order[]) {\n  for (const order of orders) order.customer = await users.find(order.userId);\n  return orders;\n}" }],
+  "expectedFindings": [{ "id": "n-plus-one", "filePath": "src/orders.ts", "lineStart": 2, "lineEnd": 2, "category": "performance", "allowedSeverities": ["high", "medium"], "messageIncludes": ["query", "batch"] }],
+  "allowedExtraFindings": 0
+}

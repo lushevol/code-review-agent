@@ -1,0 +1,9 @@
+{
+  "id": "ts-missing-tests",
+  "language": "typescript",
+  "title": "Calculate progressive discount",
+  "description": "Adds branching pricing logic without tests.",
+  "files": [{ "path": "src/discount.ts", "changeType": "added", "after": "export function discount(total: number) {\n  if (total > 1000) return total * 0.2;\n  if (total > 100) return total * 0.1;\n  return 0;\n}" }],
+  "expectedFindings": [{ "id": "missing-boundary-tests", "filePath": "src/discount.ts", "lineStart": 1, "lineEnd": 4, "category": "test", "allowedSeverities": ["medium", "low"], "messageIncludes": ["test", "boundary"] }],
+  "allowedExtraFindings": 0
+}

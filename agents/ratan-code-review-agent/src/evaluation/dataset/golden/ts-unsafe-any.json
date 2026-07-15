@@ -1,0 +1,9 @@
+{
+  "id": "ts-unsafe-any",
+  "language": "typescript",
+  "title": "Parse account payload",
+  "description": "Introduces an exported account parser.",
+  "files": [{ "path": "src/account-model.ts", "changeType": "added", "after": "export function parseAccount(payload: any): Account {\n  return payload;\n}" }],
+  "expectedFindings": [{ "id": "unsafe-any", "filePath": "src/account-model.ts", "lineStart": 1, "lineEnd": 2, "category": "maintainability", "allowedSeverities": ["medium", "low"], "messageIncludes": ["validate", "type"] }],
+  "allowedExtraFindings": 0
+}

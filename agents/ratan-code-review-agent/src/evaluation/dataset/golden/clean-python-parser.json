@@ -1,0 +1,9 @@
+{
+  "id": "clean-python-parser",
+  "language": "python",
+  "title": "Parse bounded quantity",
+  "description": "Adds explicit numeric validation.",
+  "files": [{ "path": "orders/quantity.py", "changeType": "added", "after": "def parse_quantity(raw: str) -> int:\n    value = int(raw)\n    if value < 1 or value > 100:\n        raise ValueError(\"quantity out of range\")\n    return value" }],
+  "expectedFindings": [],
+  "allowedExtraFindings": 0
+}

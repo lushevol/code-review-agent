@@ -1,0 +1,9 @@
+{
+  "id": "js-prototype-pollution",
+  "language": "javascript",
+  "title": "Apply user preferences",
+  "description": "Copies arbitrary preference keys into a target object.",
+  "files": [{ "path": "src/preferences.js", "changeType": "added", "after": "export function apply(target, input) {\n  for (const key in input) target[key] = input[key];\n  return target;\n}" }],
+  "expectedFindings": [{ "id": "prototype-pollution", "filePath": "src/preferences.js", "lineStart": 2, "lineEnd": 2, "category": "security", "allowedSeverities": ["critical", "high"], "messageIncludes": ["prototype", "key"] }],
+  "allowedExtraFindings": 0
+}

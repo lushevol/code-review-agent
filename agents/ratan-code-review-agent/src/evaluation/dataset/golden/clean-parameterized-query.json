@@ -1,0 +1,9 @@
+{
+  "id": "clean-parameterized-query",
+  "language": "typescript",
+  "title": "Find user safely",
+  "description": "Adds a parameterized user lookup.",
+  "files": [{ "path": "src/users-safe.ts", "changeType": "added", "after": "export function findUser(id: string) {\n  return db.query(\"SELECT * FROM users WHERE id = ?\", [id]);\n}" }],
+  "expectedFindings": [],
+  "allowedExtraFindings": 0
+}

@@ -240,7 +240,7 @@ OpenCodeReview owns review semantics through its native rule JSON. Default confi
 - `agents/ratan-code-review-agent/src/review/types/finding.ts` — NormalizedFinding schema, FindingCategory, FindingSeverity, EngineType, content hash computation
 - `agents/ratan-code-review-agent/src/bootstrap/` — startup, PR scanning, session handling
 - `agents/ratan-code-review-agent/src/webhooks/` — Express webhook receiver, HMAC validation, eligibility gate
-- `agents/ratan-code-review-agent/src/evaluation/` — evaluation types, dataset fixtures, judge agent
+- `agents/ratan-code-review-agent/src/evaluation/` — evaluation types, 25-case synthetic golden PR corpus, deterministic finding scorer, opt-in live OCR runner, and judge agent
 - `agents/ratan-code-review-agent/templates/` — default config and native OCR rule templates (published to npm)
 
 ### Dashboard (React SPA)
@@ -274,6 +274,15 @@ pnpm test
 
 # Run a single test file
 pnpm --filter ratan-code-review exec vitest run src/cli/config/local-client.spec.ts
+
+# Run package coverage (offline)
+pnpm --filter ratan-code-review test:coverage
+
+# Validate the synthetic golden corpus without external calls
+pnpm --filter ratan-code-review evaluate:golden --dry-run
+
+# Evaluate one synthetic PR against the configured OCR endpoint (external call)
+pnpm --filter ratan-code-review evaluate:golden --case ts-sql-injection
 
 # CLI usage (after build)
 node agents/ratan-code-review-agent/bin/ratan-code-review.cjs --help
@@ -319,14 +328,16 @@ DATABASE_URL=postgres_connection_string
 - Work item creation step handles errors gracefully (non-fatal).
 - Comment step posts at most 30 valid-location findings after blocking/severity ordering, current-run deduplication, and suppression of findings already linked to ADO threads. It silently skips per-line comment failures and still posts the main PR comment.
 - OpenCodeReview output does not expose a calibrated confidence score; do not restore the obsolete confidence-rescore/filter path or invent confidence values.
-- The test suite covers CLI config/scaffolding, OpenCodeReview configuration and focus routing, finding/thread persistence, feedback synchronization, scanners, workflow integration, sensitive-data masking, retry logic, and eligibility gates.
+- The test suite covers CLI config/scaffolding, OpenCodeReview configuration and focus routing, a 25-case multilingual synthetic PR finding corpus, merge-gate decisions, work-item creation/context, SonarQube degradation, finding/thread persistence, feedback synchronization, scanners, workflow integration, sensitive-data masking, retry logic, and eligibility gates.
+- `evaluate:golden --dry-run` is offline. Running it without `--dry-run` requires at least one explicit `--case` and sends only selected synthetic fixtures to `config.openCodeReview.llm`; it does not fetch ADO data or post PR comments. Require explicit authorization before evaluating non-synthetic or private code against an external endpoint.
+- Golden fixtures currently model only added and modified files. Treat skipped or errored OCR execution as evaluation failure; do not count an empty clean-case result as a successful review unless OCR completed.
 - A live pilot can post ADO comments and statuses. Do not run the Phase 3 pilot without explicit user authorization, a target cohort, and scoped credentials; do not change merge policy before the pilot report is reviewed.
 - The 2026-07-15 `example-repo` PR `#4` attempt is incomplete, not a successful pilot: it exposed an OCR category-contract mismatch, and the corrected live retry was blocked by the environment's external-data policy.
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **code-review-agent** (2183 symbols, 4297 relationships, 149 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **code-review-agent** (2398 symbols, 4823 relationships, 159 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 

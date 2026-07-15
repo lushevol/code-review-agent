@@ -1,0 +1,9 @@
+{
+  "id": "ts-missing-authorization",
+  "language": "typescript",
+  "title": "Delete project endpoint",
+  "description": "Adds an authenticated project deletion handler.",
+  "files": [{ "path": "src/routes/projects.ts", "changeType": "added", "after": "router.delete(\"/:id\", requireLogin, async (req, res) => {\n  await projects.delete(req.params.id);\n  res.sendStatus(204);\n});" }],
+  "expectedFindings": [{ "id": "missing-authorization", "filePath": "src/routes/projects.ts", "lineStart": 1, "lineEnd": 2, "category": "security", "allowedSeverities": ["critical", "high"], "messageIncludes": ["authorization", "project"] }],
+  "allowedExtraFindings": 0
+}

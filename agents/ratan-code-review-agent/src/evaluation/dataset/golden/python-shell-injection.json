@@ -1,0 +1,9 @@
+{
+  "id": "python-shell-injection",
+  "language": "python",
+  "title": "Run diagnostics",
+  "description": "Runs a diagnostic command assembled from request input.",
+  "files": [{ "path": "diagnostics/run.py", "changeType": "added", "after": "import subprocess\ndef run(host: str):\n    return subprocess.check_output(f\"ping -c 1 {host}\", shell=True)" }],
+  "expectedFindings": [{ "id": "command-injection", "filePath": "diagnostics/run.py", "lineStart": 3, "lineEnd": 3, "category": "security", "allowedSeverities": ["critical", "high"], "messageIncludes": ["command", "shell"] }],
+  "allowedExtraFindings": 0
+}

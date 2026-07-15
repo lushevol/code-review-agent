@@ -1,0 +1,9 @@
+{
+  "id": "docker-root-user",
+  "language": "dockerfile",
+  "title": "Containerize exporter",
+  "description": "Adds an exporter container without a non-root user.",
+  "files": [{ "path": "Dockerfile", "changeType": "added", "after": "FROM node:22\nCOPY . /app\nCMD [\"node\", \"/app/server.js\"]" }],
+  "expectedFindings": [{ "id": "root-container", "filePath": "Dockerfile", "lineStart": 1, "lineEnd": 3, "category": "security", "allowedSeverities": ["high", "medium"], "messageIncludes": ["non-root", "user"] }],
+  "allowedExtraFindings": 0
+}
