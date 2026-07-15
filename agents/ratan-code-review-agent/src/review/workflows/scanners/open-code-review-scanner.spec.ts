@@ -125,6 +125,38 @@ describe("OpenCodeReviewScanner", () => {
     });
     expect(result.findings[0]).not.toHaveProperty("confidence");
   });
+
+  it("preserves an incomplete OCR execution status", async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ocr-incomplete-"));
+    const ruleFile = path.join(tempDir, "rule.json");
+    fs.writeFileSync(ruleFile, JSON.stringify({ rules: [] }));
+    const runner: OcrReviewRunner = {
+      review: async () => ({
+        status: "timeout",
+        complete: false,
+        durationMs: 12,
+        comments: [],
+        warnings: [{ type: "timeout", message: "Review timed out" }],
+      }),
+    };
+
+    const result = await new OpenCodeReviewScanner(runner).scan(metadata(), {
+      workspace: {
+        repoPath: tempDir,
+        runDirectory: tempDir,
+        mergeBaseCommit: "base",
+        headCommit: "head",
+        changes: [],
+      },
+      provider: provider(ruleFile),
+    } as never);
+
+    expect(result.executionStatus).toBe("incomplete");
+    expect(result.metadata).toMatchObject({
+      status: "timeout",
+      warningTypes: ["timeout"],
+    });
+  });
 });
 
 function provider(ruleFile: string) {

@@ -126,7 +126,7 @@ PR Event (webhook/poll) → Eligibility Gate → fetchPR → fetchWorkItemContex
   → sonarqubeMeasures
   → mergeGate (set ADO PR status)
   → createWorkItems (Bug/Task for critical/high)
-  → comment (PR summary + inline comments + re-review reconciliation)
+  → comment (consolidated summary + prioritized postable inline comments)
 ```
 
 ### Scanner Pipeline
@@ -138,6 +138,13 @@ Three scanners run concurrently; individual failures are non-fatal:
 | OpenCodeReview | Native OCR rules + configured LLM | Code quality issues, bugs, and anti-patterns; one run receives deterministic focuses for tests, error handling, type design, and comments when relevant |
 | CVE | SonarQube Issues API | Vulnerabilities, security hotspots |
 | Compliance | Static analysis + YAML rules | TODO/FIXME, console.log, large files |
+
+The main review groups correlated findings into blocking, important, and
+advisory categories, lists concise finding details, and includes the selected
+OCR focuses. Inline comments require a valid code location, are ordered by
+blocking status and severity, deduplicated by content hash, suppressed when the
+finding was already linked to an ADO thread, and capped at 30. These presentation
+rules do not alter persisted severity or merge policy.
 
 ### Webhooks
 
@@ -181,7 +188,7 @@ OpenCodeReview configuration is scaffolded locally under `.ratan/`:
 
 As of the latest local verification:
 
-- `pnpm test` passes — 162 tests.
+- `pnpm test` passes — 171 tests.
 - `pnpm build` passes.
 - The OpenCodeReview runner passes the native rule file through unchanged and isolates its generated runtime configuration.
 - Review-focus routing and finding-to-ADO-thread feedback linkage are covered by automated tests.

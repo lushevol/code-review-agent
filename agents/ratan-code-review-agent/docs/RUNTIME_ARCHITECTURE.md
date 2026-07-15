@@ -85,7 +85,7 @@ The scanner pipeline runs all scanners concurrently via `Promise.allSettled`:
    - Large file detection (configurable threshold)
    - YAML policy-as-code rules (configurable)
 
-All scanner results are collected, correlated by scanner engine, deduplicated by content hash (SHA-256 of `filePath + surrounding code`), and persisted to the `FindingStore` SQLite database. OCR metadata records the selected focuses and their reasons.
+All scanner results are collected, correlated by scanner engine, deduplicated by content hash (SHA-256 of `filePath + surrounding code`), and persisted to the `FindingStore` SQLite database. OCR metadata records the selected focuses and their reasons. The correlation summary presents blocking, important, and advisory sections grouped by category with concise finding details; these are display buckets and do not change stored severity or merge-gate inputs.
 
 Fallback dedup: location-based matching `(filePath, lineStart +/- 3, sourceEngine, category)`.
 
@@ -116,8 +116,8 @@ After all findings are collected and persisted:
 1. Reads normalized scanner findings, the deterministic review summary, and SonarQube measures.
 2. Reads original PR details from the `fetch-pr-details` step result.
 3. Reconciles with previous review findings (content-hash matching) for re-review.
-4. Posts up to 30 inline code comments.
-5. Posts the main PR review comment with approval status, errors, summary, and SonarQube measures.
+4. Selects inline-postable findings with a valid file and positive line, removes findings already associated with an ADO thread, orders by blocking status and severity, suppresses repeated content hashes, then applies the 30-comment cap.
+5. Posts the main PR review comment with the consolidated category/focus summary and SonarQube measures.
 6. Stores the latest reviewed iteration id in PR properties under `CODE_REVIEW_AGENT_LATEST_REVIEW_ID`.
 7. Links each created ADO inline thread to its persisted finding in `finding_comment_threads`.
 8. Returns `mainCommentId` and `codeCommentIds`.

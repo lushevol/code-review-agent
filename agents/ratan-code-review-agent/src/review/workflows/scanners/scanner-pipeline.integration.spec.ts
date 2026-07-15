@@ -12,64 +12,13 @@ import {
   generateFindingId,
 } from "../../types/finding";
 import type { Scanner, ScanContext } from "./types";
-
-// ─── Severity priority map (mirrors scanner-pipeline.ts) ────────────────────
-
-const SEVERITY_ORDER: Record<string, number> = {
-  critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-  informational: 4,
-};
-
-// ─── Pipeline helper functions (re-created here since scanner-pipeline.ts
-//      does not export them, but they exercise the same code paths) ──────────
-
-function correlateFindings(findings: NormalizedFinding[]): NormalizedFinding[] {
-  const map = new Map<string, NormalizedFinding>();
-
-  for (const f of findings) {
-    const existing = map.get(f.contentHash);
-    if (!existing) {
-      map.set(f.contentHash, f);
-      continue;
-    }
-
-    const existingRank = SEVERITY_ORDER[existing.severity] ?? 99;
-    const currentRank = SEVERITY_ORDER[f.severity] ?? 99;
-
-    if (currentRank < existingRank) {
-      f.evidence = [existing.evidence, f.evidence].filter(Boolean).join("\n---\n");
-      map.set(f.contentHash, f);
-    } else {
-      existing.evidence = [existing.evidence, f.evidence].filter(Boolean).join("\n---\n");
-    }
-  }
-
-  return Array.from(map.values());
-}
-
-function prioritizeFindings(findings: NormalizedFinding[]): NormalizedFinding[] {
-  const MAX_FINDINGS = 100;
-
-  return findings
-    .sort((a, b) => {
-      const sevDiff = (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99);
-      if (sevDiff !== 0) return sevDiff;
-      return b.confidence - a.confidence;
-    })
-    .slice(0, MAX_FINDINGS);
-}
-
-function severityCounts(findings: NormalizedFinding[]): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const f of findings) {
-    const sev = f.severity || "unknown";
-    counts[sev] = (counts[sev] ?? 0) + 1;
-  }
-  return counts;
-}
+import {
+  aggregateScannerResults,
+  buildCorrelationSummary,
+  correlateFindings,
+  prioritizeFindings,
+  severityCounts,
+} from "./scanner-pipeline";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -306,6 +255,74 @@ describe("Scanner Pipeline Integration", () => {
   beforeEach(() => {
     findingStore = new MemoryFindingStore();
     findingStore.init();
+  });
+
+  describe("consolidated presentation", () => {
+    it("propagates an incomplete OpenCodeReview result through pipeline aggregation", () => {
+      const aggregated = aggregateScannerResults(
+        [{ id: "open-code-review", engine: "open-code-review" }],
+        [
+          {
+            status: "fulfilled",
+            value: {
+              findings: [],
+              engine: "open-code-review",
+              durationMs: 25,
+              executionStatus: "incomplete",
+              metadata: { status: "timeout", warningTypes: ["timeout"] },
+            },
+          },
+        ],
+      );
+
+      expect(aggregated).toEqual({
+        findings: [],
+        reviewExecutionStatus: "incomplete",
+        reviewMetadata: {
+          status: "timeout",
+          warningTypes: ["timeout"],
+          durationMs: 25,
+        },
+      });
+    });
+
+    it("groups findings into blocking, important, and advisory categories with review focuses", () => {
+      const summary = buildCorrelationSummary(
+        [
+          createFinding({ severity: "low", blocking: true, category: "security" }),
+          createFinding({ severity: "high", category: "bug", contentHash: "high-bug" }),
+          createFinding({ severity: "medium", category: "bug", contentHash: "medium-bug" }),
+          createFinding({ severity: "informational", category: "documentation", contentHash: "docs" }),
+        ],
+        [
+          {
+            focus: "general",
+            reasons: ["General review applies to every pull request."],
+          },
+          {
+            focus: "tests",
+            reasons: ["Production code changed without matching test-file changes."],
+          },
+        ],
+      );
+
+      expect(summary).toBe([
+        "### Consolidated findings",
+        "#### Blocking (1)",
+        "- **security**",
+        "  - LOW — Test finding: low (`src/main.ts:1`): Test finding: low Suggestion: Test remediation",
+        "#### Important (2)",
+        "- **bug**",
+        "  - HIGH — Test finding: high (`src/main.ts:1`): Test finding: high Suggestion: Test remediation",
+        "  - MEDIUM — Test finding: medium (`src/main.ts:1`): Test finding: medium Suggestion: Test remediation",
+        "#### Advisory (1)",
+        "- **documentation**",
+        "  - INFORMATIONAL — Test finding: informational (`src/main.ts:1`): Test finding: informational Suggestion: Test remediation",
+        "#### Review focuses",
+        "- general: General review applies to every pull request.",
+        "- tests: Production code changed without matching test-file changes.",
+      ].join("\n"));
+    });
   });
 
   // ─── 1. Full scanner pipeline integration ─────────────────────────────
@@ -1293,7 +1310,7 @@ describe("Scanner Pipeline Integration", () => {
       expect(correlated[0].severity).toBe("critical");
     });
 
-    it("sorts by confidence when severity is equal", () => {
+    it("keeps stable input order when severity is equal", () => {
       const findings = [
         createFinding({
           severity: "high",
@@ -1317,10 +1334,10 @@ describe("Scanner Pipeline Integration", () => {
 
       const prioritized = prioritizeFindings(findings);
 
-      // Critical first, then high with higher confidence
+      // Critical first; optional legacy confidence does not affect OCR ordering.
       expect(prioritized[0].severity).toBe("critical");
-      expect(prioritized[1].title).toContain("Higher confidence");
-      expect(prioritized[2].title).toContain("Lower confidence");
+      expect(prioritized[1].title).toContain("Lower confidence");
+      expect(prioritized[2].title).toContain("Higher confidence");
     });
   });
 

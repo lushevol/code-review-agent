@@ -144,10 +144,18 @@ changes, and the invariant that `general` is always present.
 
 ### Phase 2 — consolidate and order postable findings
 
+**Implemented 2026-07-15:** inline postability now requires a valid code
+location; postable findings are ordered by blocking status and severity,
+deduplicated by content hash, filtered against persisted finding/thread links,
+and capped at 30. The main review uses consolidated
+blocking/important/advisory category sections with concise finding details and
+selected review focuses. Persistence and merge-gate inputs remain unchanged.
+
 **Files:**
 
 - Create: `agents/ratan-code-review-agent/src/review/workflows/scanners/finding-eligibility.ts`
 - Create: `agents/ratan-code-review-agent/src/review/workflows/scanners/finding-eligibility.spec.ts`
+- Create: `agents/ratan-code-review-agent/src/review/workflows/scanners/finding-priority.ts`
 - Modify: `agents/ratan-code-review-agent/src/review/workflows/scanners/scanner-pipeline.ts`
 - Modify: `agents/ratan-code-review-agent/src/review/workflows/steps/comment.ts`
 - Modify: `agents/ratan-code-review-agent/src/review/workflows/scanners/scanner-pipeline.integration.spec.ts`

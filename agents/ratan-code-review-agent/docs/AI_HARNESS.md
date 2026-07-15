@@ -125,9 +125,9 @@ Then test workflow steps with mocked runtime context and mocked clients:
 
 - `fetch-pr-details` should call `getPullRequestById`.
 - `open-code-review-scanner` should pass the resolved native rule file unchanged, include selected focus reasons in the background, and map OCR comments to normalized findings.
-- `scanner-pipeline` should preserve graceful degradation, correlate by content hash, and persist stable finding IDs.
+- `scanner-pipeline` should preserve graceful degradation, propagate incomplete OCR status, correlate by content hash, persist stable finding IDs, and present actionable blocking/important/advisory category sections with selected focuses.
 - `sonarqube-measures` should return `null` on missing client or fetch errors.
-- `comment-review-results` should limit inline comments to 30, link created ADO threads to persisted findings, and update the latest-review PR property.
+- `comment-review-results` should select valid code locations, suppress repeated and previously linked content hashes, order blocking and higher-severity findings first, apply the 30-comment cap last, link created ADO threads to persisted findings, and update the latest-review PR property.
 - `FeedbackService` should synchronize only threads explicitly associated with each finding.
 
 Do not use real ADO or SonarQube clients in automated tests.

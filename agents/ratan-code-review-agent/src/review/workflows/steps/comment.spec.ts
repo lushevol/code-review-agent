@@ -17,20 +17,12 @@ afterEach(() => {
 
 describe("comment", () => {
   it("links each created inline ADO thread to its finding", async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "comment-step-"));
-    const dbPath = path.join(tempDir, "findings.db");
-    const provider = {
-      id: "comment-step-test",
-      getAdoClient: () => ({
-        addCommentThreadForPRCode: vi.fn().mockResolvedValue({ id: 101 }),
-        addCommentForPR: vi.fn().mockResolvedValue({ id: 102 }),
-        setPullRequestProperties: vi.fn().mockResolvedValue(undefined),
-      }),
-      getRootConfig: vi.fn().mockResolvedValue({ findingStorePath: dbPath }),
-    };
-    getAgentConfigSessions().registerProvider(provider as never);
-    const requestContext = new RequestContext<{ configSessionId: string }>();
-    requestContext.set("configSessionId", provider.id);
+    const addCommentThreadForPRCode = vi.fn().mockResolvedValue({ id: 101 });
+    const { dbPath, requestContext } = setupCommentTest(
+      "comment-step-test",
+      "comment-step-",
+      addCommentThreadForPRCode,
+    );
     const persistedStore = new FindingStore(dbPath);
     persistedStore.init();
     const originalFinding = finding();
@@ -41,23 +33,31 @@ describe("comment", () => {
     });
     persistedStore.close();
 
-    await comment.execute({
-      inputData: {
-        prDetails: {
-          repoId: "repo-id",
-          repoName: "repo",
-          pullRequestId: 7,
-          latestSourceCommitId: "head",
-        },
-        findings: [persistedFinding],
-        correlationSummary: "Found 1 issue",
-        reviewSummary: "Review summary",
-        reviewExecutionStatus: "complete",
-        reviewMetadata: {},
-        measures: null,
-        mergeDecision: "allowed",
-        createdWorkItems: 0,
+    const inputData = {
+      prDetails: {
+        repoId: "repo-id",
+        repoName: "repo",
+        pullRequestId: 7,
+        latestSourceCommitId: "head",
       },
+      findings: [persistedFinding],
+      correlationSummary: "Found 1 issue",
+      reviewSummary: "Review summary",
+      reviewExecutionStatus: "complete",
+      reviewMetadata: {},
+      measures: null,
+      mergeDecision: "allowed",
+      createdWorkItems: 0,
+    } as const;
+
+    await comment.execute({
+      inputData,
+      requestContext,
+      agents: { getAgent: vi.fn() },
+      getStepResult: vi.fn(),
+    });
+    await comment.execute({
+      inputData,
       requestContext,
       agents: { getAgent: vi.fn() },
       getStepResult: vi.fn(),
@@ -74,6 +74,7 @@ describe("comment", () => {
         createdAt: expect.any(String),
       }),
     ]);
+    expect(addCommentThreadForPRCode).toHaveBeenCalledTimes(1);
     store.close();
   });
 
@@ -117,7 +118,144 @@ describe("comment", () => {
     ).toThrow("Comment thread must belong to the finding's PR and repository");
     store.close();
   });
+
+  it("posts blocking and higher-severity inline findings first", async () => {
+    const addCommentThreadForPRCode = vi
+      .fn()
+      .mockResolvedValueOnce({ id: 101 })
+      .mockResolvedValueOnce({ id: 102 })
+      .mockResolvedValueOnce({ id: 103 });
+    const { dbPath, requestContext } = setupCommentTest(
+      "comment-order-test",
+      "comment-order-",
+      addCommentThreadForPRCode,
+    );
+    const store = new FindingStore(dbPath);
+    store.init();
+    const low = store.upsertFinding({
+      ...finding(),
+      id: "11111111-1111-4111-8111-111111111111",
+      title: "Low finding",
+      severity: "low",
+      contentHash: "low",
+    });
+    const critical = store.upsertFinding({
+      ...finding(),
+      id: "22222222-2222-4222-8222-222222222222",
+      title: "Critical finding",
+      severity: "critical",
+      contentHash: "critical",
+    });
+    const blocking = store.upsertFinding({
+      ...finding(),
+      id: "33333333-3333-4333-8333-333333333333",
+      title: "Blocking finding",
+      severity: "medium",
+      blocking: true,
+      contentHash: "blocking",
+    });
+    store.close();
+
+    await comment.execute({
+      inputData: {
+        prDetails: {
+          repoId: "repo-id",
+          repoName: "repo",
+          pullRequestId: 7,
+          latestSourceCommitId: "head",
+        },
+        findings: [low, critical, blocking],
+        correlationSummary: "Found 3 issues",
+        reviewSummary: "Review summary",
+        reviewExecutionStatus: "complete",
+        reviewMetadata: {},
+        measures: null,
+        mergeDecision: "blocked",
+        createdWorkItems: 0,
+      },
+      requestContext,
+      agents: { getAgent: vi.fn() },
+      getStepResult: vi.fn(),
+    });
+
+    expect(
+      addCommentThreadForPRCode.mock.calls.map(([input]) => input.comment),
+    ).toEqual([
+      expect.stringContaining("Blocking finding"),
+      expect.stringContaining("Critical finding"),
+      expect.stringContaining("Low finding"),
+    ]);
+  });
+
+  it("posts at most 30 inline comments", async () => {
+    const addCommentThreadForPRCode = vi.fn(async () => ({
+      id: 100 + addCommentThreadForPRCode.mock.calls.length,
+    }));
+    const { dbPath, requestContext } = setupCommentTest(
+      "comment-cap-test",
+      "comment-cap-",
+      addCommentThreadForPRCode,
+    );
+    const store = new FindingStore(dbPath);
+    store.init();
+    const findings = Array.from({ length: 31 }, (_, index) =>
+      store.upsertFinding({
+        ...finding(),
+        id: `${String(index + 1).padStart(8, "0")}-1111-4111-8111-111111111111`,
+        title: `Finding ${index + 1}`,
+        contentHash: `hash-${index + 1}`,
+      }),
+    );
+    store.close();
+
+    const result = await comment.execute({
+      inputData: {
+        prDetails: {
+          repoId: "repo-id",
+          repoName: "repo",
+          pullRequestId: 7,
+          latestSourceCommitId: "head",
+        },
+        findings,
+        correlationSummary: "Found 31 issues",
+        reviewSummary: "Review summary",
+        reviewExecutionStatus: "complete",
+        reviewMetadata: {},
+        measures: null,
+        mergeDecision: "allowed",
+        createdWorkItems: 0,
+      },
+      requestContext,
+      agents: { getAgent: vi.fn() },
+      getStepResult: vi.fn(),
+    });
+
+    expect(addCommentThreadForPRCode).toHaveBeenCalledTimes(30);
+    expect(result.codeCommentIds).toHaveLength(30);
+  });
 });
+
+function setupCommentTest(
+  providerId: string,
+  tempPrefix: string,
+  addCommentThreadForPRCode: ReturnType<typeof vi.fn>,
+) {
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), tempPrefix));
+  const dbPath = path.join(tempDir, "findings.db");
+  const provider = {
+    id: providerId,
+    getAdoClient: () => ({
+      addCommentThreadForPRCode,
+      addCommentForPR: vi.fn().mockResolvedValue({ id: 999 }),
+      setPullRequestProperties: vi.fn().mockResolvedValue(undefined),
+    }),
+    getRootConfig: vi.fn().mockResolvedValue({ findingStorePath: dbPath }),
+  };
+  getAgentConfigSessions().registerProvider(provider as never);
+  const requestContext = new RequestContext<{ configSessionId: string }>();
+  requestContext.set("configSessionId", provider.id);
+  return { dbPath, requestContext };
+}
 
 function finding() {
   return {

@@ -5,6 +5,7 @@ import { extractAgentConfig } from "../../../bootstrap/session";
 import { type CommonRequestContext, PullRequestSchema } from "../../types";
 import { NormalizedFindingSchema } from "../../types/finding";
 import { CODE_REVIEW_AGENT_LATEST_REVIEW_ID } from "../../utils/const";
+import { selectPostableFindings } from "../scanners/finding-eligibility";
 
 const CommentInputSchema = z.object({
   prDetails: PullRequestSchema,
@@ -52,9 +53,27 @@ export const comment = defineStep({
     const codeCommentIds: number[] = [];
 
     // Post inline comments from scanner pipeline findings
-    const findingsToComment = findings.slice(0, 30);
+    const existingLinks = findingStore.getCommentThreadsByPr(
+      prDetails.pullRequestId,
+      prDetails.repoName,
+    );
+    const linkedFindingIds = new Set(
+      existingLinks.map(({ findingId }) => findingId),
+    );
+    const linkedContentHashes = new Set(
+      findingStore
+        .getFindingsByPr(prDetails.pullRequestId, prDetails.repoName)
+        .filter(({ id }) => linkedFindingIds.has(id))
+        .map(({ contentHash }) => contentHash),
+    );
+    const findingsToComment = selectPostableFindings(
+      findings.filter(
+        (finding) =>
+          !linkedFindingIds.has(finding.id) &&
+          !linkedContentHashes.has(finding.contentHash),
+      ),
+    );
     for (const finding of findingsToComment) {
-      if (!finding.filePath || finding.lineStart === null) continue;
       let commentThread: { id?: number };
       try {
         const commentText = `**${finding.severity.toUpperCase()}** - ${finding.title}` +

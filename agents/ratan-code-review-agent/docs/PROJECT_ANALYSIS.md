@@ -28,7 +28,8 @@ fallback.
   `type-design`, and `comments`) and their reasons in scanner metadata.
 - Sets Azure DevOps PR status from merge policy; incomplete OCR runs remain
   pending for manual review.
-- Posts a main review summary and up to 30 inline comments.
+- Presents correlated findings in blocking, important, and advisory category sections with concise details and selected OCR focuses.
+- Posts up to 30 valid-location inline findings after blocking/severity ordering, content-hash duplicate suppression, and filtering of previously linked ADO threads.
 - Links each created inline ADO thread to its persisted finding so feedback is
   synchronized only to the represented finding.
 - Records audits, supports overrides, creates configured work items, and exposes
@@ -50,7 +51,7 @@ fetch-pr-details
   -> record-audit
   -> create-workitems
   -> comment-review-results
-       -> inline ADO threads
+       -> prioritized postable inline ADO threads
        -> finding_comment_threads associations
        -> main summary and latest-review property
 ```
@@ -90,6 +91,12 @@ Finding identity across PR iterations is content-addressed. The
 `finding_comment_threads` table separately associates repository, PR, finding,
 and ADO thread IDs; this avoids treating every comment on a PR as feedback for
 every finding.
+
+Inline postability is a presentation decision only: a finding needs a non-empty
+file path and positive line number. Current-run correlation and persisted
+finding/thread associations prevent repeat inline threads across re-reviews.
+Postability, ordering, duplicate suppression, and the comment cap do not remove
+findings from persistence, audit, work-item, or merge-gate inputs.
 
 OpenCodeReview does not expose calibrated confidence in the current output
 contract. PR Guardian must not invent confidence values or restore the obsolete
@@ -161,7 +168,7 @@ production PR-review engine.
 
 ## Verification State
 
-- `pnpm test` passes with 162 tests.
+- `pnpm test` passes with 171 tests.
 - `pnpm build` passes.
 - Tests cover OCR configuration and native rule pass-through, focus routing,
   scanner integration, finding/thread persistence, feedback synchronization,

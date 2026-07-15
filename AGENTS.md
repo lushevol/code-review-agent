@@ -128,7 +128,7 @@ prReviewWorkflow(prId):
   sonarqube-measures                 — SonarQube quality gate metrics
   merge-gate                         — Evaluate blocking findings, set ADO PR status (succeeded/failed)
   create-workitems                   — Auto-create ADO Bug (critical severity) and Task (high severity)
-  comment-review-results             — Post PR summary + inline comments + reconcile re-reviews
+  comment-review-results             — Post consolidated summary + prioritized postable inline comments
 ```
 
 ### Event Detection
@@ -161,6 +161,8 @@ The scanner pipeline runs all scanners concurrently via `Promise.allSettled` (gr
 | Compliance | `compliance` | Static analysis + YAML rules | TODO/FIXME/HACK detection, console.log, large files, configurable rules |
 
 Each scanner produces `NormalizedFinding` objects with a content hash (SHA-256 of `filePath + surrounding code`) for identity across PR iterations. Findings are correlated, deduplicated by content hash, and persisted to the `FindingStore`. Inline ADO thread IDs are linked back to persisted finding IDs so feedback synchronization updates only the finding represented by that thread.
+
+The main PR comment presents correlated findings as `blocking`, `important`, and `advisory` sections grouped by category, lists concise finding details, and includes selected OCR focuses. `important` is presentation only. Inline eligibility requires a valid file/line location; postable findings are ordered by blocking status and severity, deduplicated by content hash, filtered against previously linked finding/thread associations, then capped at 30. These presentation rules do not change merge-gate inputs.
 
 ### Config Provider
 
@@ -311,7 +313,7 @@ DATABASE_URL=postgres_connection_string
 - The scanner pipeline uses `Promise.allSettled` for graceful degradation — individual scanner failures don't block the pipeline.
 - Merge gate sets ADO PR Status (`succeeded`/`failed`) based on policy. Errors are non-fatal.
 - Work item creation step handles errors gracefully (non-fatal).
-- Comment step silently swallows per-line comment failures and still posts the main PR comment.
+- Comment step posts at most 30 valid-location findings after blocking/severity ordering, current-run deduplication, and suppression of findings already linked to ADO threads. It silently skips per-line comment failures and still posts the main PR comment.
 - OpenCodeReview output does not expose a calibrated confidence score; do not restore the obsolete confidence-rescore/filter path or invent confidence values.
 - The test suite covers CLI config/scaffolding, OpenCodeReview configuration and focus routing, finding/thread persistence, feedback synchronization, scanners, workflow integration, sensitive-data masking, retry logic, and eligibility gates.
 
