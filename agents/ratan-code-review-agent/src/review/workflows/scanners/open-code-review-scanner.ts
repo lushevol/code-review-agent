@@ -9,6 +9,7 @@ import {
   type NormalizedFinding,
 } from "../../types/finding";
 import type { ScanContext, Scanner } from "./types";
+import { selectReviewFocuses } from "../../open-code-review/review-focus-router";
 
 const OCR_VERSION = "1.7.7";
 
@@ -24,9 +25,14 @@ export class OpenCodeReviewScanner implements Scanner {
   ) {
     const rootConfig = await context.provider.getRootConfig();
     const openCodeReview = rootConfig.openCodeReview;
+    const reviewFocuses = selectReviewFocuses(context.workspace.changes);
     const output = await this.runner.review({
       workspace: context.workspace,
-      background: buildBackground(prDetails, context.workItemContext),
+      background: buildBackground(
+        prDetails,
+        context.workItemContext,
+        reviewFocuses,
+      ),
       llm: {
         ...openCodeReview.llm,
         useAnthropic: openCodeReview.llm.useAnthropic ?? false,
@@ -48,6 +54,7 @@ export class OpenCodeReviewScanner implements Scanner {
         filesReviewed: output.summary?.files_reviewed ?? 0,
         totalTokens: output.summary?.total_tokens ?? 0,
         warningTypes: output.warnings.map((warning) => warning.type),
+        reviewFocuses,
       },
     };
   }
@@ -98,6 +105,7 @@ export class OpenCodeReviewScanner implements Scanner {
 function buildBackground(
   pr: AdoPullRequestMetadata,
   workItemContext?: string,
+  reviewFocuses: ReturnType<typeof selectReviewFocuses> = selectReviewFocuses([]),
 ): string {
   return [
     `# Pull Request ${pr.pullRequestId}: ${pr.title}`,
@@ -106,6 +114,11 @@ function buildBackground(
     "",
     "## Work item context",
     workItemContext || "No linked work-item context available.",
+    "",
+    "## Review focus",
+    ...reviewFocuses.map(
+      ({ focus, reasons }) => `- ${focus}: ${reasons.join(" ")}`,
+    ),
   ].join("\n");
 }
 

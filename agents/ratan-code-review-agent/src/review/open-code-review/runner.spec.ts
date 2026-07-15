@@ -81,12 +81,13 @@ describe("OpenCodeReviewRunner", () => {
       },
     });
     const reviewWorkspace = workspace(fixture.dir);
+    const reviewRuleFile = ruleFile(fixture.dir);
 
     const result = await runner.review({
       workspace: reviewWorkspace,
       background: "PR context",
       llm: { url: "https://llm.example/v1", token: "secret", model: "model", useAnthropic: false },
-      ruleFile: ruleFile(fixture.dir),
+      ruleFile: reviewRuleFile,
     });
 
     expect(result.status).toBe("success");
@@ -106,6 +107,8 @@ describe("OpenCodeReviewRunner", () => {
         "json",
         "--audience",
         "agent",
+        "--rule",
+        reviewRuleFile,
       ]),
     );
     expect(capture.noUpdate).toBe("1");
