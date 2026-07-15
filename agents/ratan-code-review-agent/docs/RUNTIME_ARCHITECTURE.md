@@ -18,38 +18,23 @@ flowchart TD
     FetchWIC --> ADOWI["ADO: extract work item IDs<br/>from commits, fetch AC"]
 
     FetchWIC --> Scanners["scanner-pipeline"]
-    Scanners --> AIReview["ai-review-scanner<br/>LLM code review"]
+    Scanners --> AIReview["open-code-review-scanner<br/>focused OCR review"]
     Scanners --> CVE["cve-scanner<br/>SonarQube Issues API"]
     Scanners --> Compliance["compliance-engine<br/>static analysis + YAML rules"]
     AIReview --> Correlate["Correlation & Dedup<br/>content-hash matching"]
     CVE --> Correlate
     Compliance --> Correlate
     Correlate --> Persist["Persist to FindingStore<br/>(SQLite)"]
+    Persist --> Sonar["sonarqube-measures<br/>quality gate metrics"]
 
-    Persist --> Para["Parallel Promise.all"]
-    Para --> Summary["code-summary<br/>LLM PR summary"]
-    Para --> Sonar["sonarqube-measures<br/>quality gate metrics"]
-
-    Summary --> MergeGate["merge-gate"]
-    Sonar --> MergeGate
+    Sonar --> MergeGate["merge-gate"]
     MergeGate --> ADOStatus["ADO: set PR status<br/>(succeeded/failed/pending)"]
 
     MergeGate --> WorkItems["create-workitems"]
     WorkItems --> ADOWI2["ADO: create Bug (critical)<br/>and Task (high)"]
 
     WorkItems --> Comment["comment-review-results"]
-    Comment --> ADOWrite["ADO: inline comments,<br/>main comment, PR properties"]
-```
-
-## Legacy Workflow (pre-v2, still present as sub-workflow)
-
-```mermaid
-flowchart TD
-    Locate["locate-pr-changes"] --> Review["code-review"]
-    Review --> Filter1["filter-issues (confidence >= 0.8)"]
-    Filter1 --> Rescore["code-review-rescore"]
-    Rescore --> Filter2["filter-issues"]
-    Filter2 --> Classify["code-review-issue-classification"]
+    Comment --> ADOWrite["ADO: inline comments,<br/>finding/thread links, main comment,<br/>PR properties"]
 ```
 
 ## Startup Flow
@@ -92,7 +77,7 @@ Both converge on `runScanLoop(agentConfig: ConfigProvider)`, which calls `scanPR
 
 The scanner pipeline runs all scanners concurrently via `Promise.allSettled`:
 
-1. **AI Review Scanner**: Code diff review via LLM → rescore confidence → classify by category → map to `NormalizedFinding` with content hash.
+1. **OpenCodeReview Scanner**: Select deterministic focuses from changed files, run OpenCodeReview once with PR/work-item context and native OCR rules, then map comments to `NormalizedFinding` objects. OpenCodeReview owns review semantics; PR Guardian does not rescore or invent confidence.
 2. **CVE Scanner**: Queries SonarQube Issues API for `VULNERABILITY` and `SECURITY_HOTSPOT` types → map to `NormalizedFinding`.
 3. **Compliance Engine**: Static analysis rules:
    - Pattern scan: TODO/FIXME/HACK/XXX comments
@@ -100,7 +85,7 @@ The scanner pipeline runs all scanners concurrently via `Promise.allSettled`:
    - Large file detection (configurable threshold)
    - YAML policy-as-code rules (configurable)
 
-All scanner results are collected, correlated by scanner engine, deduplicated by content hash (SHA-256 of `filePath + surrounding code`), and persisted to the `FindingStore` SQLite database.
+All scanner results are collected, correlated by scanner engine, deduplicated by content hash (SHA-256 of `filePath + surrounding code`), and persisted to the `FindingStore` SQLite database. OCR metadata records the selected focuses and their reasons.
 
 Fallback dedup: location-based matching `(filePath, lineStart +/- 3, sourceEngine, category)`.
 
@@ -128,13 +113,16 @@ After all findings are collected and persisted:
 
 `comment-review-results`:
 
-1. Reads classified review issues, summary text, and SonarQube measures.
+1. Reads normalized scanner findings, the deterministic review summary, and SonarQube measures.
 2. Reads original PR details from the `fetch-pr-details` step result.
 3. Reconciles with previous review findings (content-hash matching) for re-review.
-4. Posts up to 30 inline code comments, in reverse order.
+4. Posts up to 30 inline code comments.
 5. Posts the main PR review comment with approval status, errors, summary, and SonarQube measures.
 6. Stores the latest reviewed iteration id in PR properties under `CODE_REVIEW_AGENT_LATEST_REVIEW_ID`.
-7. Returns `mainCommentId` and `codeCommentIds`.
+7. Links each created ADO inline thread to its persisted finding in `finding_comment_threads`.
+8. Returns `mainCommentId` and `codeCommentIds`.
+
+The feedback daemon uses these associations to apply thread reactions or status changes only to the represented finding; it does not apply every PR thread to every finding.
 
 ### Re-review Reconciliation
 

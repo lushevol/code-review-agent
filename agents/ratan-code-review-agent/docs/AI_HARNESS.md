@@ -11,7 +11,7 @@ The harness should treat this package as a PR-review automation system with real
 An AI harness working on this project should be able to:
 
 - Understand the code review workflow and its side effects.
-- Modify prompts, schemas, filtering, and workflow steps safely.
+- Modify native OpenCodeReview rules, schemas, focus routing, and workflow steps safely.
 - Add tests or evaluation cases without posting to live PRs.
 - Run build and local validation commands when dependencies are available.
 - Keep sensitive company data and credentials out of source code and logs.
@@ -59,8 +59,7 @@ ADO_ORGANIZATION=...
 ADO_PROJECT=...
 ADO_CONFIG_BASE_PATH=...
 ADO_PROXY_URL=none
-OPENAI_BASE_URL=http://localhost:1218/v1
-OPENAI_API_KEY=...
+OCR_LLM_TOKEN=...
 SONARQUBE_TOKEN=...
 DATABASE_URL=...
 ```
@@ -82,14 +81,10 @@ Azure DevOps MCP tools for organization `lushe`. If tools are not visible in a
 running Codex session, restart Codex or open a new session so the newly
 registered MCP server is loaded.
 
-The LLM client in `src/review/agents/openai-client.ts` reads from environment variables:
-
-```ts
-baseURL: process.env.OPENAI_BASE_URL || "http://localhost:1218/v1"
-apiKey: process.env.OPENAI_API_KEY || ""
-```
-
-Override these through environment configuration rather than embedding secrets.
+The production LLM endpoint, token, model, and provider mode are configured under
+`config.openCodeReview.llm`. Use `env:NAME` references for secrets rather than
+embedding them in `.ratan/config.json`. OpenCodeReview rules live in the native
+JSON file referenced by `config.openCodeReview.rulesPath`.
 
 ## Validation Commands
 
@@ -115,7 +110,7 @@ pnpm dev
 pnpm demo
 ```
 
-`pnpm demo` is not a safe default because it starts the live PR scanning flow from `src/demo.ts`. The `scan` CLI command also has external side effects (ADO calls) and requires a valid config.
+`pnpm demo` is not a safe default because it starts the live PR scanning flow from `src/demo.ts`. The `start` CLI command also has external side effects (ADO calls) and requires a valid config.
 
 ## Suggested Harness Test Strategy
 
@@ -123,21 +118,17 @@ Start with unit tests around pure utilities:
 
 - `maskSensitiveData`
 - `filterReviewableFiles`
-- `applyConfidenceScoreFilter`
-- `chunkContent`
-- `sortIssues`
-- `duplicate-issue-check`
+- `selectReviewFocuses`
+- finding content-hash generation and correlation
 
 Then test workflow steps with mocked runtime context and mocked clients:
 
 - `fetch-pr-details` should call `getPullRequestById`.
-- `locate-pr-changes` should mask and filter diffs.
-- `code-review` should chunk diffs, build the `review` prompt, call `codeReviewAgent`, and attach file paths.
-- `filter-issues` should enforce `CONFIDENCE_SCORE_THRESHOLD`.
-- `code-review-rescore` should preserve issues and update only returned scores.
-- `code-review-issue-classification` should add categories and default to `Uncategorized`.
+- `open-code-review-scanner` should pass the resolved native rule file unchanged, include selected focus reasons in the background, and map OCR comments to normalized findings.
+- `scanner-pipeline` should preserve graceful degradation, correlate by content hash, and persist stable finding IDs.
 - `sonarqube-measures` should return `null` on missing client or fetch errors.
-- `comment-review-results` should limit inline comments to 30 and update the latest-review PR property.
+- `comment-review-results` should limit inline comments to 30, link created ADO threads to persisted findings, and update the latest-review PR property.
+- `FeedbackService` should synchronize only threads explicitly associated with each finding.
 
 Do not use real ADO or SonarQube clients in automated tests.
 
@@ -178,52 +169,37 @@ A complete evaluation harness should:
 2. Run only the review path against `input.codeChange`, not the full PR-commenting workflow.
 3. Normalize actual issues to the test schema.
 4. Fuzzy-match issue file and line against expected issues.
-5. Use `codeReviewEvaluationJudgeAgent` only for precision and suggestion-quality checks.
+5. Use `codeReviewEvaluationJudgeAgent` only for evaluation; it is not part of production review.
 6. Emit metrics matching `codeChangesReviewEvaluationResultSchema`.
 
-## Prompt Harness
+## OpenCodeReview Harness
 
-Prompt names are resolved through `agentConfig.buildPrompt(...)`.
-
-Expected prompt keys:
-
-- `review`
-- `review-rescore`
-- `issue-classification`
-- `summary`
-
-For review prompts, the review step passes path variables:
-
-```ts
-{
-  repo: repoName,
-  extension: extractFileExtension(change.newFilePath)
-}
-```
-
-Harness tests should verify prompt inputs, but should not assume prompt text is stored in this package. Prompt content appears to come from `agent-config-manager` and external config files.
+The harness should verify the native rule file is valid JSON and passed unchanged
+to `ocr review --rule`. Review-focus routing is deterministic: `general` always
+applies, while changed code may also select `tests`, `error-handling`,
+`type-design`, or `comments`. The selections and reasons are injected into OCR
+background context and returned in scanner metadata; they do not cause extra LLM
+calls.
 
 ## Live Run Checklist
 
 Before allowing live PR review:
 
-- Run `ratan-code-review init` to scaffold a valid config, then verify ADO connectivity with `ratan-code-review scan` against a test PR first.
+- Run `ratan-code-review start --pr-id <test-pr-id>` to scaffold a valid config and verify connectivity against a dedicated test PR first.
 - Confirm the target repositories and PR age window in root config.
-- Confirm `ADO_TOKEN`, `OPENAI_BASE_URL`, and `OPENAI_API_KEY` (or `SONARQUBE_TOKEN`) are scoped correctly.
-- Confirm the model endpoint at the configured `OPENAI_BASE_URL` is running and compatible with the AI SDK.
-- Confirm the review prompts are available for `review`, `review-rescore`, `issue-classification`, and `summary`.
-- Confirm allowlist/blocklist patterns and merge policy configuration.
-- Confirm whether the `locate-pr-changes` return value should use filtered `codeChangesArray`.
+- Confirm `ADO_TOKEN`, the token referenced by `config.openCodeReview.llm.token`, and optional `SONARQUBE_TOKEN` are scoped correctly.
+- Confirm the configured OpenCodeReview model endpoint is running and compatible with the selected provider mode.
+- Confirm `.ratan/opencodereview/rule.json` is valid native OCR rule JSON.
+- Confirm OCR rule scope and merge-policy configuration.
 - Run against a dedicated test PR before enabling broad scanning.
 
-Current status: local build/test/package checks pass for v2 (10 test files, ~134+ tests). The installed CLI can authenticate to ADO, the Azure DevOps MCP server is registered and smoke-tested, and the configured prompt files load through `agent-config-manager`. Scanner pipeline, FindingStore, webhook receiver, merge gate, work item creation, and dashboard are implemented. The config repo currently has starter prompt content and `scanRepoNames` is intentionally set to `__replace_with_target_repo_name__`; do not claim end-to-end ADO review operation until the target repo is configured and a dedicated live test PR review has been completed.
+Current status: local build and test checks pass. The scanner pipeline, OpenCodeReview runner and focus router, FindingStore finding/thread associations, feedback synchronization, webhook receiver, merge gate, work-item creation, and dashboard are implemented. Do not claim end-to-end ADO review operation until a target repository is configured and a dedicated live test PR review has been completed.
 
 ## Recommended Improvements
 
-- [DONE] Move model base URL, model name, and API key behavior to environment or agent config — now reads `OPENAI_BASE_URL` + `OPENAI_API_KEY` from env.
-- Add a `test` script and focused Vitest tests (currently 10 test files, ~134+ tests).
+- [DONE] Move production model URL, token, model, and provider mode to `config.openCodeReview.llm`, with `env:` references for secrets.
+- [DONE] Add focused Vitest coverage for OCR configuration, focus routing, persistence, and workflow integration.
 - Implement `src/evaluation/scorer.ts` and `startupEvaluation`.
-- Fix or confirm the `locate-pr-changes` filtered array return behavior.
 - Align `pr-review-workflow` output schema with the `comment-review-results` step.
 - Log inline comment failures with enough context to debug without exposing secrets.
 - Add dry-run mode so the full workflow can execute without writing PR comments.

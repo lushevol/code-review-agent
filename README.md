@@ -2,7 +2,7 @@
 
 AI-powered Azure DevOps pull request governance platform built as a pnpm workspace. Scans PRs through a multi-scanner pipeline (AI code review, CVE scanning, compliance checking), enforces merge policies via ADO PR status, and provides a dashboard for findings management.
 
-Originally a basic framework-based code review agent, evolved into a full governance platform (v2: PR Guardian Copilot). The current runtime uses plain TypeScript orchestration and the AI SDK directly.
+Originally a basic framework-based code review agent, it evolved into a full governance platform (v2: PR Guardian Copilot). The current production runtime uses plain TypeScript orchestration and OpenCodeReview as its sole LLM review engine.
 
 ## Packages
 
@@ -10,7 +10,7 @@ Originally a basic framework-based code review agent, evolved into a full govern
 | --- | --- | --- |
 | `ratan-code-review` | `agents/ratan-code-review-agent` | TypeScript review runtime, scanner pipeline, CLI, webhooks, dashboard backend |
 | `finding-store` | `packages/finding-store` | SQLite-based persistence for findings, overrides, and audit records |
-| `agent-config-manager` | `packages/agent-config-manager` | Runtime config and prompt loading from Azure DevOps or local filesystem |
+| `agent-config-manager` | `packages/agent-config-manager` | Runtime configuration loading from Azure DevOps or local filesystem |
 | `ratan-ado-api` | `packages/ratan-ado-api` | Azure DevOps API client |
 | `ratan-code-review-agent-orm` | `packages/ratan-code-review-agent-orm` | Drizzle ORM tables and repository helpers (PostgreSQL) |
 | `ratan-markdown-tool` | `packages/ratan-markdown-tool` | Markdown/HTML/JSON conversion helpers |
@@ -73,7 +73,7 @@ On first run, `start` creates `.ratan/config.json`, `.ratan/opencodereview/rule.
 `data/`, and `logs/`. Edit `config.json` with your ADO organization and project
 before scanning.
 
-Default config and prompt templates are at `templates/` in the package — they're
+Default config and OpenCodeReview rule templates are at `templates/` in the package — they're
 copied to `.ratan/` on first `start` run. You can edit the generated files or
 customize the templates before re-running.
 
@@ -121,9 +121,9 @@ ratan-code-review dashboard
 
 ```
 PR Event (webhook/poll) → Eligibility Gate → fetchPR → fetchWorkItemContext
-  → scannerPipeline (AI Review + CVE + Compliance, parallel)
+  → scannerPipeline (OpenCodeReview + optional CVE/Compliance, parallel)
   → correlation/dedup → persist to FindingStore
-  → codeSummary (parallel) + sonarqubeMeasures (parallel)
+  → sonarqubeMeasures
   → mergeGate (set ADO PR status)
   → createWorkItems (Bug/Task for critical/high)
   → comment (PR summary + inline comments + re-review reconciliation)
@@ -135,7 +135,7 @@ Three scanners run concurrently; individual failures are non-fatal:
 
 | Scanner | Engine | What It Detects |
 |---------|--------|----------------|
-| AI Review | LLM (GPT-5-mini) | Code quality issues, bugs, anti-patterns |
+| OpenCodeReview | Native OCR rules + configured LLM | Code quality issues, bugs, and anti-patterns; one run receives deterministic focuses for tests, error handling, type design, and comments when relevant |
 | CVE | SonarQube Issues API | Vulnerabilities, security hotspots |
 | Compliance | Static analysis + YAML rules | TODO/FIXME, console.log, large files |
 
@@ -172,25 +172,19 @@ Local MCP smoke testing confirms the server starts for organization `lushe`
 and exposes Azure DevOps tools. A new Codex session may be required before the
 newly registered MCP tools are visible to the agent runtime.
 
-The ADO config repository currently contains starter files under
-`/code-review-agent`:
+OpenCodeReview configuration is scaffolded locally under `.ratan/`:
 
-- `config.json`
-- `prompts/review.md`
-- `prompts/review-rescore.md`
-- `prompts/issue-classification.md`
-- `prompts/summary.md`
+- `config.json` — includes `config.openCodeReview.llm` and the native rule path
+- `opencodereview/rule.json` — native OpenCodeReview review rules
 
 ## Current Verification Status
 
-As of the latest local verification (v2):
+As of the latest local verification:
 
-- `pnpm test` passes — 10 test files, ~134+ tests.
+- `pnpm test` passes — 162 tests.
 - `pnpm build` passes.
-- `pnpm -r pack --pack-destination /tmp/code-review-agent-packs` creates tarballs for all publishable workspaces.
-- `npm publish --dry-run /tmp/code-review-agent-packs/ratan-code-review-0.1.0.tgz` succeeds for the CLI package.
-- Installing the packed CLI into a clean local consumer project works on macOS, and `ratan-code-review --help` runs from `node_modules/.bin`.
-- ADO authentication/connectivity works, and the configured remote prompt files load through `agent-config-manager`.
+- The OpenCodeReview runner passes the native rule file through unchanged and isolates its generated runtime configuration.
+- Review-focus routing and finding-to-ADO-thread feedback linkage are covered by automated tests.
 
 The end-to-end goal is therefore not complete yet: the starter config still needs a real `scanRepoNames` target, and a controlled live test PR review must be run before claiming full ADO review operation.
 
@@ -201,11 +195,11 @@ Required for live operation:
 ```bash
 ADO_TOKEN=your_azure_devops_pat
 
-OPENAI_BASE_URL=http://localhost:1218/v1
-OPENAI_API_KEY=your_api_key
+OCR_LLM_TOKEN=your_api_key
 ```
 
-Optional:
+The endpoint, model, provider mode, and `env:OCR_LLM_TOKEN` reference belong in
+`config.openCodeReview.llm`. Optional integrations use:
 
 ```bash
 SONARQUBE_TOKEN=your_sonarqube_token

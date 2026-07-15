@@ -62,13 +62,38 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+### 5. Post-Code-Change Documentation Hook (Mandatory)
+
+**Every code change must trigger a documentation impact check before handoff or commit.**
+
+After changing code:
+
+1. Run `git diff --name-only` and map each changed area to its user-facing or maintainer-facing documentation.
+2. Update every affected document in the same change. Do not defer documentation updates to a later task.
+3. Search for stale names, commands, configuration keys, workflow steps, and architecture descriptions with `rg`.
+4. Verify documented commands against `package.json` scripts and documented paths against the repository.
+5. In the final report, list the documents updated. If no document required a content change, state why.
+
+Documentation triggers:
+
+| Code change | Required documentation check |
+|-------------|------------------------------|
+| Runtime flow, scanner, workflow step, persistence, or integration behavior | `README.md`, `AGENTS.md`, and `agents/ratan-code-review-agent/docs/RUNTIME_ARCHITECTURE.md` |
+| CLI command, option, scaffolding, or operational behavior | `README.md`, `AGENTS.md`, and `agents/ratan-code-review-agent/docs/AI_HARNESS.md` |
+| Configuration schema, environment variable, template, or default | `README.md`, `AGENTS.md`, templates, and config/design docs |
+| Public package API or package responsibility | `README.md` and the package-level documentation |
+| Test/evaluation workflow or safety constraint | `AGENTS.md` and `agents/ratan-code-review-agent/docs/AI_HARNESS.md` |
+| Accepted design or implementation-plan behavior | The corresponding file under `docs/superpowers/specs/` or `docs/superpowers/plans/` |
+
+A code change is not complete while relevant documentation describes the old behavior.
+
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
 ## Project Overview
 
-This is a pnpm workspace monorepo (pnpm 9/11) containing **PR Guardian Copilot** — an AI-powered Azure DevOps pull request governance platform built with plain TypeScript orchestration. It evolved from a basic code review agent into a full governance platform by adding a multi-scanner pipeline (AI review, CVE scanning, compliance checking), merge governance via ADO PR status, webhook-driven PR event detection, a React dashboard, SQLite-based finding persistence, and an audit trail with override management.
+This is a pnpm workspace monorepo (pnpm 9/11) containing **PR Guardian Copilot** — an AI-powered Azure DevOps pull request governance platform built with plain TypeScript orchestration. OpenCodeReview is the sole LLM review engine; PR Guardian owns workspace preparation, optional CVE/compliance scanning, correlation, persistence, ADO comments, feedback, and merge governance.
 
 The system connects to Azure DevOps (ADO) for PR data, calls OpenAI-compatible LLMs for AI review, queries SonarQube for security vulnerabilities, enforces compliance rules, and posts review results as ADO PR comments and status checks.
 
@@ -95,14 +120,12 @@ prReviewWorkflow(prId):
   fetch-pr-details                    — ADO: PR details, diffs, iteration metadata
   fetch-workitem-context              — ADO: extract work item IDs from commits, fetch descriptions/AC
   scanner-pipeline (parallel Promise.allSettled):
-    ├── ai-review-scanner            — LLM code review → rescore → classify → NormalizedFinding
+    ├── open-code-review-scanner     — focused OpenCodeReview run → NormalizedFinding
     ├── cve-scanner                  — SonarQube Issues API (VULNERABILITY, SECURITY_HOTSPOT)
     └── compliance-engine            — Static analysis: TODO/FIXME, console.log, large files, YAML rules
   correlation & dedup (content-hash)  — Merge all scanner findings, deduplicate by SHA-256 hash
-  persist to FindingStore             — SQLite: findings, override_log, audit_records
-  parallel Promise.all:
-    ├── code-summary                 — LLM PR summary
-    └── sonarqube-measures           — SonarQube quality gate metrics
+  persist to FindingStore             — SQLite: findings, finding_comment_threads, overrides, audit
+  sonarqube-measures                 — SonarQube quality gate metrics
   merge-gate                         — Evaluate blocking findings, set ADO PR status (succeeded/failed)
   create-workitems                   — Auto-create ADO Bug (critical severity) and Task (high severity)
   comment-review-results             — Post PR summary + inline comments + reconcile re-reviews
@@ -124,7 +147,7 @@ Fallback: polling every 30 min via `start --watch`
 
 The `ratan-code-review` CLI has two commands:
 
-- **`start`** — Unified entry point. On first run, scaffolds `.ratan/` folder with default config and prompts from template files. Reads config, initializes the PR queue, and starts the scan loop. Runs a background feedback daemon (ADO comment sync) automatically in `--watch` mode. Options: `--config <path>`, `--pr-id <id>`, `--watch` (30-min interval + feedback daemon), `--repo-pattern <patterns...>`.
+- **`start`** — Unified entry point. On first run, scaffolds `.ratan/` with default config and native OpenCodeReview rules. Reads config, initializes the PR queue, and starts the scan loop. Runs a background feedback daemon (ADO comment sync) automatically in `--watch` mode. Options: `--config <path>`, `--pr-id <id>`, `--watch` (30-min interval + feedback daemon), `--repo-pattern <patterns...>`.
 - **`dashboard`** — Starts the PR Guardian dashboard (Express REST API + React SPA). Serves `/api/health`, `/api/queue`, `/api/findings`, `/api/audit`, `/api/stats`, `/api/prs`.
 
 ### Scanner Pipeline
@@ -133,30 +156,27 @@ The scanner pipeline runs all scanners concurrently via `Promise.allSettled` (gr
 
 | Scanner | Engine | Source | Purpose |
 |---------|--------|--------|---------|
-| AI Review | `ai-review` | OpenAI-compatible LLM | Code diff review, confidence rescore, issue classification |
+| OpenCodeReview | `open-code-review` | `@alibaba-group/open-code-review` | Code diff review using native OCR rules and deterministic review-focus routing |
 | CVE | `cve` | SonarQube Issues API | Vulnerability and security hotspot detection |
 | Compliance | `compliance` | Static analysis + YAML rules | TODO/FIXME/HACK detection, console.log, large files, configurable rules |
 
-Each scanner produces `NormalizedFinding` objects with a content hash (SHA-256 of `filePath + surrounding code`) for identity across PR iterations. Findings are correlated, deduplicated by content hash, and persisted to the `FindingStore`.
+Each scanner produces `NormalizedFinding` objects with a content hash (SHA-256 of `filePath + surrounding code`) for identity across PR iterations. Findings are correlated, deduplicated by content hash, and persisted to the `FindingStore`. Inline ADO thread IDs are linked back to persisted finding IDs so feedback synchronization updates only the finding represented by that thread.
 
 ### Config Provider
 
 The `ConfigProvider` interface (in `agent-config-manager`) is implemented by:
-- **`AgentConfigClient`** — Fetches config/prompts from ADO repos with caching
-- **`LocalConfigClient`** — Reads config JSON and prompt `.md` files from local filesystem
+- **`AgentConfigClient`** — Fetches configuration from ADO repos with caching
+- **`LocalConfigClient`** — Reads configuration and resolves local rule paths
 
-The wrapper config at `.ratan/code-review-agent/config.json` declares the mode (`"local"` or `"ado"`) and mode-specific parameters. Secrets use `"env:VAR_NAME"` syntax, resolved at load time by the config loader.
+The wrapper config at `.ratan/config.json` declares the mode (`"local"` or `"ado"`) and mode-specific parameters. OpenCodeReview LLM settings live under `config.openCodeReview.llm`; its native rule file defaults to `.ratan/opencodereview/rule.json`. Secrets use `"env:VAR_NAME"` syntax, resolved at load time by the config loader.
 
-### Agents (registered in `src/review/index.ts`)
-- **codeReviewAgent** — GPT-5-mini, reviews code diffs, returns issues with Zod schema
-- **codeReviewRescoreAgent** — re-evaluates confidence scores
-- **codeReviewIssueClassificationAgent** — categorizes issues
-- **codeChangeSummaryAgent** — summarizes PR changes
-- **codeReviewEvaluationJudgeAgent** — evaluation judge
+### Review Engines
+- **OpenCodeReview** — sole production LLM review engine; receives PR/work-item context, native OCR rules, and selected focuses (`general`, `tests`, `error-handling`, `type-design`, `comments`) in one review run.
+- **codeReviewEvaluationJudgeAgent** — evaluation-only judge; it is not part of the production PR review workflow.
 
 ### Services
 
-- **FindingStore** — SQLite persistence via `packages/finding-store`. Tables: `findings`, `override_log`, `audit_records`. Content-addressable finding identity via SHA-256 hash. `MemoryFindingStore` variant for tests.
+- **FindingStore** — SQLite persistence via `packages/finding-store`. Tables include `findings`, `finding_comment_threads`, `override_log`, and `audit_records`. Content-addressable finding identity uses SHA-256 hashes; ADO thread associations support finding-specific feedback. `MemoryFindingStore` is used in tests.
 - **OverrideService** — Finding resolution override management. Workflows: waive, false-positive, risk-accept. Two-person approval for critical findings. Expiry management. Full audit trail.
 - **FeedbackService** — Collects ADO comment reactions (👍/👎), aggregates false-positive patterns, generates prompt optimization recommendations (semi-automated, human review required).
 - **AuditService** — Append-only audit records. Every review result captured with commit hash, engine versions, model version, and timestamp. Retention policy.
@@ -180,19 +200,17 @@ A React SPA (Vite + Recharts + React Router) served by an Express backend:
 
 ### LLM Configuration
 
-Model endpoint reads from environment: `OPENAI_BASE_URL` and `OPENAI_API_KEY` (resolved in `src/review/agents/openai-client.ts`).
+OpenCodeReview model configuration is read from `config.openCodeReview.llm` (`url`, `token`, `model`, and optional `useAnthropic`). Values may use `env:VAR_NAME`; there is no production fallback to `OPENAI_BASE_URL` or `OPENAI_API_KEY`.
 
 ### Data Privacy
 Diff text is masked via `maskSensitiveData()` using `redact-pii` (credentials only) and custom regex for Stripe keys, bearer tokens, and `password`/`token`/`secret` assignments.
 
 ### Config System
 `agent-config-manager` provides the `ConfigProvider` interface. Two implementations:
-- `AgentConfigClient` — fetches `config.json` and prompt markdown files from an ADO repo, caches with configurable TTL (default 5 min), resolves Handlebars templates.
-- `LocalConfigClient` — reads from local filesystem via the config loader (`src/cli/config/loader.ts`), also supports Handlebars interpolation for path and content variables.
+- `AgentConfigClient` — fetches configuration from an ADO repo and caches it with a configurable TTL (default 5 min).
+- `LocalConfigClient` — reads from the local filesystem via the config loader (`src/cli/config/loader.ts`) and resolves the OCR rule path relative to the config directory.
 
-Prompt keys used: `review`, `review-rescore`, `issue-classification`, `summary`.
-
-Default config and prompt templates shipped with the package live at `templates/` (published to npm). On first `start` run, the CLI copies these to `.ratan/` for editing.
+OpenCodeReview owns review semantics through its native rule JSON. Default config and rule templates shipped with the package live at `templates/` (published to npm). On first `start` run, the CLI copies them to `.ratan/` for editing.
 
 ## Key Files
 
@@ -204,19 +222,20 @@ Default config and prompt templates shipped with the package live at `templates/
 - `agents/ratan-code-review-agent/src/cli/dashboard/` — Express dashboard backend (health, findings, audit, stats APIs)
 - `agents/ratan-code-review-agent/bin/ratan-code-review.cjs` — npm bin shim (CJS entry)
 - `agents/ratan-code-review-agent/bin/ratan-code-review.js` — npm bin shim (ESM entry)
-- `agents/ratan-code-review-agent/src/review/index.ts` — local review agent registry
-- `agents/ratan-code-review-agent/src/review/workflows/pr-review-workflow.ts` — top-level workflow definition (v2: scanner pipeline, merge gate, work items)
-- `agents/ratan-code-review-agent/src/review/workflows/steps/` — individual workflow step implementations (fetch-pr, fetch-workitem-context, code-review, filter-issues, rescore, classify, code-summary, sonarqube-measures, merge-gate, create-workitems, comment)
-- `agents/ratan-code-review-agent/src/review/workflows/scanners/` — scanner pipeline: types, scanner-pipeline, ai-review-scanner, cve-scanner, compliance-engine
+- `agents/ratan-code-review-agent/src/review/index.ts` — evaluation-agent registry; production review uses OpenCodeReview directly
+- `agents/ratan-code-review-agent/src/review/open-code-review/` — OCR runner and deterministic review-focus router
+- `agents/ratan-code-review-agent/src/review/workflows/pr-review-workflow.ts` — top-level workflow definition (scanner pipeline, merge gate, audit, work items, comments)
+- `agents/ratan-code-review-agent/src/review/workflows/steps/` — fetch, SonarQube measures, merge-gate, audit, work-item, and comment steps
+- `agents/ratan-code-review-agent/src/review/workflows/scanners/` — OpenCodeReview, CVE, and compliance scanners plus correlation/persistence pipeline
 - `agents/ratan-code-review-agent/src/review/workflows/services/` — audit-service, feedback-service, override-service
 - `agents/ratan-code-review-agent/src/review/workflows/utils/` — finding-reconciler, review-tracker
-- `agents/ratan-code-review-agent/src/review/agents/` — LLM agent definitions (openai-client, code-review-agent, code-review-rescore-agent, code-review-issue-classification-agent, code-change-summary-agent, code-review-evaluation-agent)
+- `agents/ratan-code-review-agent/src/review/agents/` — evaluation-only agent support; not the production review engine
 - `agents/ratan-code-review-agent/src/review/types/index.ts` — shared Zod schemas and TypeScript types
 - `agents/ratan-code-review-agent/src/review/types/finding.ts` — NormalizedFinding schema, FindingCategory, FindingSeverity, EngineType, content hash computation
 - `agents/ratan-code-review-agent/src/bootstrap/` — startup, PR scanning, session handling
 - `agents/ratan-code-review-agent/src/webhooks/` — Express webhook receiver, HMAC validation, eligibility gate
 - `agents/ratan-code-review-agent/src/evaluation/` — evaluation types, dataset fixtures, judge agent
-- `agents/ratan-code-review-agent/templates/` — default config and prompt templates (published to npm)
+- `agents/ratan-code-review-agent/templates/` — default config and native OCR rule templates (published to npm)
 
 ### Dashboard (React SPA)
 - `agents/ratan-code-review-agent/dashboard/` — Vite + React + Recharts SPA (DashboardOverview, FindingsPage, PRsPage, AdminPage)
@@ -273,9 +292,9 @@ pnpm --filter ratan-code-review codegen
 # Required
 ADO_TOKEN=your_azure_devops_pat
 
-# LLM endpoint (read from env by openai-client.ts)
-OPENAI_BASE_URL=http://localhost:1218/v1
-OPENAI_API_KEY=your_api_key
+# LLM credentials are normally referenced from config.openCodeReview.llm
+# Example: "token": "env:OCR_LLM_TOKEN"
+OCR_LLM_TOKEN=your_api_key
 
 # Optional
 SONARQUBE_TOKEN=your_sonarqube_token
@@ -286,21 +305,20 @@ DATABASE_URL=postgres_connection_string
 
 - `pnpm dev` / `pnpm demo` / `pnpm agent:dev` create real external side effects (ADO calls, PR comments). Do not run without user confirmation.
 - `ADO_TOKEN` env var is required for Azure DevOps access.
-- `OPENAI_BASE_URL` and `OPENAI_API_KEY` are read from environment by `openai-client.ts` (previously hardcoded).
+- Production LLM endpoint, token, model, and provider mode are owned by `config.openCodeReview.llm`; `env:` references are resolved recursively.
 - Workspace dependencies: `finding-store`, `agent-config-manager`, `ratan-ado-api`, `ratan-sonarqube-api` — defined in other packages in the monorepo.
 - The `start` CLI command scaffolds `.ratan/` from `templates/` on first run, then reads config via `ConfigProvider` and runs the scan loop.
 - The scanner pipeline uses `Promise.allSettled` for graceful degradation — individual scanner failures don't block the pipeline.
 - Merge gate sets ADO PR Status (`succeeded`/`failed`) based on policy. Errors are non-fatal.
 - Work item creation step handles errors gracefully (non-fatal).
 - Comment step silently swallows per-line comment failures and still posts the main PR comment.
-- Confidence score threshold for AI review findings is 0.8 (in `src/review/utils/const.ts`).
-- `locate-pr-changes` builds a filtered/masked `codeChangesArray` but returns the original `codeDiffsArray` — verify before relying on incremental filtering.
-- Test count: 10 test files (~134+ tests) covering CLI config, sensitive data mask, compliance engine, CVE scanner, scanner pipeline integration, finding types, commit parser, retry logic, eligibility gate, and local config client.
+- OpenCodeReview output does not expose a calibrated confidence score; do not restore the obsolete confidence-rescore/filter path or invent confidence values.
+- The test suite covers CLI config/scaffolding, OpenCodeReview configuration and focus routing, finding/thread persistence, feedback synchronization, scanners, workflow integration, sensitive-data masking, retry logic, and eligibility gates.
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **code-review-agent** (2016 symbols, 3911 relationships, 141 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **code-review-agent** (2183 symbols, 4297 relationships, 149 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
