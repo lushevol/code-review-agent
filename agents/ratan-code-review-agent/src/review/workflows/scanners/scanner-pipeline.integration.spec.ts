@@ -14,8 +14,10 @@ import {
 import type { Scanner, ScanContext } from "./types";
 import {
   aggregateScannerResults,
+  buildReviewOutcomeMetadata,
   buildCorrelationSummary,
   correlateFindings,
+  loadPreviouslyLinkedFindings,
   prioritizeFindings,
   severityCounts,
 } from "./scanner-pipeline";
@@ -258,6 +260,42 @@ describe("Scanner Pipeline Integration", () => {
   });
 
   describe("consolidated presentation", () => {
+    it("adds postability and duplicate-suppression metrics to review metadata", () => {
+      const metadata = buildReviewOutcomeMetadata(
+        {
+          status: "success",
+          warningTypes: ["partial-file"],
+          reviewFocuses: [{ focus: "general", reasons: ["Always selected."] }],
+        },
+        [
+          createFinding({ severity: "high", contentHash: "postable" }),
+          createFinding({ severity: "low", contentHash: "invalid", lineStart: 0 }),
+          createFinding({ severity: "medium", contentHash: "linked" }),
+        ],
+        {
+          findingIds: new Set<string>(),
+          contentHashes: new Set(["linked"]),
+        },
+        2,
+      );
+
+      expect(metadata).toEqual({
+        status: "success",
+        warningTypes: ["partial-file"],
+        reviewFocuses: [{ focus: "general", reasons: ["Always selected."] }],
+        postableFindingCount: 1,
+        duplicateSuppressionReasons: {
+          contentHashCorrelation: 2,
+          inlineContentHash: 0,
+          previouslyLinkedThread: 1,
+        },
+        inlineSuppressionReasons: {
+          invalidCodeLocation: 1,
+          commentLimit: 0,
+        },
+      });
+    });
+
     it("propagates an incomplete OpenCodeReview result through pipeline aggregation", () => {
       const aggregated = aggregateScannerResults(
         [{ id: "open-code-review", engine: "open-code-review" }],
@@ -284,6 +322,43 @@ describe("Scanner Pipeline Integration", () => {
           durationMs: 25,
         },
       });
+    });
+
+    it("retains routed focuses when OpenCodeReview rejects", () => {
+      const reviewFocuses = [
+        { focus: "general" as const, reasons: ["Always selected."] },
+      ];
+      const aggregated = aggregateScannerResults(
+        [{ id: "open-code-review", engine: "open-code-review" }],
+        [{ status: "rejected", reason: new Error("runner failed") }],
+        { reviewFocuses },
+      );
+
+      expect(aggregated).toEqual({
+        findings: [],
+        reviewExecutionStatus: "incomplete",
+        reviewMetadata: {
+          status: "failed",
+          durationMs: 0,
+          reviewFocuses,
+        },
+      });
+    });
+
+    it("uses empty link history when finding-store reads fail", () => {
+      const previouslyLinked = loadPreviouslyLinkedFindings(
+        {
+          getFindingsByPr: () => {
+            throw new Error("store unavailable");
+          },
+          getCommentThreadsByPr: () => [],
+        } as never,
+        7,
+        "repo",
+      );
+
+      expect(previouslyLinked.findingIds.size).toBe(0);
+      expect(previouslyLinked.contentHashes.size).toBe(0);
     });
 
     it("groups findings into blocking, important, and advisory categories with review focuses", () => {

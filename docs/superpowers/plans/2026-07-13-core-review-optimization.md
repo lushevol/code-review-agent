@@ -178,6 +178,13 @@ the existing 30-comment limit.
 
 ### Phase 3 — observability, pilot, and policy decision
 
+**Implementation status 2026-07-15:** local observability and audit API export
+are implemented. Audit raw outputs use an explicit allowlist for focus/routing,
+OCR execution, postability, and suppression metrics. No dashboard filter or
+merge-policy change was added. The live ADO pilot and written post-pilot policy
+decision remain pending explicit authorization and a bounded target cohort; see
+`docs/research/2026-07-15-core-review-focus-pilot-report.md`.
+
 **Files:**
 
 - Modify: `agents/ratan-code-review-agent/src/review/workflows/scanners/scanner-pipeline.ts`

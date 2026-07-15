@@ -146,6 +146,12 @@ blocking status and severity, deduplicated by content hash, suppressed when the
 finding was already linked to an ADO thread, and capped at 30. These presentation
 rules do not alter persisted severity or merge policy.
 
+Pilot metrics are written to each audit record's `rawScannerOutputs`: selected
+focuses and reasons, OCR status/warnings/duration/reviewed-file count, postable
+finding count, and duplicate/inline suppression counts. The payload is an
+explicit allowlist and excludes arbitrary model configuration. It is available
+through `/api/audit`; no focus/status dashboard controls are enabled yet.
+
 ### Webhooks
 
 - Express receiver with HMAC-SHA256 validation
@@ -188,10 +194,11 @@ OpenCodeReview configuration is scaffolded locally under `.ratan/`:
 
 As of the latest local verification:
 
-- `pnpm test` passes — 171 tests.
+- `pnpm test` passes — 177 tests.
 - `pnpm build` passes.
 - The OpenCodeReview runner passes the native rule file through unchanged and isolates its generated runtime configuration.
 - Review-focus routing and finding-to-ADO-thread feedback linkage are covered by automated tests.
+- Audit pilot metrics and their API export are covered without exposing secret configuration.
 
 The end-to-end goal is therefore not complete yet: the starter config still needs a real `scanRepoNames` target, and a controlled live test PR review must be run before claiming full ADO review operation.
 

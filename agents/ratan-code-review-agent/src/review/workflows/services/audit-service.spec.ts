@@ -21,21 +21,45 @@ describe("AuditService", () => {
         baseCommitHash: "def",
         reviewStartTimestamp: "2024-01-01T00:00:00.000Z",
         reviewEndTimestamp: "2024-01-01T00:01:00.000Z",
-        scanners: [{ engine: "ai-review", version: "1.0.0", durationMs: 12 }],
-        modelVersion: "gpt-5-mini",
+        scanners: [
+          { engine: "open-code-review", version: "1.7.7", durationMs: 12 },
+        ],
+        modelVersion: "review-model",
         findingsCount: 1,
         blockingFindingsCount: 0,
         mergePolicyDecision: "allowed",
         supersedesReviewId: null,
-        rawScannerOutputs: { scanner: { count: 1 } },
+        rawScannerOutputs: {
+          reviewExecutionStatus: "complete",
+          reviewFocuses: [
+            { focus: "general", reasons: ["Always selected."] },
+          ],
+          postableFindingCount: 1,
+          duplicateSuppressionReasons: {
+            contentHashCorrelation: 0,
+            inlineContentHash: 0,
+            previouslyLinkedThread: 0,
+          },
+        },
       });
 
       const [record] = store.queryAuditRecords({ prId: 123, repository: "repo" });
 
       expect(record.scanners).toEqual([
-        { engine: "ai-review", version: "1.0.0", durationMs: 12 },
+        { engine: "open-code-review", version: "1.7.7", durationMs: 12 },
       ]);
-      expect(record.rawScannerOutputs).toEqual({ scanner: { count: 1 } });
+      expect(record.rawScannerOutputs).toEqual({
+        reviewExecutionStatus: "complete",
+        reviewFocuses: [
+          { focus: "general", reasons: ["Always selected."] },
+        ],
+        postableFindingCount: 1,
+        duplicateSuppressionReasons: {
+          contentHashCorrelation: 0,
+          inlineContentHash: 0,
+          previouslyLinkedThread: 0,
+        },
+      });
     } finally {
       store.close();
       await rm(dir, { recursive: true, force: true });

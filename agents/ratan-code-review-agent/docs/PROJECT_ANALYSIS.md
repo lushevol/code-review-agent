@@ -34,6 +34,8 @@ fallback.
   synchronized only to the represented finding.
 - Records audits, supports overrides, creates configured work items, and exposes
   a dashboard and webhook receiver.
+- Records allowlisted pilot observability in audit raw outputs and exports it
+  through the existing audit API without persisting arbitrary model metadata.
 
 ## Runtime Workflow
 
@@ -168,13 +170,15 @@ production PR-review engine.
 
 ## Verification State
 
-- `pnpm test` passes with 171 tests.
+- `pnpm test` passes with 177 tests.
 - `pnpm build` passes.
 - Tests cover OCR configuration and native rule pass-through, focus routing,
   scanner integration, finding/thread persistence, feedback synchronization,
   comment linkage, CLI configuration, and supporting scanners/utilities.
 - No live PR scan should be claimed from local verification alone; a configured
   target repository and dedicated test PR are still required.
+- The routed-review pilot and post-pilot policy decision remain pending explicit
+  authorization and a bounded target cohort.
 
 ## Risks And Gaps
 

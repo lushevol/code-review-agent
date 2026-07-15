@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { NormalizedFinding } from "../../types/finding";
 import {
+  evaluatePostableFindings,
   isInlinePostable,
-  selectPostableFindings,
 } from "./finding-eligibility";
 
 describe("isInlinePostable", () => {
@@ -15,9 +15,34 @@ describe("isInlinePostable", () => {
   });
 });
 
-describe("selectPostableFindings", () => {
+describe("evaluatePostableFindings", () => {
+  it("reports why inline findings were suppressed", () => {
+    const selection = evaluatePostableFindings(
+      [
+        finding({ contentHash: "kept", severity: "high" }),
+        finding({ contentHash: "kept", severity: "low" }),
+        finding({ contentHash: "invalid", filePath: null }),
+        finding({ contentHash: "linked", id: "22222222-2222-4222-8222-222222222222" }),
+      ],
+      {
+        findingIds: new Set(["22222222-2222-4222-8222-222222222222"]),
+        contentHashes: new Set<string>(),
+      },
+    );
+
+    expect(selection.findings.map(({ contentHash }) => contentHash)).toEqual([
+      "kept",
+    ]);
+    expect(selection.suppressionReasons).toEqual({
+      invalidCodeLocation: 1,
+      duplicateContentHash: 1,
+      previouslyLinkedThread: 1,
+      commentLimit: 0,
+    });
+  });
+
   it("orders blocking findings before severity-ranked non-blocking findings", () => {
-    const selected = selectPostableFindings([
+    const selected = selectPostable([
       finding({ id: "11111111-1111-4111-8111-111111111111", contentHash: "low", severity: "low" }),
       finding({ id: "22222222-2222-4222-8222-222222222222", contentHash: "critical", severity: "critical" }),
       finding({ id: "33333333-3333-4333-8333-333333333333", contentHash: "blocking", severity: "medium", blocking: true }),
@@ -33,7 +58,7 @@ describe("selectPostableFindings", () => {
   });
 
   it("emits only the highest-priority finding for each content hash", () => {
-    const selected = selectPostableFindings([
+    const selected = selectPostable([
       finding({ id: "11111111-1111-4111-8111-111111111111", contentHash: "same", severity: "low" }),
       finding({ id: "22222222-2222-4222-8222-222222222222", contentHash: "same", severity: "high" }),
     ]);
@@ -50,21 +75,33 @@ describe("selectPostableFindings", () => {
         severity: "low",
       }),
     );
-    const selected = selectPostableFindings([
-      ...lowFindings,
-      finding({
-        id: "99999999-9999-4999-8999-999999999999",
-        contentHash: "blocking",
-        severity: "medium",
-        blocking: true,
-      }),
-    ]);
+    const selection = evaluatePostableFindings(
+      [
+        ...lowFindings,
+        finding({
+          id: "99999999-9999-4999-8999-999999999999",
+          contentHash: "blocking",
+          severity: "medium",
+          blocking: true,
+        }),
+      ],
+      { findingIds: new Set(), contentHashes: new Set() },
+    );
+    const selected = selection.findings;
 
     expect(selected).toHaveLength(30);
     expect(selected[0].contentHash).toBe("blocking");
     expect(selected.some(({ contentHash }) => contentHash === "low-29")).toBe(false);
+    expect(selection.suppressionReasons.commentLimit).toBe(1);
   });
 });
+
+function selectPostable(findings: NormalizedFinding[]): NormalizedFinding[] {
+  return evaluatePostableFindings(findings, {
+    findingIds: new Set<string>(),
+    contentHashes: new Set<string>(),
+  }).findings;
+}
 
 function finding(overrides: Partial<NormalizedFinding> = {}): NormalizedFinding {
   return {

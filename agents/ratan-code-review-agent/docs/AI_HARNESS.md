@@ -129,6 +129,8 @@ Then test workflow steps with mocked runtime context and mocked clients:
 - `sonarqube-measures` should return `null` on missing client or fetch errors.
 - `comment-review-results` should select valid code locations, suppress repeated and previously linked content hashes, order blocking and higher-severity findings first, apply the 30-comment cap last, link created ADO threads to persisted findings, and update the latest-review PR property.
 - `FeedbackService` should synchronize only threads explicitly associated with each finding.
+- `record-audit` should persist only allowlisted pilot metrics and must discard secret-like or arbitrary OCR metadata.
+- `/api/audit` should export routed outcome metrics before any focus/status UI filters are added.
 
 Do not use real ADO or SonarQube clients in automated tests.
 
@@ -194,6 +196,11 @@ Before allowing live PR review:
 - Run against a dedicated test PR before enabling broad scanning.
 
 Current status: local build and test checks pass. The scanner pipeline, OpenCodeReview runner and focus router, FindingStore finding/thread associations, feedback synchronization, webhook receiver, merge gate, work-item creation, and dashboard are implemented. Do not claim end-to-end ADO review operation until a target repository is configured and a dedicated live test PR review has been completed.
+
+The Phase 3 live pilot is side-effectful. Require explicit authorization, a
+bounded repository/PR cohort, and scoped credentials before running it. Do not
+make focus-retention, confidence-threshold, or blocking-policy decisions until
+the pilot report has been reviewed.
 
 ## Recommended Improvements
 

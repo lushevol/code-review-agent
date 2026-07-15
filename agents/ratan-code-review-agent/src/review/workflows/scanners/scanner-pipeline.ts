@@ -2,7 +2,10 @@ import type { FindingStore } from "finding-store";
 import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
 import { OpenCodeReviewRunner } from "../../open-code-review/runner";
-import type { ReviewFocusSelection } from "../../open-code-review/review-focus-router";
+import {
+  selectReviewFocuses,
+  type ReviewFocusSelection,
+} from "../../open-code-review/review-focus-router";
 import { defineStep } from "../../runtime";
 import { type CommonRequestContext, PullRequestSchema } from "../../types";
 import {
@@ -13,6 +16,11 @@ import type { ReviewWorkspace } from "../../workspace/types";
 import { reconcileFindings } from "../utils/finding-reconciler";
 import { CveScanner } from "./cve-scanner";
 import { complianceEngine } from "./compliance-engine";
+import {
+  evaluatePostableFindings,
+  indexPreviouslyLinkedFindings,
+  type PreviouslyLinkedFindings,
+} from "./finding-eligibility";
 import { FINDING_SEVERITY_RANK } from "./finding-priority";
 import { OpenCodeReviewScanner } from "./open-code-review-scanner";
 import type { Scanner, ScannerResult } from "./types";
@@ -81,6 +89,7 @@ export function severityCounts(findings: NormalizedFinding[]): Record<string, nu
 export function aggregateScannerResults(
   scanners: Pick<Scanner, "id" | "engine">[],
   settled: PromiseSettledResult<ScannerResult>[],
+  fallbackReviewMetadata: Record<string, unknown> = {},
 ): {
   findings: NormalizedFinding[];
   reviewExecutionStatus: "complete" | "incomplete";
@@ -91,6 +100,7 @@ export function aggregateScannerResults(
   let reviewMetadata: Record<string, unknown> = {
     status: "failed",
     durationMs: 0,
+    ...fallbackReviewMetadata,
   };
 
   settled.forEach((result, index) => {
@@ -114,6 +124,49 @@ export function aggregateScannerResults(
   });
 
   return { findings, reviewExecutionStatus, reviewMetadata };
+}
+
+export function loadPreviouslyLinkedFindings(
+  findingStore: Pick<
+    FindingStore,
+    "getFindingsByPr" | "getCommentThreadsByPr"
+  >,
+  prId: number,
+  repository: string,
+): PreviouslyLinkedFindings {
+  try {
+    return indexPreviouslyLinkedFindings(
+      findingStore.getFindingsByPr(prId, repository),
+      findingStore.getCommentThreadsByPr(prId, repository),
+    );
+  } catch {
+    console.error("[scanner-pipeline] Failed to load linked findings");
+    return { findingIds: new Set(), contentHashes: new Set() };
+  }
+}
+
+export function buildReviewOutcomeMetadata(
+  reviewMetadata: Record<string, unknown>,
+  findings: NormalizedFinding[],
+  previouslyLinked: PreviouslyLinkedFindings,
+  correlatedDuplicateCount: number,
+): Record<string, unknown> {
+  const selection = evaluatePostableFindings(findings, previouslyLinked);
+  return {
+    ...reviewMetadata,
+    postableFindingCount: selection.findings.length,
+    duplicateSuppressionReasons: {
+      contentHashCorrelation: correlatedDuplicateCount,
+      inlineContentHash: selection.suppressionReasons.duplicateContentHash,
+      previouslyLinkedThread:
+        selection.suppressionReasons.previouslyLinkedThread,
+    },
+    inlineSuppressionReasons: {
+      invalidCodeLocation:
+        selection.suppressionReasons.invalidCodeLocation,
+      commentLimit: selection.suppressionReasons.commentLimit,
+    },
+  };
 }
 
 export function buildCorrelationSummary(
@@ -231,10 +284,14 @@ export const scannerPipeline = defineStep({
     const {
       findings: allFindings,
       reviewExecutionStatus,
-      reviewMetadata,
-    } = aggregateScannerResults(scanners, settled);
+      reviewMetadata: baseReviewMetadata,
+    } = aggregateScannerResults(scanners, settled, {
+      reviewFocuses: selectReviewFocuses(workspace.changes),
+    });
 
-    let prioritized = prioritizeFindings(correlateFindings(allFindings));
+    const correlated = correlateFindings(allFindings);
+    const correlatedDuplicateCount = allFindings.length - correlated.length;
+    let prioritized = prioritizeFindings(correlated);
     let changesSinceLastReview = "";
     try {
       const previous = findingStore.getFindingsByPr(
@@ -263,6 +320,18 @@ export const scannerPipeline = defineStep({
     } catch {
       console.error("[scanner-pipeline] Failed to persist findings");
     }
+
+    const previouslyLinked = loadPreviouslyLinkedFindings(
+      findingStore,
+      prDetails.pullRequestId,
+      prDetails.repoName,
+    );
+    const reviewMetadata = buildReviewOutcomeMetadata(
+      baseReviewMetadata,
+      prioritized,
+      previouslyLinked,
+      correlatedDuplicateCount,
+    );
 
     const counts = severityCounts(prioritized);
     const severitySummary = ["critical", "high", "medium", "low", "informational"]

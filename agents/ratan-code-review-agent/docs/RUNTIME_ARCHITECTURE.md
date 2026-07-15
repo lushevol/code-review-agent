@@ -101,6 +101,16 @@ After all findings are collected and persisted:
    - `pending` — review in progress
 4. Errors are non-fatal; workflow continues.
 
+## Audit Observability Flow
+
+`record-audit` persists an allowlisted pilot payload in
+`audit_records.raw_scanner_outputs`: selected focuses and routing reasons, OCR
+status and warning types, duration, reviewed-file count, postable finding count,
+duplicate-suppression counts, inline-suppression counts, and review execution
+status. Arbitrary scanner metadata and model credentials are not copied. The
+existing `/api/audit` endpoint exports the stored payload; the dashboard does
+not add focus/status filters until operator consumption justifies them.
+
 ## Work Item Creation Flow
 
 1. Collect findings with severity = Critical (→ Bug) or High (→ Task).
