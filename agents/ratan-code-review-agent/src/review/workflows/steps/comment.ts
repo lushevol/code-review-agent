@@ -1,5 +1,6 @@
 import { defineStep } from "../../runtime";
 import z from "zod";
+import { FindingStore } from "finding-store";
 import { extractAgentConfig } from "../../../bootstrap/session";
 import { type CommonRequestContext, PullRequestSchema } from "../../types";
 import { NormalizedFindingSchema } from "../../types/finding";
@@ -42,6 +43,11 @@ export const comment = defineStep({
     );
 
     const adoClient = agentConfig.getAdoClient();
+    const rootConfig = await agentConfig.getRootConfig();
+    const findingStore = new FindingStore(
+      rootConfig.findingStorePath ?? ".ratan/data/findings.db",
+    );
+    findingStore.init();
 
     const codeCommentIds: number[] = [];
 
@@ -49,11 +55,12 @@ export const comment = defineStep({
     const findingsToComment = findings.slice(0, 30);
     for (const finding of findingsToComment) {
       if (!finding.filePath || finding.lineStart === null) continue;
+      let commentThread: { id?: number };
       try {
         const commentText = `**${finding.severity.toUpperCase()}** - ${finding.title}` +
           (finding.description ? `\n\n${finding.description}` : "") +
           (finding.remediation ? `\n\n**Suggestion:** ${finding.remediation}` : "");
-        const commentThread = await adoClient.addCommentThreadForPRCode({
+        commentThread = await adoClient.addCommentThreadForPRCode({
           repoId: prDetails.repoId,
           pullRequestId: prDetails.pullRequestId,
           comment: `${commentText}\n\n<!-- survey: please provide feedback -->`,
@@ -64,12 +71,28 @@ export const comment = defineStep({
           fileStartOffset: 1,
           fileEndOffset: 1,
         });
-
-        codeCommentIds.push(commentThread.id);
       } catch (error) {
         // Silently skip per-line comment failures
+        continue;
+      }
+
+      if (commentThread.id === undefined) continue;
+      codeCommentIds.push(commentThread.id);
+
+      try {
+        findingStore.linkCommentThread({
+          repository: prDetails.repoName,
+          prId: prDetails.pullRequestId,
+          findingId: finding.id,
+          threadId: commentThread.id,
+        });
+      } catch (error) {
+        console.error(
+          `[comment-review-results] Failed to link comment thread ${commentThread.id} to finding ${finding.id}: ${(error as Error).message}`,
+        );
       }
     }
+    findingStore.close();
 
     const incompleteNotice =
       inputData.reviewExecutionStatus === "incomplete"

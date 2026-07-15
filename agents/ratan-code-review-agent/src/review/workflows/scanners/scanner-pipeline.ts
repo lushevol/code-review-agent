@@ -146,7 +146,7 @@ export const scannerPipeline = defineStep({
       }
     });
 
-    const prioritized = prioritizeFindings(correlateFindings(allFindings));
+    let prioritized = prioritizeFindings(correlateFindings(allFindings));
     let changesSinceLastReview = "";
     try {
       const previous = findingStore.getFindingsByPr(
@@ -169,9 +169,9 @@ export const scannerPipeline = defineStep({
     }
 
     try {
-      findingStore.batchUpsert(
+      prioritized = findingStore.batchUpsert(
         prioritized as Parameters<typeof findingStore.batchUpsert>[0],
-      );
+      ) as NormalizedFinding[];
     } catch {
       console.error("[scanner-pipeline] Failed to persist findings");
     }

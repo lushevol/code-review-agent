@@ -60,6 +60,14 @@ export interface OverrideLogEntry {
   createdAt: string;
 }
 
+export interface FindingCommentThread {
+  repository: string;
+  prId: number;
+  findingId: string;
+  threadId: number;
+  createdAt: string;
+}
+
 // ─── Internal Row Types (snake_case from SQLite) ─────────────────────────────
 
 interface FindingRow {
@@ -118,12 +126,21 @@ interface AuditRecordRow {
   created_at: string;
 }
 
+interface FindingCommentThreadRow {
+  repository: string;
+  pr_id: number;
+  finding_id: string;
+  thread_id: number;
+  created_at: string;
+}
+
 // ─── Statement ID Constants ──────────────────────────────────────────────────
 
 const STMT = {
   INIT_FINDINGS: "ddl:findings",
   INIT_OVERRIDE_LOG: "ddl:override_log",
   INIT_AUDIT: "ddl:audit",
+  INIT_FINDING_COMMENT_THREADS: "ddl:findingCommentThreads",
   UPSERT_FINDING: "stmt:upsertFinding",
   GET_FINDING_BY_ID: "stmt:getFindingById",
   GET_FINDINGS_BY_PR: "stmt:getFindingsByPr",
@@ -134,6 +151,8 @@ const STMT = {
   INSERT_OVERRIDE: "stmt:insertOverride",
   INSERT_AUDIT: "stmt:insertAudit",
   GET_EXPIRED_OVERRIDES: "stmt:getExpiredOverrides",
+  INSERT_FINDING_COMMENT_THREAD: "stmt:insertFindingCommentThread",
+  GET_FINDING_COMMENT_THREADS_BY_PR: "stmt:getFindingCommentThreadsByPr",
 } as const;
 
 // ─── FindingStore Class ─────────────────────────────────────────────────────
@@ -233,6 +252,17 @@ export class FindingStore {
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE INDEX IF NOT EXISTS idx_audit_pr ON audit_records(pr_id, repository);
+
+      CREATE TABLE IF NOT EXISTS finding_comment_threads (
+        repository TEXT NOT NULL,
+        pr_id INTEGER NOT NULL,
+        finding_id TEXT NOT NULL REFERENCES findings(id),
+        thread_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (repository, pr_id, thread_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_finding_comment_threads_finding
+        ON finding_comment_threads(finding_id);
     `);
   }
 
@@ -321,6 +351,21 @@ export class FindingStore {
            merge_policy_decision, supersedes_review_id, raw_scanner_outputs)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `),
+    );
+
+    this.stmts.set(
+      STMT.INSERT_FINDING_COMMENT_THREAD,
+      db.prepare(`
+        INSERT OR IGNORE INTO finding_comment_threads
+          (repository, pr_id, finding_id, thread_id, created_at)
+        VALUES (@repository, @pr_id, @finding_id, @thread_id, @created_at)
+      `),
+    );
+    this.stmts.set(
+      STMT.GET_FINDING_COMMENT_THREADS_BY_PR,
+      db.prepare(
+        "SELECT repository, pr_id, finding_id, thread_id, created_at FROM finding_comment_threads WHERE pr_id = ? AND repository = ?",
+      ),
     );
 
     this.stmts.set(
@@ -417,6 +462,45 @@ export class FindingStore {
         `Failed to get finding ${id}: ${(err as Error).message}`,
       );
     }
+  }
+
+  linkCommentThread(
+    thread: Omit<FindingCommentThread, "createdAt">,
+  ): void {
+    this.assertInitialized();
+    const finding = this.getFindingById(thread.findingId);
+    if (
+      !finding ||
+      finding.prId !== thread.prId ||
+      finding.repository !== thread.repository
+    ) {
+      throw new Error("Comment thread must belong to the finding's PR and repository");
+    }
+    this.getStmt(STMT.INSERT_FINDING_COMMENT_THREAD).run({
+      repository: thread.repository,
+      pr_id: thread.prId,
+      finding_id: thread.findingId,
+      thread_id: thread.threadId,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  getCommentThreadsByPr(
+    prId: number,
+    repository: string,
+  ): FindingCommentThread[] {
+    this.assertInitialized();
+    const rows = this.getStmt(STMT.GET_FINDING_COMMENT_THREADS_BY_PR).all(
+      prId,
+      repository,
+    ) as FindingCommentThreadRow[];
+    return rows.map((row) => ({
+      repository: row.repository,
+      prId: row.pr_id,
+      findingId: row.finding_id,
+      threadId: row.thread_id,
+      createdAt: row.created_at,
+    }));
   }
 
   /**
