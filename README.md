@@ -75,7 +75,7 @@ Commands:
 
 | Command | Description |
 |---------|-------------|
-| `start` | Scaffold `.ratan/` config on first run, scan repos, process PR queue. `--watch` for 30-min polling with background feedback daemon. `--pr-id <id>` for single PR. |
+| `start` | Scaffold `.ratan/` config on first run, scan repos, process PR queue. `--watch` for 30-min polling with background feedback daemon. `--pr-id <id>` runs that review directly, waits for completion, and surfaces failures without requiring a detected build status; automatic scans still require a build pipeline. |
 | `dashboard` | Start PR Guardian dashboard (Express REST API + React SPA) |
 
 On first run, `start` creates `.ratan/config.json`, `.ratan/opencodereview/rule.json`,

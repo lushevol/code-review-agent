@@ -156,7 +156,7 @@ Golden fixture format:
 {
   "id": "ts-sql-injection",
   "language": "typescript",
-  "title": "Find user by request id",
+  "title": "Find users by request id",
   "description": "Adds a database lookup endpoint.",
   "files": [
     {
@@ -215,7 +215,7 @@ calls.
 
 Before allowing live PR review:
 
-- Run `ratan-code-review start --pr-id <test-pr-id>` to scaffold a valid config and verify connectivity against a dedicated test PR first.
+- Run `ratan-code-review start --pr-id <test-pr-id>` to scaffold a valid config and verify connectivity against a dedicated test PR first. Explicit PR reviews run directly, wait for the workflow, surface failures, and bypass the automatic-scan build-status gate so repositories without CI can be used for a bounded pilot.
 - Confirm the target repositories and PR age window in root config.
 - Confirm `ADO_TOKEN`, the token referenced by `config.openCodeReview.llm.token`, and optional `SONARQUBE_TOKEN` are scoped correctly.
 - Confirm the configured OpenCodeReview model endpoint is running and compatible with the selected provider mode.

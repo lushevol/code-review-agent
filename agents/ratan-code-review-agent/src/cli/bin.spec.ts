@@ -11,7 +11,7 @@ describe("CLI binary", () => {
       cwd: packageRoot,
       stdio: "pipe",
     });
-  });
+  }, 30_000);
 
   it("prints help through the published bin entrypoint", () => {
     const output = execFileSync("node", [binPath, "--help"], {

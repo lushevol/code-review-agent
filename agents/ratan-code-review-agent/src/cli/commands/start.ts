@@ -309,7 +309,14 @@ export async function startCommand(options: StartOptions) {
     process.exit(1);
   }
 
-  // 4. Initialize PR queue with build pipeline check
+  // 4. Explicit reviews run directly so completion and failures propagate to the caller.
+  if (options.prId !== undefined) {
+    logger.info(`Reviewing single PR #${options.prId}`);
+    await startReviewPrWithProvider(provider, options.prId);
+    return;
+  }
+
+  // 5. Initialize automatic-scan queue with build pipeline check
   const queue = getPRQueue();
   queue.setProcessor(async (item) => {
     const hasBuild = await queue.hasBuildPipeline(
@@ -323,13 +330,6 @@ export async function startCommand(options: StartOptions) {
     }
     await startReviewPrWithProvider(provider, item.prId);
   });
-
-  // 5. Handle single PR mode
-  if (options.prId !== undefined) {
-    logger.info(`Reviewing single PR #${options.prId}`);
-    queue.enqueue({ prId: options.prId, repoName: "" });
-    return;
-  }
 
   // 6. Start the feedback daemon (ado comment sync, false-positive detection)
   // 7. Handle --watch mode: scan every 30 minutes, daemon keeps running

@@ -147,7 +147,7 @@ Fallback: polling every 30 min via `start --watch`
 
 The `ratan-code-review` CLI has two commands:
 
-- **`start`** — Unified entry point. On first run, scaffolds `.ratan/` with default config and native OpenCodeReview rules. Reads config, initializes the PR queue, and starts the scan loop. Runs a background feedback daemon (ADO comment sync) automatically in `--watch` mode. Options: `--config <path>`, `--pr-id <id>`, `--watch` (30-min interval + feedback daemon), `--repo-pattern <patterns...>`.
+- **`start`** — Unified entry point. On first run, scaffolds `.ratan/` with default config and native OpenCodeReview rules. Reads config, initializes the PR queue, and starts the scan loop. Runs a background feedback daemon (ADO comment sync) automatically in `--watch` mode. Options: `--config <path>`, `--pr-id <id>` (runs the explicit review directly, waits for completion, surfaces failures, and bypasses the automatic-scan build-status gate), `--watch` (30-min interval + feedback daemon), `--repo-pattern <patterns...>`.
 - **`dashboard`** — Starts the PR Guardian dashboard (Express REST API + React SPA). Serves `/api/health`, `/api/queue`, `/api/findings`, `/api/audit`, `/api/stats`, `/api/prs`.
 
 ### Scanner Pipeline
