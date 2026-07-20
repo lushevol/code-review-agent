@@ -220,9 +220,9 @@ function createMockProvider(overrides: Record<string, unknown> = {}) {
 
 // ─── ScanContext factory ───────────────────────────────────────────────────
 
-function createMockScanContext(overrides: Record<string, unknown> = {}): ScanContext {
+async function createMockScanContext(overrides: Record<string, unknown> = {}): Promise<ScanContext> {
   const findingStore = new MemoryFindingStore();
-  findingStore.init();
+  await findingStore.init();
 
   return {
     provider: createMockProvider(),
@@ -240,9 +240,9 @@ function createMockScanContext(overrides: Record<string, unknown> = {}): ScanCon
 describe("Scanner Pipeline Integration", () => {
   let findingStore: MemoryFindingStore;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     findingStore = new MemoryFindingStore();
-    findingStore.init();
+    await findingStore.init();
   });
 
   describe("consolidated presentation", () => {

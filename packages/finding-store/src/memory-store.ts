@@ -21,7 +21,7 @@ export class MemoryFindingStore {
   private auditRecords: AuditRecord[] = [];
   private commentThreads: FindingCommentThread[] = [];
 
-  init(_dbPath?: string): void {
+  async init(_dbPath?: string): Promise<void> {
     // No-op; in-memory store is ready immediately.
   }
 

@@ -1,4 +1,4 @@
-import { minimatch } from "minimatch";
+import picomatch from "picomatch";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { ChangedFile } from "../../workspace/types";
@@ -52,7 +52,7 @@ interface YamlRule {
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 function isTestFile(filePath: string): boolean {
-  return TEST_FILE_PATTERNS.some((pattern) => minimatch(filePath, pattern));
+  return TEST_FILE_PATTERNS.some((pattern) => picomatch(pattern)(filePath));
 }
 
 function isSourceFile(filePath: string): boolean {
@@ -97,12 +97,12 @@ function normalizeSeverity(severity: string): NormalizedFinding["severity"] {
 
 // ─── Rule File Loading ────────────────────────────────────────────────────
 
-let yamlModule: typeof import("yaml") | null | undefined;
+let yamlModule: typeof import("js-yaml") | null | undefined;
 
-async function getYamlModule(): Promise<typeof import("yaml") | null> {
+async function getYamlModule(): Promise<typeof import("js-yaml") | null> {
   if (yamlModule !== undefined) return yamlModule;
   try {
-    yamlModule = await import("yaml");
+    yamlModule = await import("js-yaml");
     return yamlModule;
   } catch {
     console.warn(
@@ -137,7 +137,7 @@ async function loadRuleFiles(
     const filePath = path.join(rulesDir, file);
     try {
       const content = await fs.readFile(filePath, "utf-8");
-      const parsed = yaml.parse(content) as Record<string, unknown>;
+      const parsed = yamlModule.load(content) as Record<string, unknown>;
 
       // Validate required fields
       if (
@@ -342,7 +342,7 @@ export const complianceEngine: Scanner = {
       if (yamlRules.length > 0 && targetFilePath) {
         for (const rule of yamlRules) {
           const matchesFilePattern = rule.file_patterns.some((pattern) =>
-            minimatch(targetFilePath, pattern),
+            picomatch(pattern)(targetFilePath),
           );
           if (!matchesFilePattern) continue;
 

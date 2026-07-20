@@ -41,7 +41,7 @@ export const recordAudit = defineStep({
     const findingStore = new FindingStore(
       rootConfig.findingStorePath ?? ".ratan/data/findings.db",
     );
-    findingStore.init();
+    await findingStore.init();
 
     const auditRecordId = randomUUID();
     const now = new Date().toISOString();

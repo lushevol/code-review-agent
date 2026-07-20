@@ -1,3 +1,4 @@
+import { serve } from "@hono/node-server";
 import { createWebhookServer } from "../../webhooks";
 import type { FindingStore } from "finding-store";
 
@@ -18,7 +19,7 @@ export async function startWebhookService(options: {
     },
   });
 
-  app.listen(options.port, () => {
+  serve({ fetch: app.fetch, port: options.port }, () => {
     console.log(`Webhook receiver listening on port ${options.port}`);
   });
 

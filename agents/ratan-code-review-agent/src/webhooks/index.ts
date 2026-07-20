@@ -1,4 +1,4 @@
-import express from "express";
+import { Hono } from "hono";
 import crypto from "node:crypto";
 
 // ─── Duplicate Detection ───────────────────────────────────────────────────
@@ -29,37 +29,43 @@ function isDuplicate(prId: number, commitSha?: string): boolean {
   return false;
 }
 
+// ─── HMAC Validation ───────────────────────────────────────────────────────
+
+function validateHmac(rawBody: string, secret: string, signature: string): boolean {
+  const hmac = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+  return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(signature));
+}
+
 // ─── Server ────────────────────────────────────────────────────────────────
 
 export function createWebhookServer(options: {
   port: number;
   secret?: string;
   onPREvent: (event: { action: string; prId: number; repository: string }) => Promise<void>;
-}): express.Express {
-  const app = express();
-
-  // Raw body for HMAC validation
-  app.use(
-    express.json({
-      verify: (req, _res, buf) => {
-        (req as any).rawBody = buf;
-      },
-    }),
-  );
+}): Hono {
+  const app = new Hono();
 
   // POST /webhooks/ado
-  app.post("/webhooks/ado", async (req, res) => {
-    // 1. Validate HMAC signature if secret configured
+  app.post("/webhooks/ado", async (c) => {
+    // 1. Read raw body for HMAC validation
+    const rawBody = await c.req.raw.clone().text();
+    let body: any;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return c.text("Invalid JSON", 400);
+    }
+
+    // 2. Validate HMAC signature if secret configured
     if (options.secret) {
-      const signature = req.headers["x-hub-signature"] as string;
-      if (!signature || !validateHmac(req, options.secret, signature)) {
-        return res.status(401).json({ error: "Invalid signature" });
+      const signature = c.req.header("x-hub-signature");
+      if (!signature || !validateHmac(rawBody, options.secret, signature)) {
+        return c.json({ error: "Invalid signature" }, 401);
       }
     }
 
-    // 2. Extract event details
-    const eventType = req.headers["x-hub-event"] as string;
-    const body = req.body;
+    // 3. Extract event details
+    const eventType = c.req.header("x-hub-event");
 
     // Handle pullrequest.created and pullrequest.updated
     if (eventType?.startsWith("git.pullrequest")) {
@@ -71,13 +77,13 @@ export function createWebhookServer(options: {
         resource?.lastMergeTargetCommit?.commitId;
 
       if (!prId || !repository) {
-        return res.status(400).json({ error: "Missing required fields" });
+        return c.json({ error: "Missing required fields" }, 400);
       }
 
-      // 3. Duplicate detection
+      // 4. Duplicate detection
       if (isDuplicate(prId, commitSha)) {
         console.log(`[webhook] Skipping duplicate event for PR #${prId}`);
-        return res.status(200).json({ status: "skipped", reason: "duplicate" });
+        return c.json({ status: "skipped", reason: "duplicate" }, 200);
       }
 
       // Fire and forget — don't wait for review
@@ -85,23 +91,16 @@ export function createWebhookServer(options: {
         console.error("Webhook handler error:", err);
       });
 
-      return res.status(200).json({ accepted: true });
+      return c.json({ accepted: true }, 200);
     }
 
-    res.status(200).json({ ignored: true });
+    return c.json({ ignored: true }, 200);
   });
 
   // Health check
-  app.get("/health", (_req, res) => {
-    res.json({ status: "ok" });
+  app.get("/health", (c) => {
+    return c.json({ status: "ok" });
   });
 
   return app;
-}
-
-function validateHmac(req: express.Request, secret: string, signature: string): boolean {
-  const rawBody = (req as any).rawBody;
-  if (!rawBody) return false;
-  const hmac = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
-  return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(signature));
 }

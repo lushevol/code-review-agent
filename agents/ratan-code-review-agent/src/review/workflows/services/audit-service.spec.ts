@@ -10,7 +10,7 @@ describe("AuditService", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "audit-service-"));
     const store = new FindingStore(path.join(dir, "findings.db"));
     try {
-      store.init();
+      await store.init();
       const service = new AuditService(store);
 
       await service.recordReview({

@@ -38,30 +38,29 @@
   "devDependencies": {
     "@microsoft/api-extractor": "^7.58.11",
     "@rslib/core": "^0.18.6",
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
     "@types/node": "^25.9.1",
     "@vitest/coverage-v8": "4.1.7",
     "cross-env": "^10.1.0",
     "dotenv": "^17.4.2",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.10"
+    "vitest": "^4.0.10",
+    "@types/js-yaml": "^4.0.0",
+    "@types/picomatch": "^4.0.0"
   },
   "dependencies": {
-    "@alibaba-group/open-code-review": "1.7.7",
+    "@alibaba-group/open-code-review": "1.7.13",
     "agent-config-manager": "workspace:0.1.0",
-    "commander": "^13.0.0",
-    "cors": "^2.8.5",
-    "express": "^4.21.0",
     "finding-store": "workspace:0.2.0",
-    "minimatch": "^10.1.1",
     "ratan-ado-api": "0.0.3",
     "ratan-logger": "0.1.0",
     "ratan-sonarqube-api": "0.0.3",
     "redact-pii": "^3.4.0",
-    "yaml": "^2.5.0",
-    "zod": "^4.1.12"
+    "zod": "^4.4.3",
+    "@hono/node-server": "^2.0.10",
+    "hono": "^4.0.0",
+    "picomatch": "^4.0.0",
+    "js-yaml": "^4.1.0"
   },
   "author": "Shuai,Lu (shuai.lu@sc.com)",
   "keywords": []

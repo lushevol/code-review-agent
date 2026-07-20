@@ -110,7 +110,7 @@ describe("comment", () => {
       addCommentThreadForPRCode,
     );
     const persistedStore = new FindingStore(dbPath);
-    persistedStore.init();
+    await persistedStore.init();
     const originalFinding = finding();
     persistedStore.upsertFinding(originalFinding);
     const persistedFinding = persistedStore.upsertFinding({
@@ -146,7 +146,7 @@ describe("comment", () => {
     });
 
     const store = new FindingStore(dbPath);
-    store.init();
+    await store.init();
     expect(store.getCommentThreadsByPr(7, "repo")).toEqual([
       expect.objectContaining({
         repository: "repo",
@@ -172,10 +172,10 @@ describe("comment", () => {
     store.close();
   });
 
-  it("keeps a SQLite thread link idempotent and scoped to its PR", () => {
+  it("keeps a SQLite thread link idempotent and scoped to its PR", async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "comment-store-"));
     const store = new FindingStore(path.join(tempDir, "findings.db"));
-    store.init();
+    await store.init();
     const linkedFinding = finding();
     const otherFinding = {
       ...finding(),
@@ -225,7 +225,7 @@ describe("comment", () => {
       addCommentThreadForPRCode,
     );
     const store = new FindingStore(dbPath);
-    store.init();
+    await store.init();
     const low = store.upsertFinding({
       ...finding(),
       id: "11111111-1111-4111-8111-111111111111",
@@ -371,7 +371,7 @@ describe("comment", () => {
         ],
       );
     const store = new FindingStore(dbPath);
-    store.init();
+    await store.init();
     store.upsertFinding(finding());
     store.linkCommentThread({
       repository: "repo",
@@ -457,7 +457,7 @@ describe("comment", () => {
       supersedesFindingId: original.id,
     };
     const store = new FindingStore(dbPath);
-    store.init();
+    await store.init();
     store.batchUpsert([original, fixedDescendant]);
     store.linkCommentThread({
       repository: "repo",
@@ -492,7 +492,7 @@ describe("comment", () => {
       );
     const original = { ...finding(), blocking: true };
     const store = new FindingStore(dbPath);
-    store.init();
+    await store.init();
     store.upsertFinding(original);
     store.close();
 
@@ -509,7 +509,7 @@ describe("comment", () => {
     });
 
     const fixedStore = new FindingStore(dbPath);
-    fixedStore.init();
+    await fixedStore.init();
     fixedStore.updateResolution(original.id, "resolved");
     fixedStore.close();
 
@@ -595,7 +595,7 @@ describe("comment", () => {
       blocking: true,
     };
     const store = new FindingStore(dbPath);
-    store.init();
+    await store.init();
     store.batchUpsert([fixedOld, unchangedOld, unchangedNew, introduced]);
     store.linkCommentThread({
       repository: "repo",
@@ -654,7 +654,7 @@ describe("comment", () => {
     expect(result).toEqual({ mainCommentId: 1000, codeCommentIds: [103] });
 
     const persisted = new FindingStore(dbPath);
-    persisted.init();
+    await persisted.init();
     expect(persisted.getCommentThreadsByPr(7, "repo")).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ findingId: introduced.id, threadId: 103 }),
@@ -673,7 +673,7 @@ describe("comment", () => {
       addCommentThreadForPRCode,
     );
     const store = new FindingStore(dbPath);
-    store.init();
+    await store.init();
     const findings = Array.from({ length: 31 }, (_, index) =>
       store.upsertFinding({
         ...finding(),

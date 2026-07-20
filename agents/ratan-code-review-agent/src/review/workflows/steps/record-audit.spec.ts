@@ -67,7 +67,7 @@ describe("recordAudit", () => {
     });
 
     const store = new FindingStore(dbPath);
-    store.init();
+    await store.init();
     const [record] = store.queryAuditRecords({ prId: 7, repository: "repo" });
     expect(record.rawScannerOutputs).toEqual({
       reviewExecutionStatus: "incomplete",

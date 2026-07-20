@@ -221,7 +221,7 @@ OpenCodeReview owns review semantics through its native rule JSON. Default confi
 ## Key Files
 
 ### Core Agent
-- `agents/ratan-code-review-agent/src/cli/index.ts` — CLI entry point with commander (start, dashboard)
+- `agents/ratan-code-review-agent/src/cli/index.ts` — CLI entry point (start, dashboard)
 - `agents/ratan-code-review-agent/src/cli/commands/` — start, dashboard command implementations
 - `agents/ratan-code-review-agent/src/cli/config/loader.ts` — config file reader with `"env:VAR_NAME"` token resolution
 - `agents/ratan-code-review-agent/src/cli/config/local-client.ts` — `LocalConfigClient` implementation

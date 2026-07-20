@@ -57,7 +57,7 @@ describe("createWorkItems", () => {
     const dbPath = path.join(directory, "findings.db");
     const linked = finding({ linkedTaskId: 55 });
     const store = new FindingStore(dbPath);
-    store.init();
+    await store.init();
     store.upsertFinding(linked);
     store.close();
     const createWorkItem = vi.fn();

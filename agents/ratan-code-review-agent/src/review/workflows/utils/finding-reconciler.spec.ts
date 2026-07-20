@@ -6,9 +6,9 @@ import { reconcileAndPersistFindings } from "./finding-reconciler";
 describe("continued-commit finding reconciliation", () => {
   let store: MemoryFindingStore;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     store = new MemoryFindingStore();
-    store.init();
+    await store.init();
   });
 
   it("persists a disappeared blocking finding as resolved after a complete re-review", () => {

@@ -1,5 +1,3 @@
-import { once } from "node:events";
-import type { AddressInfo } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -20,7 +18,7 @@ describe("GET /api/audit", () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "dashboard-audit-"));
     tempDirs.push(dir);
     const store = new FindingStore(path.join(dir, "findings.db"));
-    store.init();
+    await store.init();
     store.saveAuditRecord({
       id: "550e8400-e29b-41d4-a716-446655440000",
       prId: 7,
@@ -53,36 +51,26 @@ describe("GET /api/audit", () => {
       createdAt: "2026-07-15T00:01:00.000Z",
     });
 
-    const server = createDashboardApp(store).listen(0, "127.0.0.1");
-    await once(server, "listening");
-    try {
-      const { port } = server.address() as AddressInfo;
-      const response = await fetch(
-        `http://127.0.0.1:${port}/api/audit?prId=7&repo=repo`,
-      );
-      expect(response.status).toBe(200);
-      const body = (await response.json()) as {
-        records: Array<{ rawScannerOutputs: Record<string, unknown> }>;
-      };
-      expect(body.records[0].rawScannerOutputs).toMatchObject({
-        reviewExecutionStatus: "incomplete",
-        reviewFocuses: [
-          { focus: "general", reasons: ["Always selected."] },
-        ],
-        ocrStatus: "timeout",
-        postableFindingCount: 2,
-        duplicateSuppressionReasons: {
-          contentHashCorrelation: 1,
-          previouslyLinkedThread: 1,
-        },
-      });
-      expect(JSON.stringify(body)).not.toMatch(/token|secret/i);
-    } finally {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
-      });
-      store.close();
-    }
+    const app = createDashboardApp(store);
+    const response = await app.request("/api/audit?prId=7&repo=repo");
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      records: Array<{ rawScannerOutputs: Record<string, unknown> }>;
+    };
+    expect(body.records[0].rawScannerOutputs).toMatchObject({
+      reviewExecutionStatus: "incomplete",
+      reviewFocuses: [
+        { focus: "general", reasons: ["Always selected."] },
+      ],
+      ocrStatus: "timeout",
+      postableFindingCount: 2,
+      duplicateSuppressionReasons: {
+        contentHashCorrelation: 1,
+        previouslyLinkedThread: 1,
+      },
+    });
+    expect(JSON.stringify(body)).not.toMatch(/token|secret/i);
+    store.close();
   });
 });
 
@@ -91,7 +79,7 @@ describe("dashboard data routes", () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "dashboard-data-"));
     tempDirs.push(dir);
     const store = new FindingStore(path.join(dir, "findings.db"));
-    store.init();
+    await store.init();
     const finding = (id: string, repository: string, contentHash: string) => ({
       id,
       prId: 7,
@@ -145,42 +133,36 @@ describe("dashboard data routes", () => {
     saveAudit("550e8400-e29b-41d4-a716-446655440021", "repo-a", "allowed", "2026-07-16T00:00:00.000Z");
     saveAudit("550e8400-e29b-41d4-a716-446655440022", "repo-b", "blocked", "2026-07-17T00:00:00.000Z");
 
-    const server = createDashboardApp(store).listen(0, "127.0.0.1");
-    await once(server, "listening");
-    try {
-      const { port } = server.address() as AddressInfo;
-      const get = async (route: string) => {
-        const response = await fetch(`http://127.0.0.1:${port}${route}`);
-        expect(response.status).toBe(200);
-        return response.json() as Promise<any>;
-      };
-      expect((await get("/api/findings")).total).toBe(2);
-      expect((await get("/api/findings?prId=7&repo=repo-b")).findings).toHaveLength(1);
-      expect((await fetch(`http://127.0.0.1:${port}/api/findings?engine=legacy`)).status).toBe(400);
-      expect((await fetch(`http://127.0.0.1:${port}/api/findings?status=wont-fix`)).status).toBe(400);
-      expect((await fetch(`http://127.0.0.1:${port}/api/findings/550e8400-e29b-41d4-a716-446655440011`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ resolution: "wont-fix", overriddenBy: "owner" }),
-      })).status).toBe(400);
-      expect((await get("/api/overrides")).overrides[0]).toMatchObject({
-        overriddenBy: "owner",
-        newResolution: "false-positive",
-      });
-      expect(await get("/api/stats")).toMatchObject({
-        totalReviews: 3,
-        totalPRs: 2,
-        totalFindings: 2,
-      });
-      const prs = await get("/api/prs");
-      expect(prs.total).toBe(2);
-      expect(prs.prs).toEqual(expect.arrayContaining([
-        expect.objectContaining({ repository: "repo-a", status: "allowed", findingCount: 1 }),
-        expect.objectContaining({ repository: "repo-b", status: "blocked", findingCount: 1 }),
-      ]));
-    } finally {
-      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-      store.close();
-    }
+    const app = createDashboardApp(store);
+    const get = async (route: string) => {
+      const response = await app.request(route);
+      expect(response.status).toBe(200);
+      return response.json() as Promise<any>;
+    };
+    expect((await get("/api/findings")).total).toBe(2);
+    expect((await get("/api/findings?prId=7&repo=repo-b")).findings).toHaveLength(1);
+    expect((await app.request("/api/findings?engine=legacy")).status).toBe(400);
+    expect((await app.request("/api/findings?status=wont-fix")).status).toBe(400);
+    expect((await app.request("/api/findings/550e8400-e29b-41d4-a716-446655440011", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resolution: "wont-fix", overriddenBy: "owner" }),
+    })).status).toBe(400);
+    expect((await get("/api/overrides")).overrides[0]).toMatchObject({
+      overriddenBy: "owner",
+      newResolution: "false-positive",
+    });
+    expect(await get("/api/stats")).toMatchObject({
+      totalReviews: 3,
+      totalPRs: 2,
+      totalFindings: 2,
+    });
+    const prs = await get("/api/prs");
+    expect(prs.total).toBe(2);
+    expect(prs.prs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ repository: "repo-a", status: "allowed", findingCount: 1 }),
+      expect.objectContaining({ repository: "repo-b", status: "blocked", findingCount: 1 }),
+    ]));
+    store.close();
   });
 });

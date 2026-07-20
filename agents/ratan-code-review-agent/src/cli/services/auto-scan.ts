@@ -1,4 +1,4 @@
-import { minimatch } from "minimatch";
+import picomatch from "picomatch";
 import { getLogger } from "../utils/logger";
 import type { ConfigProvider } from "agent-config-manager";
 import { getPRQueue } from "./pr-queue";
@@ -119,7 +119,7 @@ export class AutoScanService {
       ? myRepos.filter(
           (repo) =>
             repo.name &&
-            patterns.some((pattern: string) => minimatch(repo.name, pattern)),
+            patterns.some((pattern: string) => picomatch(pattern)(repo.name)),
         )
       : myRepos;
 

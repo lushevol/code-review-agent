@@ -116,7 +116,7 @@ async function startFeedbackDaemon(
 
   try {
     findingStore = new FindingStore(findingStorePath);
-    findingStore.init();
+    await findingStore.init();
   } catch (err) {
     logger.warn(
       `Cannot init FindingStore for feedback daemon: ${(err as Error).message}`,

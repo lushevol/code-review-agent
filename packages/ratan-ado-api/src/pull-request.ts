@@ -11,7 +11,6 @@ import {
   PullRequestStatus,
   PullRequestTimeRangeType,
 } from "azure-devops-node-api/interfaces/GitInterfaces.js";
-import dayjs from "dayjs";
 import {
   filterChanges,
   getCodeDiffFromHierarchyQuery,
@@ -242,7 +241,10 @@ export async function getPullRequestById(
 }
 
 const isDateIn2Months = (date: Date | string) => {
-  return dayjs().diff(dayjs(date), "month", true) <= 2;
+  const now = new Date();
+  const d = new Date(date);
+  const months = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
+  return months <= 2;
 };
 
 export const isValidPullRequest = (

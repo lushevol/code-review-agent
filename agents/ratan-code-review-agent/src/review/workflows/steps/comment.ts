@@ -313,7 +313,7 @@ export const comment = defineStep({
     const findingStore = new FindingStore(
       rootConfig.findingStorePath ?? ".ratan/data/findings.db",
     );
-    findingStore.init();
+    await findingStore.init();
 
     const codeCommentIds: number[] = [];
 

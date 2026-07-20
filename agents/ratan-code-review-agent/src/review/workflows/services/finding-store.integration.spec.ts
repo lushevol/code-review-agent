@@ -37,7 +37,7 @@ describe("FindingStore integration", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "finding-store-"));
     const store = new FindingStore(path.join(dir, "findings.db"));
     try {
-      store.init();
+      await store.init();
       const finding = createFinding(null) as ReturnType<typeof createFinding> & {
         confidence?: number;
       };
@@ -57,7 +57,7 @@ describe("FindingStore integration", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "finding-store-"));
     const store = new FindingStore(path.join(dir, "findings.db"));
     try {
-      store.init();
+      await store.init();
       store.upsertFinding(createFinding(null));
       store.upsertFinding({
         ...createFinding(999),
@@ -76,7 +76,7 @@ describe("FindingStore integration", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "finding-store-"));
     const store = new FindingStore(path.join(dir, "findings.db"));
     try {
-      store.init();
+      await store.init();
       store.batchUpsert([
         createFinding(null),
         {
@@ -103,7 +103,7 @@ describe("FindingStore integration", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "finding-store-"));
     const store = new FindingStore(path.join(dir, "findings.db"));
     try {
-      store.init();
+      await store.init();
       store.upsertFinding(createFinding(null));
       store.updateResolution(createFinding(null).id, "false-positive", {
         overriddenBy: "reviewer@example.invalid",

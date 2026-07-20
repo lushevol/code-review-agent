@@ -60,7 +60,7 @@ directly rather than stored in a registry or step-result context map.
 
 1. Reads `scanRepoNames` and `scanPRCreatedDaysAgo` from root config.
 2. Gets repositories from the ADO client (cached for 24 hours via module-level cache).
-3. Applies repository name glob patterns through `minimatch`.
+3. Applies repository name glob patterns through `picomatch`.
 4. Fetches active PRs created within the configured time window.
 5. Skips PRs without ids.
 6. Uses `adoClient.isValidPullRequest`.

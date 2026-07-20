@@ -22,12 +22,10 @@
   },
   "author": "Shuai,Lu(shuai.lu@sc.com)",
   "dependencies": {
-    "azure-devops-node-api": "^15.1.0",
-    "ratan-markdown-tool": "0.0.1",
-    "typed-rest-client": "^2.1.0"
+    "azure-devops-node-api": "^15.1.2",
+    "ratan-markdown-tool": "0.0.1"
   },
   "peerDependencies": {
-    "dayjs": "^1.11.13",
     "zod": "^4.1.12"
   },
   "devDependencies": {
