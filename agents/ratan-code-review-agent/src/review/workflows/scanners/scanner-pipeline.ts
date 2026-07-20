@@ -27,6 +27,7 @@ import {
 import { FINDING_SEVERITY_RANK } from "./finding-priority";
 import { OpenCodeReviewScanner } from "./open-code-review-scanner";
 import type { Scanner, ScannerResult } from "./types";
+import { configureSensitiveDataMask } from "../../utils/sensitive-data-mask";
 
 const ScannerPipelineInputSchema = z.object({
   prDetails: PullRequestSchema,
@@ -71,14 +72,17 @@ export function correlateFindings(findings: NormalizedFinding[]): NormalizedFind
   return Array.from(map.values());
 }
 
-export function prioritizeFindings(findings: NormalizedFinding[]): NormalizedFinding[] {
+export function prioritizeFindings(
+  findings: NormalizedFinding[],
+  limit: number = 100,
+): NormalizedFinding[] {
   return findings
     .sort(
       (a, b) =>
         FINDING_SEVERITY_RANK[a.severity] -
         FINDING_SEVERITY_RANK[b.severity],
     )
-    .slice(0, 100);
+    .slice(0, limit);
 }
 
 export function severityCounts(findings: NormalizedFinding[]): Record<string, number> {
@@ -153,8 +157,9 @@ export function buildReviewOutcomeMetadata(
   findings: NormalizedFinding[],
   previouslyLinked: PreviouslyLinkedFindings,
   correlatedDuplicateCount: number,
+  inlineCommentLimit: number = 30,
 ): Record<string, unknown> {
-  const selection = evaluatePostableFindings(findings, previouslyLinked);
+  const selection = evaluatePostableFindings(findings, previouslyLinked, inlineCommentLimit);
   return {
     ...reviewMetadata,
     postableFindingCount: selection.findings.length,
@@ -262,11 +267,16 @@ export const scannerPipeline = defineStep({
     const adoClient = agentConfig.getAdoClient();
     const rootConfig = await agentConfig.getRootConfig();
     const findingStore: FindingStore = new (await import("finding-store")).FindingStore();
-    findingStore.init(rootConfig.findingStorePath ?? ".ratan/data/findings.db");
+    await findingStore.init(rootConfig.findingStorePath ?? ".ratan/data/findings.db");
 
-    const ocrRunner = new OpenCodeReviewRunner();
-    const scanners: Scanner[] = [new OpenCodeReviewScanner(ocrRunner)];
     const scannerSettings = rootConfig.scannerSettings ?? {};
+    // Configure sensitive data masking from root config
+    configureSensitiveDataMask(rootConfig.sensitiveDataMask);
+    const ocrRunner = new OpenCodeReviewRunner({
+      concurrency: rootConfig.openCodeReview?.concurrency,
+      timeoutMs: rootConfig.openCodeReview?.timeoutMs,
+    });
+    const scanners: Scanner[] = [new OpenCodeReviewScanner(ocrRunner)];
     if (scannerSettings.cve?.enabled !== false) scanners.push(new CveScanner());
     if (scannerSettings.compliance?.enabled === true) scanners.push(complianceEngine);
 
@@ -293,7 +303,9 @@ export const scannerPipeline = defineStep({
 
     const correlated = correlateFindings(allFindings);
     const correlatedDuplicateCount = allFindings.length - correlated.length;
-    let prioritized = prioritizeFindings(correlated);
+    const maxFindings = scannerSettings.maxPrioritizedFindings ?? 100;
+    const inlineLimit = scannerSettings.inlineCommentLimit ?? 30;
+    let prioritized = prioritizeFindings(correlated, maxFindings);
     let changesSinceLastReview = "";
     try {
       const previous = findingStore.getFindingsByPr(
@@ -337,6 +349,7 @@ export const scannerPipeline = defineStep({
       prioritized,
       previouslyLinked,
       correlatedDuplicateCount,
+      inlineLimit,
     );
 
     const counts = severityCounts(prioritized);

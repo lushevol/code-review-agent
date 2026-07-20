@@ -102,6 +102,25 @@ Logs are JSONL files in `.ratan/logs` by default, redact secret-like fields, and
 can be configured through `config.logging` (`level`, `format`, `console`, `file`,
 `directory`, and `retentionDays`).
 
+Global tuning values are included in the generated `config.json` with sensible
+defaults and can be adjusted by editing the file — no interactive prompts required.
+Key areas include:
+
+| Config path | Default | Purpose |
+|-------------|---------|---------|
+| `openCodeReview.concurrency` | `8` | Parallel OCR review workers (system-wide) |
+| `openCodeReview.timeoutMs` | `3600000` | OCR review timeout (1 hour) |
+| `scannerSettings.maxPrioritizedFindings` | `100` | Max findings kept after severity sorting |
+| `scannerSettings.inlineCommentLimit` | `30` | Max inline code comments per review |
+| `scannerSettings.compliance.largeFileThreshold` | `400` | Changed lines before large-file warning |
+| `scannerSettings.compliance.consoleDetectionEnabled` | `true` | Flag `console.log`/`console.error` in source |
+| `scannerSettings.compliance.todoDetectionEnabled` | `true` | Flag TODO/FIXME/HACK markers |
+| `workspace.maxGitOutputBytes` | `33554432` | Max git output buffer (32 MiB) |
+| `sensitiveDataMask.enabled` | `true` | Enable PII masking before LLM review |
+| `sensitiveDataMask.customPatterns` | Stripe + Bearer | Regex patterns for secret redaction |
+| `remediationTasks.adoUrlTemplate` | Azure DevOps URL | Template for work item PR links |
+| `remediationTasks.workItemTags` | `"PR Guardian; Code Review"` | Tags applied to created work items |
+
 To run a one-shot scan:
 
 ```bash

@@ -48,6 +48,7 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
   const workspaceProvider = new LocalReviewWorkspaceProvider({
     workspaceRoot: rootConfig.openCodeReview?.workspaceRoot,
     adoToken: agentConfig.getAdoClient().getAdoToken(),
+    maxGitOutputBytes: rootConfig.workspace?.maxGitOutputBytes,
   });
   let attemptedReviewFocuses: ReviewFocusSelection[] = [];
   let reviewAttemptStartedAt: number | undefined;

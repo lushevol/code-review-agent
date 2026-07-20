@@ -31,11 +31,16 @@ const SonarQubeConfigSchema = z.object({
 const ComplianceScannerSettingsSchema = z.object({
   enabled: z.boolean().optional(),
   rulesPath: z.string().optional(),
+  largeFileThreshold: z.number().int().min(50).optional(),
+  consoleDetectionEnabled: z.boolean().optional(),
+  todoDetectionEnabled: z.boolean().optional(),
 });
 
 const ScannerSettingsSchema = z.object({
   cve: CveScannerSettingsSchema.optional(),
   compliance: ComplianceScannerSettingsSchema.optional(),
+  maxPrioritizedFindings: z.number().int().min(1).max(500).optional(),
+  inlineCommentLimit: z.number().int().min(1).max(100).optional(),
 });
 
 const OverrideAuthRulesSchema = z.object({
@@ -59,7 +64,26 @@ const DashboardConfigSchema = z.object({
 
 const RemediationTasksConfigSchema = z.object({
   enabled: z.boolean().optional(),
+  adoUrlTemplate: z.string().optional(),
+  workItemTags: z.string().optional(),
 });
+
+const WorkspaceConfigSchema = z.object({
+  maxGitOutputBytes: z.number().int().min(1048576).optional(),
+}).strict();
+
+const SensitiveDataMaskCustomPatternSchema = z.object({
+  pattern: z.string(),
+  replaceWith: z.string(),
+});
+
+const SensitiveDataMaskConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  redactors: z.object({
+    credentials: z.boolean().optional(),
+  }).optional(),
+  customPatterns: z.array(SensitiveDataMaskCustomPatternSchema).optional(),
+}).strict();
 
 const AuditConfigSchema = z.object({
   retentionDays: z.number().optional(),
@@ -85,6 +109,8 @@ const OpenCodeReviewConfigSchema = z.object({
   workspaceRoot: z.string().optional(),
   rulesPath: z.string().min(1),
   llm: OpenCodeReviewLlmConfigSchema,
+  concurrency: z.number().int().min(1).max(64).optional(),
+  timeoutMs: z.number().int().min(30000).max(7200000).optional(),
 });
 
 /**
@@ -104,8 +130,17 @@ export const RootAgentConfigSchema = z.object({
   dashboard: DashboardConfigSchema.optional(),
   remediationTasks: RemediationTasksConfigSchema.optional(),
   audit: AuditConfigSchema.optional(),
+  workspace: WorkspaceConfigSchema.optional(),
+  sensitiveDataMask: SensitiveDataMaskConfigSchema.optional(),
   feedbackDaemon: FeedbackDaemonConfigSchema.optional(),
   watch: WatchConfigSchema.optional(),
+  ado: z.object({
+    organization: z.string().min(1),
+    project: z.string().min(1),
+    token: z.string().optional(),
+  }).optional(),
+  adoProxyUrl: z.string().optional(),
+  databaseUrl: z.string().optional(),
 }).strict();
 
 export type RootAgentConfig = z.infer<typeof RootAgentConfigSchema>;

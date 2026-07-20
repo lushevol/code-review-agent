@@ -18,17 +18,20 @@ const MAX_GIT_OUTPUT = 32 * 1024 * 1024;
 export interface LocalReviewWorkspaceOptions {
   workspaceRoot?: string;
   adoToken?: string;
+  maxGitOutputBytes?: number;
 }
 
 export class LocalReviewWorkspaceProvider implements ReviewWorkspaceProvider {
   private readonly workspaceRoot: string;
   private readonly adoToken: string;
+  private readonly maxGitOutputBytes: number;
 
   constructor(options: LocalReviewWorkspaceOptions = {}) {
     this.workspaceRoot = path.resolve(
       options.workspaceRoot ?? ".ratan/workspaces",
     );
     this.adoToken = options.adoToken ?? "";
+    this.maxGitOutputBytes = options.maxGitOutputBytes ?? MAX_GIT_OUTPUT;
   }
 
   async withWorkspace<T>(
@@ -254,7 +257,7 @@ export class LocalReviewWorkspaceProvider implements ReviewWorkspaceProvider {
     const { stdout } = await execFileAsync("git", args, {
       env,
       encoding: "utf8",
-      maxBuffer: MAX_GIT_OUTPUT,
+      maxBuffer: this.maxGitOutputBytes,
       windowsHide: true,
     });
     return preserveNul ? stdout : stdout.trim();

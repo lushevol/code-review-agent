@@ -1,46 +1,70 @@
 {
-  "mode": "local",
   "ado": {
     "organization": "your-organization",
     "project": "your-project",
     "token": "env:ADO_TOKEN"
   },
-  "config": {
-    "scanRepoNames": [],
-    "scanPRCreatedDaysAgo": 7,
-    "findingStorePath": ".ratan/data/findings.db",
-    "logging": {
-      "level": "info",
-      "directory": "logs",
-      "retentionDays": 30,
-      "format": "pretty",
-      "console": true,
-      "file": true
+  "adoProxyUrl": "",
+  "scanRepoNames": [],
+  "scanPRCreatedDaysAgo": 7,
+  "findingStorePath": ".ratan/data/findings.db",
+  "logging": {
+    "level": "info",
+    "directory": "logs",
+    "retentionDays": 30,
+    "format": "pretty",
+    "console": true,
+    "file": true
+  },
+  "retry": {
+    "maxAttempts": 3,
+    "baseDelayMs": 1000,
+    "maxDelayMs": 30000,
+    "jitterMs": 1000
+  },
+  "sonarQube": {
+    "url": "https://your-sonarqube.example.com/api",
+    "token": "set-your-sonar-token"
+  },
+  "watch": { "intervalMs": 1800000 },
+  "feedbackDaemon": { "enabled": true, "intervalMs": 300000 },
+  "workspace": {
+    "maxGitOutputBytes": 33554432
+  },
+  "sensitiveDataMask": {
+    "enabled": true,
+    "redactors": { "credentials": true },
+    "customPatterns": [
+      { "pattern": "sk_(live|test)_[a-zA-Z0-9]{24,}", "replaceWith": "API_KEY" },
+      { "pattern": "Bearer [a-zA-Z0-9\\-._]{30,}", "replaceWith": "TOKEN" }
+    ]
+  },
+  "remediationTasks": {
+    "enabled": false,
+    "adoUrlTemplate": "https://dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/{prId}",
+    "workItemTags": "PR Guardian; Code Review"
+  },
+  "scannerSettings": {
+    "cve": { "enabled": false },
+    "compliance": {
+      "enabled": true,
+      "largeFileThreshold": 400,
+      "consoleDetectionEnabled": true,
+      "todoDetectionEnabled": true
     },
-    "retry": {
-      "maxAttempts": 3,
-      "baseDelayMs": 1000,
-      "maxDelayMs": 30000,
-      "jitterMs": 1000
-    },
-    "sonarQube": {
-      "url": "https://sonarqube.example.com/api"
-    },
-    "watch": { "intervalMs": 1800000 },
-    "feedbackDaemon": { "enabled": true, "intervalMs": 300000 },
-    "scannerSettings": {
-      "cve": { "enabled": false },
-      "compliance": { "enabled": true }
-    },
-    "openCodeReview": {
-      "workspaceRoot": ".ratan/workspaces",
-      "rulesPath": "opencodereview/rule.json",
-      "llm": {
-        "url": "http://your-llm-endpoint.example.com/v1",
-        "token": "set-your-llm-token",
-        "model": "your-review-model",
-        "useAnthropic": false
-      }
+    "maxPrioritizedFindings": 100,
+    "inlineCommentLimit": 30
+  },
+  "openCodeReview": {
+    "concurrency": 8,
+    "timeoutMs": 3600000,
+    "workspaceRoot": ".ratan/workspaces",
+    "rulesPath": "opencodereview/rule.json",
+    "llm": {
+      "url": "http://your-llm-endpoint.example.com/v1",
+      "token": "set-your-llm-token",
+      "model": "your-review-model",
+      "useAnthropic": false
     }
   }
 }

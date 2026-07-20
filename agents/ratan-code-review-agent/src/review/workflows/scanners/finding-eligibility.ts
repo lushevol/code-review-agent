@@ -1,6 +1,5 @@
 import type { NormalizedFinding } from "../../types/finding";
 import { FINDING_SEVERITY_RANK } from "./finding-priority";
-const INLINE_COMMENT_LIMIT = 30;
 
 export interface PreviouslyLinkedFindings {
   findingIds: ReadonlySet<string>;
@@ -34,6 +33,7 @@ export function isInlinePostable(finding: NormalizedFinding): boolean {
 export function evaluatePostableFindings(
   findings: NormalizedFinding[],
   previouslyLinked: PreviouslyLinkedFindings,
+  inlineCommentLimit: number = 30,
 ): {
   findings: NormalizedFinding[];
   suppressionReasons: {
@@ -80,10 +80,10 @@ export function evaluatePostableFindings(
     });
   suppressionReasons.commentLimit = Math.max(
     0,
-    eligible.length - INLINE_COMMENT_LIMIT,
+    eligible.length - inlineCommentLimit,
   );
   return {
-    findings: eligible.slice(0, INLINE_COMMENT_LIMIT),
+    findings: eligible.slice(0, inlineCommentLimit),
     suppressionReasons,
   };
 }

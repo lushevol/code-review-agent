@@ -39,13 +39,15 @@ flowchart TD
 
 ## Startup Flow
 
-The CLI loads a `ConfigProvider`, connects to ADO, and registers a queue
-processor. `start --pr-id` calls `startReviewPrWithProvider` directly so errors
-and completion propagate to the shell. One-shot and watch scans use
-`AutoScanService` to filter repositories, enqueue eligible PRs, and apply the
-build-status gate at dequeue time. `--repo-pattern` overrides configured globs.
-Watch mode uses the configured OCR URL and credential for its reachability check
-and runs the feedback daemon alongside the scan interval.
+The CLI loads a `ConfigProvider` (which resolves `config.openCodeReview.llm`, global
+tuning values like `openCodeReview.concurrency`, compliance thresholds, workspace
+buffer sizes, and sensitive-data-mask patterns from `.ratan/config.json`), connects
+to ADO, and registers a queue processor. `start --pr-id` calls
+`startReviewPrWithProvider` directly so errors and completion propagate to the shell.
+One-shot and watch scans use `AutoScanService` to filter repositories, enqueue
+eligible PRs, and apply the build-status gate at dequeue time. `--repo-pattern`
+overrides configured globs. Watch mode uses the configured OCR URL and credential
+for its reachability check and runs the feedback daemon alongside the scan interval.
 
 Each explicit review registers the provider session, creates a small
 `RequestContext` containing only `configSessionId`, then runs sequential workflow
