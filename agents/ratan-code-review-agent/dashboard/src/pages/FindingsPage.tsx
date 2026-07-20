@@ -1,9 +1,16 @@
-import { useEffect, useState, useMemo } from "react";
+import { Fragment, useEffect, useState, useMemo } from "react";
 import { fetchFindings, overrideFinding } from "../api";
 
 const SEVERITIES = ["critical", "high", "medium", "low", "informational"];
-const ENGINES = ["open-code-review", "cve", "compliance"];
-const STATUSES = ["open", "resolved", "wont-fix", "false-positive"];
+const ENGINES = ["open-code-review", "sonarqube-cve", "compliance"];
+const STATUSES = [
+  "open",
+  "resolved",
+  "superseded",
+  "waived",
+  "false-positive",
+  "accepted-risk",
+];
 
 export default function FindingsPage() {
   const [findings, setFindings] = useState<any[]>([]);
@@ -229,9 +236,8 @@ export default function FindingsPage() {
               {filtered.map((f) => {
                 const isExpanded = expandedId === f.id;
                 return (
-                  <>
+                  <Fragment key={f.id}>
                     <tr
-                      key={f.id}
                       onClick={() =>
                         setExpandedId(isExpanded ? null : f.id)
                       }
@@ -333,7 +339,7 @@ export default function FindingsPage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>

@@ -53,7 +53,7 @@ export class AutoScanService {
         },
       });
 
-      if (response.status < 500 && response.status !== 401 && response.status !== 403) {
+      if (response.ok) {
         return true;
       }
       this.logger.warn(

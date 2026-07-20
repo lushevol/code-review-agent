@@ -2,6 +2,7 @@ import { defineConfig } from "@rslib/core";
 
 export default defineConfig({
   source: {
+    tsconfigPath: "./tsconfig.dts.json",
     entry: {
       index: "./src/index.ts",
       cli: "./src/cli/index.ts",
@@ -11,7 +12,7 @@ export default defineConfig({
     {
       format: "esm",
       syntax: ["node 20"],
-      dts: false,
+      dts: { bundle: true },
     },
     {
       format: "cjs",

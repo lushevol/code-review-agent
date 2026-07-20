@@ -21,14 +21,28 @@ export interface NormalizedFinding {
   remediation: string;
   blocking: boolean;
   linkedTaskId: number | null;
-  resolution: string;
-  sourceEngine: string;
+  resolution: FindingResolution;
+  sourceEngine: FindingEngine;
   sourceVersion: string;
   supersedesFindingId: string | null;
   contentHash: string;
   createdAt: string;
   resolvedAt: string | null;
 }
+
+export type FindingEngine =
+  | "ai-review"
+  | "open-code-review"
+  | "sonarqube-cve"
+  | "compliance";
+
+export type FindingResolution =
+  | "open"
+  | "resolved"
+  | "superseded"
+  | "waived"
+  | "false-positive"
+  | "accepted-risk";
 
 export interface AuditRecord {
   id: string;
@@ -450,8 +464,8 @@ export class FindingStore {
   queryFindings(filters: {
     prId?: number;
     repository?: string;
-    engine?: string;
-    resolution?: string;
+    engine?: FindingEngine;
+    resolution?: FindingResolution;
   }): NormalizedFinding[] {
     this.assertInitialized();
     let query = "SELECT * FROM findings WHERE 1=1";
@@ -539,7 +553,7 @@ export class FindingStore {
    */
   updateResolution(
     id: string,
-    resolution: string,
+    resolution: FindingResolution,
     options?: {
       overriddenBy?: string;
       justification?: string;
@@ -625,7 +639,7 @@ export class FindingStore {
   /**
    * Get all findings for a given scanner engine.
    */
-  getFindingsByEngine(engine: string): NormalizedFinding[] {
+  getFindingsByEngine(engine: FindingEngine): NormalizedFinding[] {
     this.assertInitialized();
     try {
       const rows = this.getStmt(STMT.GET_FINDINGS_BY_ENGINE).all(
@@ -793,8 +807,8 @@ function rowToFinding(r: FindingRow): NormalizedFinding {
     remediation: r.remediation,
     blocking: r.blocking === 1,
     linkedTaskId: r.linked_task_id,
-    resolution: r.resolution,
-    sourceEngine: r.source_engine,
+    resolution: r.resolution as FindingResolution,
+    sourceEngine: r.source_engine as FindingEngine,
     sourceVersion: r.source_version,
     supersedesFindingId: r.supersedes_finding_id,
     contentHash: r.content_hash,

@@ -3,9 +3,24 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
-import type { FindingStore } from "finding-store";
+import type { FindingEngine, FindingResolution, FindingStore } from "finding-store";
 import { getPRQueue } from "../services/pr-queue";
 import { getLogger } from "../utils/logger";
+
+const FINDING_ENGINES = new Set<FindingEngine>([
+  "ai-review",
+  "open-code-review",
+  "sonarqube-cve",
+  "compliance",
+]);
+const FINDING_RESOLUTIONS = new Set<FindingResolution>([
+  "open",
+  "resolved",
+  "superseded",
+  "waived",
+  "false-positive",
+  "accepted-risk",
+]);
 
 /**
  * Resolve the dashboard SPA build directory. Works in both tsx (dev) and
@@ -20,7 +35,7 @@ function resolveDashboardDir(): string | null {
   return null;
 }
 
-export function createDashboardApp(findingStore: FindingStore) {
+export function createDashboardApp(findingStore: FindingStore): express.Express {
   const app = express();
   const logger = getLogger("dashboard");
 
@@ -121,11 +136,17 @@ export function createDashboardApp(findingStore: FindingStore) {
       if (req.query.prId && (!Number.isInteger(prId) || (prId ?? 0) <= 0)) {
         return res.status(400).json({ error: "prId must be a positive integer" });
       }
+      if (engine && !FINDING_ENGINES.has(engine as FindingEngine)) {
+        return res.status(400).json({ error: "engine is invalid" });
+      }
+      if (status && !FINDING_RESOLUTIONS.has(status as FindingResolution)) {
+        return res.status(400).json({ error: "status is invalid" });
+      }
       const findings = findingStore.queryFindings({
         prId,
         repository: repo,
-        engine,
-        resolution: status,
+        engine: engine as FindingEngine | undefined,
+        resolution: status as FindingResolution | undefined,
       });
       return res.json({ findings, total: findings.length });
     } catch (err) {
@@ -151,8 +172,11 @@ export function createDashboardApp(findingStore: FindingStore) {
       if (!resolution || !overriddenBy) {
         return res.status(400).json({ error: "resolution and overriddenBy required" });
       }
+      if (!FINDING_RESOLUTIONS.has(resolution as FindingResolution)) {
+        return res.status(400).json({ error: "resolution is invalid" });
+      }
 
-      findingStore.updateResolution(id, resolution, {
+      findingStore.updateResolution(id, resolution as FindingResolution, {
         overriddenBy,
         justification,
         expiryDate,

@@ -91,10 +91,7 @@ export default function AdminPage() {
     );
     const total = engineFindings.length;
     const fp = engineFindings.filter(
-      (f) =>
-        f.resolution === "false-positive" ||
-        f.resolution === "resolved" ||
-        f.resolution === "waived",
+      (f) => f.resolution === "false-positive",
     ).length;
     return {
       engine,

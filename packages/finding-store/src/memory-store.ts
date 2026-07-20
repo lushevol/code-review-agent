@@ -1,6 +1,8 @@
 import type {
   AuditRecord,
+  FindingEngine,
   FindingCommentThread,
+  FindingResolution,
   NormalizedFinding,
 } from "./index";
 
@@ -105,7 +107,7 @@ export class MemoryFindingStore {
    */
   updateResolution(
     id: string,
-    resolution: string,
+    resolution: FindingResolution,
     options?: {
       overriddenBy?: string;
       justification?: string;
@@ -152,7 +154,7 @@ export class MemoryFindingStore {
   /**
    * Find findings by source engine.
    */
-  getFindingsByEngine(engine: string): NormalizedFinding[] {
+  getFindingsByEngine(engine: FindingEngine): NormalizedFinding[] {
     return Array.from(this.findings.values()).filter(
       (f) => f.sourceEngine === engine,
     );

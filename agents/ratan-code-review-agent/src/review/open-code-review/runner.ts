@@ -120,29 +120,29 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
       "review-background.md",
     );
     try {
-    fs.mkdirSync(stateHome, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(backgroundFile, maskSensitiveData(input.background), { mode: 0o600 });
-    if (!fs.existsSync(input.ruleFile)) {
-      throw new Error("OpenCodeReview rule file not found");
-    }
-    try {
-      JSON.parse(fs.readFileSync(input.ruleFile, "utf8"));
-    } catch {
-      throw new Error("OpenCodeReview rule file is invalid");
-    }
-    const configPath = path.join(stateHome, "config.json");
-    fs.writeFileSync(
-      configPath,
-      JSON.stringify({
-        llm: {
-          url: input.llm.url,
-          auth_token: input.llm.token,
-          model: input.llm.model,
-          use_anthropic: input.llm.useAnthropic,
-        },
-      }),
-      { mode: 0o600 },
-    );
+      fs.mkdirSync(stateHome, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(backgroundFile, maskSensitiveData(input.background), { mode: 0o600 });
+      if (!fs.existsSync(input.ruleFile)) {
+        throw new Error("OpenCodeReview rule file not found");
+      }
+      try {
+        JSON.parse(fs.readFileSync(input.ruleFile, "utf8"));
+      } catch {
+        throw new Error("OpenCodeReview rule file is invalid");
+      }
+      const configPath = path.join(stateHome, "config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          llm: {
+            url: input.llm.url,
+            auth_token: input.llm.token,
+            model: input.llm.model,
+            use_anthropic: input.llm.useAnthropic,
+          },
+        }),
+        { mode: 0o600 },
+      );
 
       const stdout = await this.execute(
         [
@@ -278,33 +278,38 @@ function createMaskedGitRange(workspace: ReviewWorkspace): {
       windowsHide: true,
     }).trim();
 
-  execFileSync(
-    "git",
-    ["clone", "--quiet", "--shared", "--no-checkout", workspace.repoPath, repoPath],
-    { encoding: "utf8", windowsHide: true },
-  );
-  git("config", "user.email", "masked-review@localhost.invalid");
-  git("config", "user.name", "PR Guardian Masking");
-  git("checkout", "--quiet", "--detach", workspace.mergeBaseCommit);
-  maskChangedFiles(repoPath, workspace.changes, "base", redactionKey);
-  git("add", "--all");
-  git("commit", "--quiet", "--allow-empty", "-m", "masked review base");
-  const mergeBaseCommit = git("rev-parse", "HEAD");
+  try {
+    execFileSync(
+      "git",
+      ["clone", "--quiet", "--shared", "--no-checkout", workspace.repoPath, repoPath],
+      { encoding: "utf8", windowsHide: true },
+    );
+    git("config", "user.email", "masked-review@localhost.invalid");
+    git("config", "user.name", "PR Guardian Masking");
+    git("checkout", "--quiet", "--detach", workspace.mergeBaseCommit);
+    maskChangedFiles(repoPath, workspace.changes, "base", redactionKey);
+    git("add", "--all");
+    git("commit", "--quiet", "--allow-empty", "-m", "masked review base");
+    const mergeBaseCommit = git("rev-parse", "HEAD");
 
-  git("read-tree", "--reset", "-u", workspace.headCommit);
-  maskChangedFiles(repoPath, workspace.changes, "head", redactionKey);
-  git("add", "--all");
-  git("commit", "--quiet", "--allow-empty", "-m", "masked review head");
-  const headCommit = git("rev-parse", "HEAD");
+    git("read-tree", "--reset", "-u", workspace.headCommit);
+    maskChangedFiles(repoPath, workspace.changes, "head", redactionKey);
+    git("add", "--all");
+    git("commit", "--quiet", "--allow-empty", "-m", "masked review head");
+    const headCommit = git("rev-parse", "HEAD");
 
-  return {
-    repoPath,
-    mergeBaseCommit,
-    headCommit,
-    cleanup() {
-      fs.rmSync(repoPath, { recursive: true, force: true });
-    },
-  };
+    return {
+      repoPath,
+      mergeBaseCommit,
+      headCommit,
+      cleanup() {
+        fs.rmSync(repoPath, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    fs.rmSync(repoPath, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 function maskChangedFiles(

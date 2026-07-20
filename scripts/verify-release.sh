@@ -6,6 +6,8 @@ ADO_ORGANIZATION="${ADO_ORGANIZATION:-lushe}"
 ADO_PROJECT="${ADO_PROJECT:-project1}"
 EXPECTED_AGENT_VERSION="${EXPECTED_AGENT_VERSION:-0.2.0}"
 EXPECTED_STORE_VERSION="${EXPECTED_STORE_VERSION:-0.2.0}"
+EXPECTED_CONFIG_VERSION="${EXPECTED_CONFIG_VERSION:-0.1.0}"
+EXPECTED_MARKDOWN_VERSION="${EXPECTED_MARKDOWN_VERSION:-0.1.0}"
 PR_ID=""
 SCAN_PR=false
 EXPECTED_DECISION=""
@@ -96,9 +98,13 @@ require_environment DEEPSEEK_LLM_MODEL
 printf 'OK  required environment variables are set (values hidden)\n'
 
 store_version="$(npm view "finding-store@${EXPECTED_STORE_VERSION}" version)"
+config_version="$(npm view "agent-config-manager@${EXPECTED_CONFIG_VERSION}" version)"
+markdown_version="$(npm view "ratan-markdown-tool@${EXPECTED_MARKDOWN_VERSION}" version)"
 agent_version="$(npm view "ratan-code-review@${EXPECTED_AGENT_VERSION}" version)"
 installed_version="$(ratan-code-review --version)"
 check_version "finding-store registry" "$EXPECTED_STORE_VERSION" "$store_version"
+check_version "agent-config-manager registry" "$EXPECTED_CONFIG_VERSION" "$config_version"
+check_version "ratan-markdown-tool registry" "$EXPECTED_MARKDOWN_VERSION" "$markdown_version"
 check_version "ratan-code-review registry" "$EXPECTED_AGENT_VERSION" "$agent_version"
 check_version "installed ratan-code-review" "$EXPECTED_AGENT_VERSION" "$installed_version"
 

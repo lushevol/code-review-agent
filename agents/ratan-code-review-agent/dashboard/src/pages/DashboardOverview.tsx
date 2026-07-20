@@ -57,10 +57,12 @@ export default function DashboardOverview() {
   const openCount = findings.filter(
     (f) => f.resolution === "open" || f.status === "open",
   ).length;
-  const resolvedCount = findings.filter(
-    (f) => f.resolution === "resolved" || f.resolution === "fixed" || f.resolution === "wont-fix" || f.status === "resolved",
+  const resolvedCount = stats?.resolvedFindings ?? findings.filter(
+    (f) => f.resolution && f.resolution !== "open",
   ).length;
-  const blockingCount = findings.filter((f) => f.blocking).length;
+  const blockingCount = stats?.blockingFindings ?? findings.filter(
+    (f) => f.blocking && f.resolution === "open",
+  ).length;
 
   return (
     <div>
@@ -83,7 +85,7 @@ export default function DashboardOverview() {
         />
         <SummaryCard title="Open" value={openCount} color="#e94560" />
         <SummaryCard title="Resolved" value={resolvedCount} color="#2ecc71" />
-        <SummaryCard title="Blocking PRs" value={blockingCount} color="#f5a623" />
+        <SummaryCard title="Blocking Findings" value={blockingCount} color="#f5a623" />
       </div>
 
       <div

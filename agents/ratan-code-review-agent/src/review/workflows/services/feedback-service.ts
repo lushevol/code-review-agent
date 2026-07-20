@@ -1,4 +1,8 @@
-import { FindingStore } from "finding-store";
+import {
+  FindingStore,
+  type FindingEngine,
+  type FindingResolution,
+} from "finding-store";
 import type { ConfigProvider } from "agent-config-manager";
 import { getLogger } from "../../../cli/utils/logger";
 
@@ -55,7 +59,7 @@ export class FeedbackService {
     );
 
     // Map feedback type to resolution
-    const resolutionMap: Record<string, string> = {
+    const resolutionMap: Partial<Record<FeedbackEntry["feedbackType"], FindingResolution>> = {
       "false-positive": "resolved",
       "already-addressed": "resolved",
       "by-design": "resolved",
@@ -173,7 +177,11 @@ export class FeedbackService {
       { total: number; falsePositive: number; fpRate: number }
     > = {};
     const highFpRules: string[] = [];
-    const engines = ["ai-review", "sonarqube-cve", "compliance"];
+    const engines: FindingEngine[] = [
+      "open-code-review",
+      "sonarqube-cve",
+      "compliance",
+    ];
 
     for (const engine of engines) {
       let findings;
@@ -185,8 +193,7 @@ export class FeedbackService {
 
       const total = findings.length;
       const falsePositive = findings.filter(
-        (f: { resolution?: string }) =>
-          f.resolution === "resolved" || f.resolution === "waived",
+        (finding) => finding.resolution === "false-positive",
       ).length;
       const fpRate = total > 0 ? falsePositive / total : 0;
 

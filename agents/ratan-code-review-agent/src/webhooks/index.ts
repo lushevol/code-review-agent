@@ -35,7 +35,7 @@ export function createWebhookServer(options: {
   port: number;
   secret?: string;
   onPREvent: (event: { action: string; prId: number; repository: string }) => Promise<void>;
-}) {
+}): express.Express {
   const app = express();
 
   // Raw body for HMAC validation

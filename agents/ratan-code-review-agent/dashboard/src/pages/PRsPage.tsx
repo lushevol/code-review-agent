@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { fetchPRs, fetchFindings } from "../api";
 
 export default function PRsPage() {
@@ -109,9 +109,8 @@ export default function PRsPage() {
               const findingCount = pr.findingCount ?? pr.findingsCount ?? pr.totalFindings ?? 0;
               const blockingCount = pr.blockingCount ?? pr.blockingFindings ?? 0;
               return (
-                <>
+                <Fragment key={`${repository}:${pr.prId ?? pr.id}`}>
                   <tr
-                    key={`${repository}:${pr.prId ?? pr.id}`}
                     onClick={() => handleSelectPr(pr.prId ?? pr.id, repository)}
                     style={{
                       cursor: "pointer",
@@ -147,10 +146,10 @@ export default function PRsPage() {
                     <td style={cellStyle}>
                       {badge(
                         pr.status || "active",
-                        pr.status === "completed" || pr.status === "merged"
+                        pr.status === "allowed"
                           ? "#2ecc71"
-                          : pr.status === "closed"
-                            ? "#95a5a6"
+                          : pr.status === "blocked"
+                            ? "#e94560"
                             : "#f5a623",
                       )}
                     </td>
@@ -239,7 +238,7 @@ export default function PRsPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>

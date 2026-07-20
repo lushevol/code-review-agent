@@ -56,6 +56,29 @@ describe("FeedbackService", () => {
       }),
     ).toThrow("Comment thread must belong to the finding's PR and repository");
   });
+
+  it("reports current scanner engines and counts only explicit false positives", async () => {
+    const store = new MemoryFindingStore();
+    const falsePositive = finding("33333333-3333-4333-8333-333333333333");
+    const resolved = finding("44444444-4444-4444-8444-444444444444");
+    store.upsertFinding(falsePositive);
+    store.upsertFinding(resolved);
+    store.updateResolution(falsePositive.id, "false-positive");
+    store.updateResolution(resolved.id, "resolved");
+
+    const stats = await new FeedbackService(store as never).getFeedbackStats();
+
+    expect(Object.keys(stats.perEngine)).toEqual([
+      "open-code-review",
+      "sonarqube-cve",
+      "compliance",
+    ]);
+    expect(stats.perEngine["open-code-review"]).toEqual({
+      total: 2,
+      falsePositive: 1,
+      fpRate: 0.5,
+    });
+  });
 });
 
 function finding(id: string): NormalizedFinding {

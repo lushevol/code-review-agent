@@ -8,7 +8,7 @@ describe("AutoScanService LLM health check", () => {
 
   it("checks the configured endpoint with its configured credential", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(null, { status: 404, statusText: "Not Found" }),
+      new Response(null, { status: 204, statusText: "No Content" }),
     );
     vi.stubGlobal("fetch", fetchMock);
 

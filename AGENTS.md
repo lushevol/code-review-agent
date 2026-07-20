@@ -228,7 +228,7 @@ OpenCodeReview owns review semantics through its native rule JSON. Default confi
 - `agents/ratan-code-review-agent/src/cli/dashboard/` — Express dashboard backend (health, findings, audit, stats APIs)
 - `agents/ratan-code-review-agent/bin/ratan-code-review.cjs` — npm bin shim (CJS entry)
 - `agents/ratan-code-review-agent/bin/ratan-code-review.js` — npm bin shim (ESM entry)
-- `agents/ratan-code-review-agent/src/review/index.ts` — evaluation-agent registry; production review uses OpenCodeReview directly
+- `agents/ratan-code-review-agent/src/review/index.ts` — review type exports; production review uses OpenCodeReview directly
 - `agents/ratan-code-review-agent/src/review/open-code-review/` — OCR runner and deterministic review-focus router
 - `agents/ratan-code-review-agent/src/review/workflows/pr-review-workflow.ts` — top-level workflow definition (scanner pipeline, merge gate, audit, work items, comments)
 - `agents/ratan-code-review-agent/src/review/workflows/steps/` — fetch, SonarQube measures, merge-gate, audit, work-item, and comment steps
@@ -237,7 +237,7 @@ OpenCodeReview owns review semantics through its native rule JSON. Default confi
 - `agents/ratan-code-review-agent/src/review/workflows/utils/` — finding-reconciler, review-tracker
 - `agents/ratan-code-review-agent/src/review/types/index.ts` — shared Zod schemas and TypeScript types
 - `agents/ratan-code-review-agent/src/review/types/finding.ts` — NormalizedFinding schema, FindingCategory, FindingSeverity, EngineType, content hash computation
-- `agents/ratan-code-review-agent/src/bootstrap/` — startup, PR scanning, session handling
+- `agents/ratan-code-review-agent/src/bootstrap/` — provider session registration and explicit PR review startup
 - `agents/ratan-code-review-agent/src/webhooks/` — Express webhook receiver, HMAC validation, eligibility gate
 - `agents/ratan-code-review-agent/src/evaluation/` — 25-case synthetic golden PR corpus, deterministic evaluator, opt-in live OCR runner, and optional qualitative LLM judge
 - `agents/ratan-code-review-agent/templates/` — default config and native OCR rule templates (published to npm)
@@ -301,7 +301,6 @@ pnpm verify:release -- --pr-id 12345 --expect-decision blocked --expect-fenced-s
 # Run watch mode (starts PR scanning — has side effects)
 pnpm agent:dev
 
-# Run demo (live PR scanning — has side effects)
 ```
 
 ## Environment
@@ -316,7 +315,6 @@ OCR_LLM_TOKEN=your_api_key
 
 # Optional
 SONARQUBE_TOKEN=your_sonarqube_token
-DATABASE_URL=postgres_connection_string
 ```
 
 ## Important Notes

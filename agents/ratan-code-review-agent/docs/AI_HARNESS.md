@@ -230,7 +230,7 @@ Before allowing live PR review:
 - Confirm OCR rule scope and merge-policy configuration.
 - Run against a dedicated test PR before enabling broad scanning.
 
-Current status: the complete suite has 36 test files and 249 passing tests,
+Current status: the complete suite has 38 test files and 259 passing tests,
 the loopback dashboard integration test passes separately. Package coverage from
 the prior full coverage run is 62.35% statements,
 51.1% branches, 67.55% functions, and 63.37% lines. The scanner pipeline,

@@ -156,6 +156,13 @@ describe("dashboard data routes", () => {
       };
       expect((await get("/api/findings")).total).toBe(2);
       expect((await get("/api/findings?prId=7&repo=repo-b")).findings).toHaveLength(1);
+      expect((await fetch(`http://127.0.0.1:${port}/api/findings?engine=legacy`)).status).toBe(400);
+      expect((await fetch(`http://127.0.0.1:${port}/api/findings?status=wont-fix`)).status).toBe(400);
+      expect((await fetch(`http://127.0.0.1:${port}/api/findings/550e8400-e29b-41d4-a716-446655440011`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ resolution: "wont-fix", overriddenBy: "owner" }),
+      })).status).toBe(400);
       expect((await get("/api/overrides")).overrides[0]).toMatchObject({
         overriddenBy: "owner",
         newResolution: "false-positive",

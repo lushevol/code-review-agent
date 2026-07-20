@@ -59,6 +59,33 @@ afterEach(() => {
 });
 
 describe("OpenCodeReviewRunner", () => {
+  it("removes a partially prepared masked repository when setup fails", async () => {
+    const fixture = fakeBinary(JSON.stringify({ status: "success", comments: [] }));
+    const repoPath = path.join(fixture.dir, "source-repo");
+    const runDirectory = path.join(fixture.dir, "run");
+    fs.mkdirSync(repoPath);
+    fs.mkdirSync(runDirectory);
+    require("node:child_process").execFileSync("git", ["init", "--quiet"], {
+      cwd: repoPath,
+    });
+
+    const runner = new OpenCodeReviewRunner({ binaryPath: fixture.binary });
+    await expect(runner.review({
+      workspace: {
+        repoPath,
+        runDirectory,
+        mergeBaseCommit: "missing-base",
+        headCommit: "missing-head",
+        changes: [{ path: "config.ts", status: "modified", addedLines: [] }],
+      },
+      background: "",
+      llm: { url: "https://llm.example/v1", token: "secret", model: "model", useAnthropic: false },
+      ruleFile: ruleFile(fixture.dir),
+    })).rejects.toThrow();
+
+    expect(fs.existsSync(path.join(runDirectory, "masked-review-repo"))).toBe(false);
+  });
+
   it("masks secrets in the git range passed to OCR", async () => {
     const fixture = fakeBinary(JSON.stringify({ status: "success", comments: [] }));
     const repoPath = path.join(fixture.dir, "source-repo");

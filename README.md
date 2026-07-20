@@ -75,6 +75,10 @@ ratan-code-review --help
 The root help output includes a compact cheatsheet for first-run scanning,
 single-PR review, watch mode, and dashboard startup.
 
+The programmatic root export is intentionally limited to
+`startReviewPrWithProvider` and normalized-finding schemas/types/helpers. The npm
+package includes TypeScript declarations for this surface.
+
 Commands:
 
 | Command | Description |
@@ -118,7 +122,12 @@ From a login shell containing the ADO and DeepSeek variables, run the reusable r
 pnpm verify:release -- --pr-id 5
 ```
 
-The defaults are ADO organization `lushe`, project `project1`, `ratan-code-review@0.2.0`, and `finding-store@0.2.0`. Override them with `ADO_ORGANIZATION`, `ADO_PROJECT`, `EXPECTED_AGENT_VERSION`, or `EXPECTED_STORE_VERSION`. A normal verification is read-only. To deliberately run a real review that can update PR comments and status, use:
+The defaults are ADO organization `lushe`, project `project1`,
+`ratan-code-review@0.2.0`, `finding-store@0.2.0`,
+`agent-config-manager@0.1.0`, and `ratan-markdown-tool@0.1.0`. Override them
+with the corresponding `EXPECTED_*_VERSION` variable. A normal verification is
+read-only. To deliberately run a real review that can update PR comments and
+status, use:
 
 ```bash
 pnpm verify:release -- --scan-pr 5 --expect-decision blocked
@@ -235,7 +244,7 @@ OpenCodeReview configuration is scaffolded locally under `.ratan/`:
 
 As of the latest local verification:
 
-- The complete suite passes — 36 files and 249 tests, including the loopback dashboard integration and installed-package CLI coverage.
+- The complete suite passes — 38 files and 259 tests, including the loopback dashboard integration and installed-package CLI coverage.
 - Package coverage is 62.35% statements, 51.1% branches, 67.55% functions,
   and 63.37% lines.
 - The offline suite includes golden finding-quality controls plus mocked merge
@@ -281,7 +290,6 @@ The endpoint, model, provider mode, and `env:OCR_LLM_TOKEN` reference belong in
 
 ```bash
 SONARQUBE_TOKEN=your_sonarqube_token
-DATABASE_URL=postgres_connection_string
 ```
 
 ## Architecture Notes
