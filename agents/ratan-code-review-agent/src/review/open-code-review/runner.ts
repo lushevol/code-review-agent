@@ -1,9 +1,11 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { createHmac, randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { FindingCategory } from "../types/finding";
+import { maskSensitiveData } from "../utils/sensitive-data-mask";
 import type { ReviewWorkspace } from "../workspace/types";
 
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
@@ -111,13 +113,15 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
 
   async review(input: OcrReviewInput): Promise<OcrReviewOutput> {
     const startedAt = Date.now();
+    const maskedRange = createMaskedGitRange(input.workspace);
     const stateHome = path.join(input.workspace.runDirectory, "ocr-home");
     const backgroundFile = path.join(
       input.workspace.runDirectory,
       "review-background.md",
     );
+    try {
     fs.mkdirSync(stateHome, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(backgroundFile, input.background, { mode: 0o600 });
+    fs.writeFileSync(backgroundFile, maskSensitiveData(input.background), { mode: 0o600 });
     if (!fs.existsSync(input.ruleFile)) {
       throw new Error("OpenCodeReview rule file not found");
     }
@@ -140,16 +144,15 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
       { mode: 0o600 },
     );
 
-    try {
       const stdout = await this.execute(
         [
           "review",
           "--repo",
-          input.workspace.repoPath,
+          maskedRange.repoPath,
           "--from",
-          input.workspace.mergeBaseCommit,
+          maskedRange.mergeBaseCommit,
           "--to",
-          input.workspace.headCommit,
+          maskedRange.headCommit,
           "--format",
           "json",
           "--audience",
@@ -179,6 +182,7 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
       };
     } finally {
       fs.rmSync(stateHome, { recursive: true, force: true });
+      maskedRange.cleanup();
     }
   }
 
@@ -247,6 +251,97 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
       OCR_USE_ANTHROPIC: String(useAnthropic),
     };
   }
+}
+
+function createMaskedGitRange(workspace: ReviewWorkspace): {
+  repoPath: string;
+  mergeBaseCommit: string;
+  headCommit: string;
+  cleanup(): void;
+} {
+  if (workspace.changes.length === 0) {
+    return {
+      repoPath: workspace.repoPath,
+      mergeBaseCommit: workspace.mergeBaseCommit,
+      headCommit: workspace.headCommit,
+      cleanup() {},
+    };
+  }
+
+  const repoPath = path.join(workspace.runDirectory, "masked-review-repo");
+  const redactionKey = randomBytes(32);
+  const git = (...args: string[]) =>
+    execFileSync("git", args, {
+      cwd: repoPath,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      windowsHide: true,
+    }).trim();
+
+  execFileSync(
+    "git",
+    ["clone", "--quiet", "--shared", "--no-checkout", workspace.repoPath, repoPath],
+    { encoding: "utf8", windowsHide: true },
+  );
+  git("config", "user.email", "masked-review@localhost.invalid");
+  git("config", "user.name", "PR Guardian Masking");
+  git("checkout", "--quiet", "--detach", workspace.mergeBaseCommit);
+  maskChangedFiles(repoPath, workspace.changes, "base", redactionKey);
+  git("add", "--all");
+  git("commit", "--quiet", "--allow-empty", "-m", "masked review base");
+  const mergeBaseCommit = git("rev-parse", "HEAD");
+
+  git("read-tree", "--reset", "-u", workspace.headCommit);
+  maskChangedFiles(repoPath, workspace.changes, "head", redactionKey);
+  git("add", "--all");
+  git("commit", "--quiet", "--allow-empty", "-m", "masked review head");
+  const headCommit = git("rev-parse", "HEAD");
+
+  return {
+    repoPath,
+    mergeBaseCommit,
+    headCommit,
+    cleanup() {
+      fs.rmSync(repoPath, { recursive: true, force: true });
+    },
+  };
+}
+
+function maskChangedFiles(
+  repoPath: string,
+  changes: ReviewWorkspace["changes"],
+  revision: "base" | "head",
+  redactionKey: Buffer,
+): void {
+  for (const change of changes) {
+    const relativePath = revision === "base" ? change.previousPath ?? change.path : change.path;
+    const filePath = path.join(repoPath, relativePath);
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) continue;
+    const bytes = fs.readFileSync(filePath);
+    if (bytes.includes(0)) continue;
+    fs.writeFileSync(
+      filePath,
+      maskDiffContent(bytes.toString("utf8"), redactionKey),
+    );
+  }
+}
+
+function maskDiffContent(content: string, redactionKey: Buffer): string {
+  const masked = maskSensitiveData(content);
+  const originalLines = content.split("\n");
+  return masked
+    .split("\n")
+    .map((line, index) => {
+      if (!/(\*\*\*\*|API_KEY|TOKEN)/.test(line)) return line;
+      const digest = createHmac("sha256", redactionKey)
+        .update(originalLines[index] ?? "")
+        .digest("hex")
+        .slice(0, 12);
+      return line.replaceAll("****", `****:${digest}`)
+        .replaceAll("API_KEY", `[REDACTED:${digest}]`)
+        .replaceAll("TOKEN", `[REDACTED:${digest}]`);
+    })
+    .join("\n");
 }
 
 function resolveOcrBinary(): string {

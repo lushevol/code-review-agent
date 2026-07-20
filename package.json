@@ -7,7 +7,6 @@
     "agent:build": "pnpm --filter ratan-code-review build",
     "agent:start": "pnpm --filter ratan-code-review start",
     "agent:dev": "pnpm --filter ratan-code-review dev",
-    "agent:demo": "pnpm --filter ratan-code-review demo",
     "verify:release": "bash scripts/verify-release.sh",
     "clean": "pnpm -r exec sh -c 'rm -rf dist'"
   },

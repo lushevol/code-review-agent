@@ -127,8 +127,6 @@ async function executeMergeGate(
       ...overrides,
     } as never,
     requestContext,
-    agents: { getAgent: vi.fn() },
-    getStepResult: vi.fn(),
   });
 }
 

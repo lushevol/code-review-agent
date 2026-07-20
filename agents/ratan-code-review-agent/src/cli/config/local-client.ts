@@ -78,7 +78,4 @@ export class LocalConfigClient implements ConfigProvider {
     return this.sonarQubeClient;
   }
 
-  async getOrmClient(): Promise<null> {
-    return null;
-  }
 }

@@ -139,14 +139,10 @@ describe("comment", () => {
     await comment.execute({
       inputData,
       requestContext,
-      agents: { getAgent: vi.fn() },
-      getStepResult: vi.fn(),
     });
     await comment.execute({
       inputData,
       requestContext,
-      agents: { getAgent: vi.fn() },
-      getStepResult: vi.fn(),
     });
 
     const store = new FindingStore(dbPath);
@@ -272,8 +268,6 @@ describe("comment", () => {
         createdWorkItems: 0,
       },
       requestContext,
-      agents: { getAgent: vi.fn() },
-      getStepResult: vi.fn(),
     });
 
     expect(
@@ -330,8 +324,6 @@ describe("comment", () => {
         createdWorkItems: 3,
       },
       requestContext,
-      agents: { getAgent: vi.fn() },
-      getStepResult: vi.fn(),
     });
 
     expect(gitApi.deleteComment).toHaveBeenCalledWith(
@@ -413,8 +405,6 @@ describe("comment", () => {
         createdWorkItems: 0,
       },
       requestContext,
-      agents: { getAgent: vi.fn() },
-      getStepResult: vi.fn(),
     });
 
     expect(updateCommentThreadStatus).toHaveBeenCalledWith(
@@ -639,8 +629,6 @@ describe("comment", () => {
         createdWorkItems: 0,
       },
       requestContext,
-      agents: { getAgent: vi.fn() },
-      getStepResult: vi.fn(),
     });
 
     expect(updateCommentThreadStatus).toHaveBeenCalledWith(
@@ -714,8 +702,6 @@ describe("comment", () => {
         createdWorkItems: 0,
       },
       requestContext,
-      agents: { getAgent: vi.fn() },
-      getStepResult: vi.fn(),
     });
 
     expect(addCommentThreadForPRCode).toHaveBeenCalledTimes(30);
@@ -834,8 +820,6 @@ function executeCommentReview(
       createdWorkItems: 0,
     },
     requestContext,
-    agents: { getAgent: vi.fn() },
-    getStepResult: vi.fn(),
   });
 }
 

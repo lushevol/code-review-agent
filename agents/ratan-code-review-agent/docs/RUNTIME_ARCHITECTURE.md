@@ -8,9 +8,9 @@ flowchart TD
     Eligibility --> Dedup["Dedup Window: 5 min"]
     Dedup --> WorkflowRun["runPrReviewWorkflow"]
 
-    Polling["Polling: scan --watch<br/>every 30 min"] --> PRScan["scanPRs(runtimeContext)"]
-    PRScan --> ADOList["ADO: repos and PR list"]
-    PRScan --> WorkflowRun
+    Polling["CLI auto-scan<br/>one-shot or --watch"] --> PRQueue["Repository filter + PR queue"]
+    PRQueue --> ADOList["ADO: repos and PR list"]
+    PRQueue --> WorkflowRun
 
     WorkflowRun --> FetchPR["fetch-pr-details"]
     FetchPR --> ADOFetch["ADO: PR details, diffs, iteration"]
@@ -39,29 +39,22 @@ flowchart TD
 
 ## Startup Flow
 
-Two entry points exist:
+The CLI loads a `ConfigProvider`, connects to ADO, and registers a queue
+processor. `start --pr-id` calls `startReviewPrWithProvider` directly so errors
+and completion propagate to the shell. One-shot and watch scans use
+`AutoScanService` to filter repositories, enqueue eligible PRs, and apply the
+build-status gate at dequeue time. `--repo-pattern` overrides configured globs.
+Watch mode uses the configured OCR URL and credential for its reachability check
+and runs the feedback daemon alongside the scan interval.
 
-**1. `startup(startupOptions)`** (backwards compat for demo.ts, evaluation)
-Accepts `AgentConfigCreationOptions`. Creates a config session via `AgentConfigSession.createAgentConfigSession()`, then calls `runScanLoop()`.
-
-**2. `startScanWithProvider(provider)`** (used by CLI)
-Accepts a pre-created `ConfigProvider`. Registers it via `AgentConfigSession.registerProvider()`, then calls `runScanLoop()`.
-
-Both converge on `runScanLoop(agentConfig: ConfigProvider)`, which calls `scanPRs` with:
-
-```ts
-{
-  runtimeContext: {
-    configSessionId: agentConfig.id
-  }
-}
-```
-
-`scanPRs` returns an RxJS `Observable` of pending pull requests. For every pending PR, `runScanLoop` creates a local `RequestContext`, sets `configSessionId`, streams `runPrReviewWorkflow`, and logs every step output.
+Each explicit review registers the provider session, creates a small
+`RequestContext` containing only `configSessionId`, then runs sequential workflow
+steps. Step boundaries validate Zod input/output schemas; workflow data is passed
+directly rather than stored in a registry or step-result context map.
 
 ## PR Scan Flow
 
-`scanPRs`:
+`AutoScanService.scan`:
 
 1. Reads `scanRepoNames` and `scanPRCreatedDaysAgo` from root config.
 2. Gets repositories from the ADO client (cached for 24 hours via module-level cache).
@@ -71,7 +64,7 @@ Both converge on `runScanLoop(agentConfig: ConfigProvider)`, which calls `scanPR
 6. Uses `adoClient.isValidPullRequest`.
 7. Fetches PR details with comments.
 8. Skips PRs where the agent has already commented.
-9. Emits `{ repoName, prId }`.
+9. Enqueues `{ repoName, repoId, prId }`.
 
 ## Scanner Pipeline Flow
 
@@ -167,4 +160,22 @@ event before status, audit, work-item, or comment publication.
 
 Diff text passes through `maskSensitiveData`, which uses `redact-pii` credential redaction plus custom patterns for Stripe-style keys, bearer tokens, and assignments to `password`, `token`, or `secret`.
 
-The current masking configuration intentionally does not redact email addresses, names, phone numbers, IP addresses, URLs, generic digits, or street addresses.
+Before OCR executes, the runner builds an isolated two-commit Git repository for
+the requested base/head range and masks changed text there. Replacement markers
+use a per-run keyed digest, allowing the review to distinguish changed secrets
+without receiving their original values or a reusable cross-run hash. The source
+checkout is never modified, and the temporary repository is removed after the
+run, including error paths.
+
+The current masking configuration intentionally does not redact email addresses,
+names, phone numbers, IP addresses, URLs, generic digits, or street addresses.
+
+## Dashboard Data Flow
+
+The Express API reads SQLite through `FindingStore` query methods. `/api/findings`
+supports global and independent PR/repository/engine/resolution filters;
+`/api/overrides` exposes override history; stats count unique
+`repository + pullRequestId` pairs; and `/api/prs` selects the latest review per
+repository-aware PR before computing status and finding counts. The SPA uses
+these APIs for findings, PR details, overview charts, override administration,
+and pending-queue clearing.

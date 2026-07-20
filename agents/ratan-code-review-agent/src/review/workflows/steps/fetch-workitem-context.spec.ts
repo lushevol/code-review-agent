@@ -87,7 +87,5 @@ async function executeFetchWorkItemContext(
       },
     } as never,
     requestContext,
-    agents: { getAgent: vi.fn() },
-    getStepResult: vi.fn(),
   });
 }

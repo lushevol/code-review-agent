@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { fetchFindings, overrideFinding } from "../api";
 
 const SEVERITIES = ["critical", "high", "medium", "low", "informational"];
-const ENGINES = ["code-review", "sonarqube", "dependency-check", "secret-scanning"];
+const ENGINES = ["open-code-review", "cve", "compliance"];
 const STATUSES = ["open", "resolved", "wont-fix", "false-positive"];
 
 export default function FindingsPage() {
@@ -252,7 +252,7 @@ export default function FindingsPage() {
                         {badge(f.severity || "unknown", severityColor(f.severity))}
                       </td>
                       <td style={cellStyle}>{f.category || "-"}</td>
-                      <td style={cellStyle}>{f.engine || f.source || "-"}</td>
+                      <td style={cellStyle}>{f.sourceEngine || f.engine || f.source || "-"}</td>
                       <td style={cellStyle}>
                         {badge(
                           f.resolution || f.status || "open",

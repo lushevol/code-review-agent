@@ -118,15 +118,26 @@ export function createDashboardApp(findingStore: FindingStore) {
       const engine = req.query.engine as string | undefined;
       const status = req.query.status as string | undefined;
 
-      if (prId && repo) {
-        const findings = findingStore.getFindingsByPr(prId, repo);
-        let filtered = findings;
-        if (engine) filtered = filtered.filter(f => f.sourceEngine === engine);
-        if (status) filtered = filtered.filter(f => f.resolution === status);
-        return res.json({ findings: filtered, total: filtered.length });
+      if (req.query.prId && (!Number.isInteger(prId) || (prId ?? 0) <= 0)) {
+        return res.status(400).json({ error: "prId must be a positive integer" });
       }
+      const findings = findingStore.queryFindings({
+        prId,
+        repository: repo,
+        engine,
+        resolution: status,
+      });
+      return res.json({ findings, total: findings.length });
+    } catch (err) {
+      return res.status(500).json({ error: String(err) });
+    }
+  });
 
-      return res.json({ findings: [], total: 0 });
+  app.get("/api/overrides", (req, res) => {
+    try {
+      const findingId = req.query.findingId as string | undefined;
+      const overrides = findingStore.queryOverrideLog(findingId);
+      return res.json({ overrides, total: overrides.length });
     } catch (err) {
       return res.status(500).json({ error: String(err) });
     }
@@ -173,18 +184,11 @@ export function createDashboardApp(findingStore: FindingStore) {
 
   app.get("/api/stats", (_req, res) => {
     try {
-      // Gather aggregated stats from FindingStore
       const auditRecords = findingStore.queryAuditRecords({});
-
-      // Count unique PRs
-      const uniquePrs = new Set(auditRecords.map((r) => r.prId));
-
-      // Count findings by severity
-      const allFindings = auditRecords.reduce((acc, record) => {
-        // Pull findings per PR from the store
-        const findings = findingStore.getFindingsByPr(record.prId, record.repository);
-        return acc.concat(findings);
-      }, [] as Array<{ severity: string; sourceEngine: string; resolution: string }>);
+      const uniquePrs = new Set(
+        auditRecords.map((record) => `${record.repository}:${record.prId}`),
+      );
+      const allFindings = findingStore.queryFindings({});
 
       const severityCounts: Record<string, number> = {};
       const engineCounts: Record<string, number> = {};
@@ -198,9 +202,18 @@ export function createDashboardApp(findingStore: FindingStore) {
         const eng = f.sourceEngine || "unknown";
         engineCounts[eng] = (engineCounts[eng] ?? 0) + 1;
 
-        if (sev === "critical" || sev === "high") totalBlocking++;
+        if (f.blocking && f.resolution === "open") totalBlocking++;
         if (f.resolution && f.resolution !== "open") totalResolved++;
       }
+
+      const recentActivity = [...auditRecords]
+        .sort((a, b) => b.reviewStartTimestamp.localeCompare(a.reviewStartTimestamp))
+        .slice(0, 10)
+        .map((record) => ({
+          action: record.mergePolicyDecision === "blocked" ? "Review blocked" : "Review completed",
+          detail: `${record.repository} PR #${record.prId}: ${record.findingsCount} findings`,
+          timestamp: record.reviewEndTimestamp,
+        }));
 
       return res.json({
         totalReviews: auditRecords.length,
@@ -210,6 +223,7 @@ export function createDashboardApp(findingStore: FindingStore) {
         resolvedFindings: totalResolved,
         severityCounts,
         engineCounts,
+        recentActivity,
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
@@ -226,8 +240,7 @@ export function createDashboardApp(findingStore: FindingStore) {
 
       const auditRecords = findingStore.queryAuditRecords({ repository: repo });
 
-      // Build unique PR list with aggregated data
-      const prMap = new Map<number, {
+      const prMap = new Map<string, {
         prId: number;
         repository: string;
         status: string;
@@ -236,28 +249,35 @@ export function createDashboardApp(findingStore: FindingStore) {
         createdAt: string;
       }>();
 
-      for (const record of auditRecords) {
-        if (status && record.mergePolicyDecision !== status) continue;
-
-        const existing = prMap.get(record.prId);
-        if (existing) {
-          existing.findingCount += record.findingsCount ?? 0;
-          existing.blockingCount += record.blockingFindingsCount ?? 0;
-        } else {
-          prMap.set(record.prId, {
+      for (const record of [...auditRecords].sort(
+        (a, b) => b.reviewStartTimestamp.localeCompare(a.reviewStartTimestamp),
+      )) {
+        const key = `${record.repository}:${record.prId}`;
+        if (!prMap.has(key)) {
+          const findings = findingStore.queryFindings({
+            prId: record.prId,
+            repository: record.repository,
+          });
+          prMap.set(key, {
             prId: record.prId,
             repository: record.repository,
             status: record.mergePolicyDecision,
-            findingCount: record.findingsCount,
-            blockingCount: record.blockingFindingsCount,
+            findingCount: findings.length,
+            blockingCount: findings.filter(
+              (finding) => finding.blocking && finding.resolution === "open",
+            ).length,
             createdAt: record.reviewStartTimestamp,
           });
         }
       }
 
+      const prs = Array.from(prMap.values()).filter(
+        (pr) => !status || pr.status === status,
+      );
+
       return res.json({
-        prs: Array.from(prMap.values()),
-        total: prMap.size,
+        prs,
+        total: prs.length,
       });
     } catch (err) {
       return res.status(500).json({ error: String(err) });

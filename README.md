@@ -12,8 +12,7 @@ Originally a basic framework-based code review agent, it evolved into a full gov
 | `finding-store` | `packages/finding-store` | SQLite-based persistence for findings, overrides, and audit records |
 | `agent-config-manager` | `packages/agent-config-manager` | Runtime configuration loading from Azure DevOps or local filesystem |
 | `ratan-ado-api` | `packages/ratan-ado-api` | Azure DevOps API client |
-| `ratan-code-review-agent-orm` | `packages/ratan-code-review-agent-orm` | Drizzle ORM tables and repository helpers (PostgreSQL) |
-| `ratan-markdown-tool` | `packages/ratan-markdown-tool` | Markdown/HTML/JSON conversion helpers |
+| `ratan-markdown-tool` | `packages/ratan-markdown-tool` | Small JSON-to-Markdown builder plus HTML-to-Markdown conversion |
 | `ratan-sonarqube-api` | `packages/ratan-sonarqube-api` | SonarQube API client |
 
 ## Setup
@@ -41,6 +40,9 @@ test validates fixture structure and deterministic finding matching. A live
 single-case evaluation, which calls the configured OCR endpoint but never ADO,
 can be run explicitly with
 `pnpm --filter ratan-code-review evaluate:golden --case ts-sql-injection`.
+Add `--judge` to ask the configured LLM for false-positive and suggestion-quality
+scores. Judge output is qualitative evidence only and never changes deterministic
+golden pass/fail results.
 
 The installable CLI can be checked without contacting Azure DevOps:
 
@@ -57,7 +59,6 @@ These commands connect to Azure DevOps and can create external side effects:
 
 ```bash
 pnpm agent:dev
-pnpm agent:demo
 ratan-code-review start
 ```
 
@@ -78,7 +79,7 @@ Commands:
 
 | Command | Description |
 |---------|-------------|
-| `start` | Scaffold `.ratan/` config on first run, scan repos, process PR queue. `--watch` for 30-min polling with background feedback daemon. `--pr-id <id>` runs that review directly, waits for completion, and surfaces failures without requiring a detected build status; automatic scans still require a build pipeline. |
+| `start` | Scaffold `.ratan/` config on first run, scan repos, process PR queue. `--watch` for configurable polling with background feedback daemon. `--repo-pattern <patterns...>` overrides configured repository globs. `--pr-id <id>` runs that review directly, waits for completion, and surfaces failures without requiring a detected build status; automatic scans still require a build pipeline. |
 | `dashboard` | Start PR Guardian dashboard (Express REST API + React SPA) |
 
 On first run, `start` creates `.ratan/config.json`, `.ratan/opencodereview/rule.json`,
@@ -117,7 +118,7 @@ From a login shell containing the ADO and DeepSeek variables, run the reusable r
 pnpm verify:release -- --pr-id 5
 ```
 
-The defaults are ADO organization `lushe`, project `project1`, `ratan-code-review@0.1.11`, and `finding-store@0.1.1`. Override them with `ADO_ORGANIZATION`, `ADO_PROJECT`, `EXPECTED_AGENT_VERSION`, or `EXPECTED_STORE_VERSION`. A normal verification is read-only. To deliberately run a real review that can update PR comments and status, use:
+The defaults are ADO organization `lushe`, project `project1`, `ratan-code-review@0.2.0`, and `finding-store@0.2.0`. Override them with `ADO_ORGANIZATION`, `ADO_PROJECT`, `EXPECTED_AGENT_VERSION`, or `EXPECTED_STORE_VERSION`. A normal verification is read-only. To deliberately run a real review that can update PR comments and status, use:
 
 ```bash
 pnpm verify:release -- --scan-pr 5 --expect-decision blocked
@@ -202,7 +203,8 @@ Failure audit records retain any focuses selected before the failure.
 
 - React SPA (Vite + Recharts + React Router)
 - 4 pages: Overview (charts), Findings Explorer, PR Listing, Admin
-- Express backend: `/api/health`, `/api/queue`, `/api/findings`, `/api/audit`, `/api/stats`, `/api/prs`
+- Express backend: `/api/health`, `/api/queue`, `/api/findings`, `/api/overrides`, `/api/audit`, `/api/stats`, `/api/prs`
+- Findings support global or PR/repository/engine/resolution filtering; Admin reads the override log and can clear pending queue items; PR aggregation is repository-aware.
 
 ## Azure DevOps MCP
 

@@ -21,14 +21,7 @@ export interface PrReviewWorkflowOptions {
   requestContext: RequestContext<any>;
 }
 
-const noAgents = {
-  getAgent() {
-    throw new Error("Legacy review agents are not available in the PR review runtime");
-  },
-};
-
 export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
-  const stepResults = new Map<string, unknown>();
   const events: Array<{ stepId: string; output: unknown }> = [];
   const onStepComplete = (event: { stepId: string; output: unknown }) => {
     events.push(event);
@@ -38,7 +31,6 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
   };
   const stepOptions = {
     requestContext: options.requestContext,
-    stepResults,
     onStepComplete,
   };
 
@@ -94,19 +86,16 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
       },
       changesSinceLastReview: "",
     };
-    stepResults.set(scannerPipeline.id, current);
     yield { stepId: scannerPipeline.id, output: current };
   }
   yield* emitEvents();
 
-  const measuresResult = await sonarqubeMeasures.execute({
-    inputData: current,
-    requestContext: options.requestContext,
-    agents: noAgents,
-    getStepResult: (id) => stepResults.get(id),
-  });
-  stepResults.set(sonarqubeMeasures.id, measuresResult);
-  yield { stepId: sonarqubeMeasures.id, output: measuresResult };
+  const measuresResult = await runSteps(
+    [sonarqubeMeasures],
+    current,
+    stepOptions,
+  );
+  yield* emitEvents();
   current = { ...current, ...(measuresResult as Record<string, unknown>) };
 
   await runSteps(

@@ -3,16 +3,7 @@ import { runPrReviewWorkflow } from "../review/workflows/pr-review-workflow";
 import { ReviewTracker } from "../review/workflows/utils/review-tracker";
 import { RequestContext } from "../review/runtime";
 import type { CommonRequestContext } from "../review/types";
-import { scanPRs } from "./pr-scan";
 import { getAgentConfigSessions } from "./session";
-
-export const startScanWithProvider = async (provider: ConfigProvider) => {
-  console.log("[startScanWithProvider] Starting scan with provider ...");
-
-  const registered = getAgentConfigSessions().registerProvider(provider);
-
-  await runScanLoop(registered);
-};
 
 export const startReviewPrWithProvider = async (
   provider: ConfigProvider,
@@ -24,21 +15,6 @@ export const startReviewPrWithProvider = async (
 
   await runReviewWorkflow(registered, prId);
 };
-
-async function runScanLoop(agentConfig: ConfigProvider) {
-  console.log("[startup] Agent config session created:", agentConfig.id);
-
-  const pendingPR$ = scanPRs({
-    requestContext: { configSessionId: agentConfig.id },
-  });
-
-  console.log("[startup] Subscribing to pending PRs stream...");
-
-  pendingPR$.subscribe(async ({ prId }) => {
-    console.log(`[startup] Received pending PR: ${prId}`);
-    await runReviewWorkflow(agentConfig, prId);
-  });
-}
 
 async function runReviewWorkflow(agentConfig: ConfigProvider, prId: number) {
   console.log(`[startup] Running prReviewWorkflow for PR: ${prId}`);

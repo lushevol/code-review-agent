@@ -1,8 +1,5 @@
 import type { AzureDevOps } from "ratan-ado-api";
 import type { SonarQubeClient } from "ratan-sonarqube-api";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type { Pool } from "pg";
-import type { schema } from "ratan-code-review-agent-orm";
 import { z } from "zod";
 
 const CveScannerSettingsSchema = z.object({
@@ -120,5 +117,4 @@ export interface ConfigProvider {
   resolveConfigPath(relativePath: string): string;
   getAdoClient(): AzureDevOps;
   getSonarQubeClient(): SonarQubeClient | null;
-  getOrmClient(): Promise<NodePgDatabase<typeof schema> & { $client: Pool } | null>;
 }

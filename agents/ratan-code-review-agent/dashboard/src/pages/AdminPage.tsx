@@ -1,8 +1,14 @@
 import { useEffect, useState } from "react";
-import { fetchAudit, fetchFindings, fetchQueue, addPRToQueue } from "../api";
+import {
+  addPRToQueue,
+  clearPendingQueue,
+  fetchFindings,
+  fetchOverrides,
+  fetchQueue,
+} from "../api";
 
 export default function AdminPage() {
-  const [auditLog, setAuditLog] = useState<any[]>([]);
+  const [overrides, setOverrides] = useState<any[]>([]);
   const [findings, setFindings] = useState<any[]>([]);
   const [queueStatus, setQueueStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -49,16 +55,26 @@ export default function AdminPage() {
     }
   };
 
+  const handleClearQueue = async () => {
+    try {
+      const result = await clearPendingQueue();
+      setQueueMsg(`${result.cleared} pending PR(s) removed.`);
+      await refreshQueue();
+    } catch (e: any) {
+      setQueueError(e.message);
+    }
+  };
+
   // ── Data Loading ─────────────────────────────────────────────
 
   useEffect(() => {
     Promise.all([
-      fetchAudit().then((d) => d.entries ?? d.auditLog ?? d.results ?? d.records ?? []),
+      fetchOverrides().then((d) => d.overrides ?? []),
       fetchFindings().then((d) => d.findings ?? []),
       fetchQueue().catch(() => null),
     ])
-      .then(([audit, f, queue]) => {
-        setAuditLog(audit);
+      .then(([overrideLog, f, queue]) => {
+        setOverrides(overrideLog);
         setFindings(f);
         setQueueStatus(queue);
       })
@@ -87,12 +103,6 @@ export default function AdminPage() {
       fpRate: total > 0 ? ((fp / total) * 100).toFixed(1) : "0.0",
     };
   });
-
-  const overrides = auditLog.filter(
-    (entry) =>
-      entry.action?.toLowerCase().includes("override") ||
-      entry.type === "override",
-  );
 
   // ── Styles ───────────────────────────────────────────────────
 
@@ -217,6 +227,13 @@ export default function AdminPage() {
             style={{ marginLeft: "auto", ...buttonStyle, fontSize: "0.8rem", padding: "0.3rem 0.75rem" }}
           >
             {queueRefreshing ? "Refreshing..." : "Refresh"}
+          </button>
+          <button
+            onClick={handleClearQueue}
+            disabled={(queueStatus?.pendingCount ?? 0) === 0}
+            style={{ ...buttonStyle, fontSize: "0.8rem", padding: "0.3rem 0.75rem" }}
+          >
+            Clear Pending
           </button>
         </div>
 
@@ -368,10 +385,10 @@ export default function AdminPage() {
                       </code>
                     </td>
                     <td style={cellStyle}>
-                      {entry.action || entry.type || "override"}
+                      override
                     </td>
                     <td style={cellStyle}>
-                      {entry.resolution || entry.newValue || entry.status || "-"}
+                      {entry.newResolution || "-"}
                     </td>
                     <td style={cellStyle}>
                       {entry.overriddenBy || entry.user || entry.actor || "-"}

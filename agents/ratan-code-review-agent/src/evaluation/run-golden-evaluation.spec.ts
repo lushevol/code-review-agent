@@ -23,11 +23,13 @@ describe("golden evaluation command", () => {
       "--config",
       "/tmp/config",
       "--dry-run",
+      "--judge",
     ]);
     expect(options).toEqual({
       caseIds: new Set(["first", "second"]),
       configPath: "/tmp/config",
       dryRun: true,
+      judge: true,
     });
     expect(() => parseOptions(["--unknown"])).toThrow("Unknown option");
     expect(() => parseOptions(["--case"])).toThrow("requires a value");
@@ -42,13 +44,14 @@ describe("golden evaluation command", () => {
   });
 
   it("requires explicit case selection before live evaluation", () => {
-    expect(() => assertSafeExecution({ caseIds: new Set(), dryRun: false }))
+    expect(() => assertSafeExecution({ caseIds: new Set(), dryRun: false, judge: false }))
       .toThrow("requires at least one --case");
-    expect(() => assertSafeExecution({ caseIds: new Set(), dryRun: true }))
+    expect(() => assertSafeExecution({ caseIds: new Set(), dryRun: true, judge: false }))
       .not.toThrow();
     expect(() => assertSafeExecution({
       caseIds: new Set(["ts-sql-injection"]),
       dryRun: false,
+      judge: true,
     })).not.toThrow();
   });
 

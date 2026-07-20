@@ -148,11 +148,12 @@ policy, work-item remediation, audit, webhook, and dashboard behavior.
 
 ```text
 src/
-  bootstrap/                         startup and PR scan loop
-  cli/                               start/dashboard commands and config loader
-  evaluation/                        evaluation schemas, fixtures, and judge
+  bootstrap/                         config session and explicit PR review startup
+  cli/                               start/dashboard commands, queue, and config loader
+  evaluation/                        golden fixtures, deterministic evaluator, optional judge
   review/
-    open-code-review/                isolated OCR runner and focus router
+    open-code-review/                masked Git adapter, OCR runner, and focus router
+    runtime/                         schema-validated sequential steps
     workspace/                       local merge-base/head workspace
     workflows/
       pr-review-workflow.ts          top-level orchestration
@@ -165,22 +166,16 @@ src/
 dashboard/                           React SPA
 ```
 
-The remaining code under `src/review/agents/` supports evaluation and is not the
-production PR-review engine.
-
 ## Verification State
 
-- `pnpm test` passes with 181 tests.
+- The local suite covers more than 250 tests, including dashboard HTTP behavior,
+  CLI repository overrides, the masked Git boundary, and qualitative judge parsing.
 - `pnpm build` passes.
 - Tests cover OCR configuration and native rule pass-through, focus routing,
   scanner integration, finding/thread persistence, feedback synchronization,
   comment linkage, CLI configuration, and supporting scanners/utilities.
-- No live PR scan should be claimed from local verification alone; a configured
-  target repository and dedicated test PR are still required.
-- The first routed-review attempt on `example-repo` PR `#4` was incomplete and
-  exposed an OCR category-contract mismatch. The adapter fix is locally
-  verified; a successful live cohort and post-pilot policy decision remain
-  pending because the corrected external-LLM retry was blocked.
+- Live ADO verification is tracked separately from local verification and must
+  identify the installed npm version and target PR.
 
 ## Risks And Gaps
 
@@ -191,4 +186,6 @@ production PR-review engine.
   would require an explicit persistence design.
 - The dashboard needs deployment-level authentication and authorization.
 - Feedback-derived prompt/rule recommendations remain human-reviewed.
-- Evaluation scaffolding exists, but the full evaluation loop is incomplete.
+- Deterministic golden evaluation is operational. The optional LLM judge adds
+  qualitative false-positive and suggestion-quality evidence without changing
+  pass/fail; broader benchmark coverage and calibration remain ongoing work.

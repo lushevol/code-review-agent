@@ -78,7 +78,6 @@ function createMockContext() {
     },
     adoClient: {},
     findingStore: {},
-    agents: {},
     workspace: {
       repoPath: "",
       runDirectory: "",

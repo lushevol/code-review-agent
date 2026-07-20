@@ -15,7 +15,15 @@ function fakeBinary(output: string, exitCode = 0) {
     binary,
     `#!/usr/bin/env node
 const fs = require("node:fs");
-fs.writeFileSync(process.env.OCR_TEST_CAPTURE, JSON.stringify({ args: process.argv.slice(2), home: process.env.HOME, noUpdate: process.env.OCR_NO_UPDATE }));
+const childProcess = require("node:child_process");
+const args = process.argv.slice(2);
+const repo = args[args.indexOf("--repo") + 1];
+const from = args[args.indexOf("--from") + 1];
+const to = args[args.indexOf("--to") + 1];
+const diff = process.env.OCR_TEST_CAPTURE_DIFF === "1"
+  ? childProcess.execFileSync("git", ["-C", repo, "diff", from, to], { encoding: "utf8" })
+  : undefined;
+fs.writeFileSync(process.env.OCR_TEST_CAPTURE, JSON.stringify({ args, diff, home: process.env.HOME, noUpdate: process.env.OCR_NO_UPDATE }));
 process.stdout.write(${JSON.stringify(output)});
 process.exit(${exitCode});
 `,
@@ -51,6 +59,60 @@ afterEach(() => {
 });
 
 describe("OpenCodeReviewRunner", () => {
+  it("masks secrets in the git range passed to OCR", async () => {
+    const fixture = fakeBinary(JSON.stringify({ status: "success", comments: [] }));
+    const repoPath = path.join(fixture.dir, "source-repo");
+    const runDirectory = path.join(fixture.dir, "run");
+    fs.mkdirSync(repoPath);
+    fs.mkdirSync(runDirectory);
+    const git = (...args: string[]) =>
+      require("node:child_process").execFileSync("git", args, {
+        cwd: repoPath,
+        encoding: "utf8",
+      }).trim();
+    git("init", "--quiet");
+    git("config", "user.email", "runner@example.invalid");
+    git("config", "user.name", "Runner Test");
+    fs.writeFileSync(path.join(repoPath, "config.ts"), 'const token = "old-secret";\n');
+    git("add", ".");
+    git("commit", "--quiet", "-m", "base");
+    const mergeBaseCommit = git("rev-parse", "HEAD");
+    fs.writeFileSync(path.join(repoPath, "config.ts"), 'const token = "new-secret";\n');
+    git("add", ".");
+    git("commit", "--quiet", "-m", "head");
+    const headCommit = git("rev-parse", "HEAD");
+
+    const runner = new OpenCodeReviewRunner({
+      binaryPath: fixture.binary,
+      environment: {
+        OCR_TEST_CAPTURE: fixture.capture,
+        OCR_TEST_CAPTURE_DIFF: "1",
+      },
+    });
+    await runner.review({
+      workspace: {
+        repoPath,
+        runDirectory,
+        mergeBaseCommit,
+        headCommit,
+        changes: [{
+          path: "config.ts",
+          status: "modified",
+          addedLines: [{ line: 1, text: 'const token = "new-secret";' }],
+        }],
+      },
+      background: "",
+      llm: { url: "https://llm.example/v1", token: "secret", model: "model", useAnthropic: false },
+      ruleFile: ruleFile(fixture.dir),
+    });
+
+    const capture = JSON.parse(fs.readFileSync(fixture.capture, "utf8"));
+    expect(capture.diff).not.toContain("old-secret");
+    expect(capture.diff).not.toContain("new-secret");
+    expect(capture.diff).toContain('token="****:');
+    expect(capture.args[capture.args.indexOf("--repo") + 1]).not.toBe(repoPath);
+  });
+
   it("executes the structured range review with isolated state", async () => {
     const fixture = fakeBinary(
       JSON.stringify({

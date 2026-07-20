@@ -30,9 +30,8 @@ Safe activities:
 
 Side-effectful activities:
 
-- `pnpm demo`
-- `startup(...)`
-- `scanPRs(...)` with real config
+- `ratan-code-review start` or `start --watch`
+- `startReviewPrWithProvider(...)` with real config
 - `prReviewWorkflow` against a real `prId`
 - any call path that reaches `addCommentThreadForPRCode`, `addCommentForPR`, or `setPullRequestProperties`
 
@@ -61,7 +60,6 @@ ADO_CONFIG_BASE_PATH=...
 ADO_PROXY_URL=none
 OCR_LLM_TOKEN=...
 SONARQUBE_TOKEN=...
-DATABASE_URL=...
 ```
 
 Use `ADO_PROXY_URL=none` when the host can reach Azure DevOps directly. Omit it or set a proxy URL when the host must use a corporate proxy.
@@ -103,9 +101,6 @@ pnpm --filter ratan-code-review test:coverage
 # Validate all golden fixtures without calling an LLM
 pnpm --filter ratan-code-review evaluate:golden --dry-run
 
-# Regenerate evaluation JSON schema
-pnpm --filter ratan-code-review codegen
-
 # CLI usage (after build)
 node bin/ratan-code-review.cjs --help
 node bin/ratan-code-review.cjs start --help
@@ -115,23 +110,21 @@ node bin/ratan-code-review.cjs dashboard  # start dashboard server
 
 # Live side-effectful commands (not safe default)
 pnpm dev
-pnpm demo
 ```
 
-`pnpm demo` is not a safe default because it starts the live PR scanning flow from `src/demo.ts`. The `start` CLI command also has external side effects (ADO calls) and requires a valid config.
+The `start` CLI command has external side effects (ADO calls) and requires a valid config.
 
 ## Suggested Harness Test Strategy
 
 Start with unit tests around pure utilities:
 
 - `maskSensitiveData`
-- `filterReviewableFiles`
 - `selectReviewFocuses`
 - finding content-hash generation and correlation
 
 Then test workflow steps with mocked runtime context and mocked clients:
 
-- `fetch-pr-details` should call `getPullRequestById`.
+- `fetch-pr-details` should fetch cloneable metadata and linked work-item ids through existing ADO client methods.
 - `open-code-review-scanner` should pass the resolved native rule file unchanged, include selected focus reasons in the background, and map OCR comments to normalized findings.
 - `OpenCodeReviewRunner` should map unknown string comment categories to `other` while rejecting structurally malformed comments.
 - `scanner-pipeline` should preserve graceful degradation, propagate incomplete OCR status, correlate by content hash, persist stable finding IDs, and present actionable blocking/important/advisory category sections with selected focuses.
@@ -142,6 +135,7 @@ Then test workflow steps with mocked runtime context and mocked clients:
 - `FeedbackService` should synchronize only threads explicitly associated with each finding.
 - `record-audit` should persist only allowlisted pilot metrics and must discard secret-like or arbitrary OCR metadata.
 - `/api/audit` should export routed outcome metrics before any focus/status UI filters are added.
+- Dashboard HTTP tests should cover unfiltered and independently filtered findings, override history, repository-aware PR aggregation, and stats. UI builds should cover queue clearing and current scanner names.
 
 Do not use real ADO or SonarQube clients in automated tests.
 
@@ -202,6 +196,10 @@ configured external LLM endpoint, so it must remain explicit and opt-in.
 `skipped` and `completed_with_errors` OCR outcomes fail the case even when a
 clean fixture receives no comments.
 
+`--judge` adds a second, qualitative pass through `LlmEvaluationJudge`. It
+scores false-positive risk and suggestion quality from synthetic fixture data.
+Judge failures or scores never alter the deterministic golden pass/fail result.
+
 The corrected `ts-sql-injection` case has been live-verified with one expected
 critical finding, recall `1.0`, and precision `1.0`.
 
@@ -213,6 +211,11 @@ applies, while changed code may also select `tests`, `error-handling`,
 `type-design`, or `comments`. The selections and reasons are injected into OCR
 background context and returned in scanner metadata; they do not cause extra LLM
 calls.
+
+The runner must execute OCR against its temporary masked two-commit repository,
+never the source checkout. Tests should inspect the Git diff presented to OCR and
+verify raw credentials are absent while per-run keyed markers preserve whether a
+credential value changed.
 
 ## Live Run Checklist
 

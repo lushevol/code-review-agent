@@ -64,8 +64,6 @@ describe("recordAudit", () => {
         mergeDecision: "pending",
       },
       requestContext,
-      agents: { getAgent: () => { throw new Error("unused"); } },
-      getStepResult: () => undefined,
     });
 
     const store = new FindingStore(dbPath);

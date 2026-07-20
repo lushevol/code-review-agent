@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     | ((item: { prId: number; repoName: string }) => Promise<void>)
     | undefined,
   scan: vi.fn(),
+  setRepoPatterns: vi.fn(),
   startReviewPrWithProvider: vi.fn(),
 }));
 
@@ -39,7 +40,10 @@ vi.mock("../services/pr-queue", () => ({
   },
 }));
 vi.mock("../services/auto-scan", () => ({
-  getAutoScanService: () => ({ scan: mocks.scan }),
+  getAutoScanService: () => ({
+    scan: mocks.scan,
+    setRepoPatterns: mocks.setRepoPatterns,
+  }),
 }));
 
 import { startCommand } from "./start";
@@ -106,6 +110,28 @@ describe("startCommand", () => {
 
       expect(mocks.hasBuildPipeline).toHaveBeenCalledWith(provider, 5, "repo");
       expect(mocks.startReviewPrWithProvider).not.toHaveBeenCalled();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("applies command-line repository patterns to automatic scans", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "ratan-start-"));
+    const provider = {
+      connect: vi.fn(),
+      getRootConfig: vi.fn().mockResolvedValue({}),
+    };
+    mocks.loadConfig.mockResolvedValue({ provider });
+    mocks.scan.mockResolvedValue(0);
+
+    try {
+      await startCommand({
+        config: path.join(dir, ".ratan"),
+        repoPatterns: ["api-*", "web"],
+      });
+
+      expect(mocks.setRepoPatterns).toHaveBeenCalledWith(["api-*", "web"]);
+      expect(mocks.scan).toHaveBeenCalledWith(provider);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -141,8 +141,6 @@ async function executeCreateWorkItems(
       mergeDecision: "blocked",
     } as never,
     requestContext,
-    agents: { getAgent: vi.fn() },
-    getStepResult: vi.fn(),
   });
 }
 

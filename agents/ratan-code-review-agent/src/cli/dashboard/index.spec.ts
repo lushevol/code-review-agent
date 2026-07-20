@@ -85,3 +85,95 @@ describe("GET /api/audit", () => {
     }
   });
 });
+
+describe("dashboard data routes", () => {
+  it("returns global findings, overrides, stable stats, and repository-scoped PRs", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "dashboard-data-"));
+    tempDirs.push(dir);
+    const store = new FindingStore(path.join(dir, "findings.db"));
+    store.init();
+    const finding = (id: string, repository: string, contentHash: string) => ({
+      id,
+      prId: 7,
+      repository,
+      filePath: "src/file.ts",
+      lineStart: 1,
+      lineEnd: 1,
+      category: "bug",
+      severity: "high",
+      confidence: 0,
+      title: "Finding",
+      description: "Description",
+      evidence: "Evidence",
+      businessImpact: "",
+      remediation: "Fix",
+      blocking: true,
+      linkedTaskId: null,
+      resolution: "open",
+      sourceEngine: "open-code-review",
+      sourceVersion: "1.7.7",
+      supersedesFindingId: null,
+      contentHash,
+      createdAt: "2026-07-15T00:00:00.000Z",
+      resolvedAt: null,
+    });
+    store.batchUpsert([
+      finding("550e8400-e29b-41d4-a716-446655440010", "repo-a", "hash-a"),
+      finding("550e8400-e29b-41d4-a716-446655440011", "repo-b", "hash-b"),
+    ]);
+    store.updateResolution("550e8400-e29b-41d4-a716-446655440010", "false-positive", {
+      overriddenBy: "owner",
+      justification: "Expected behavior",
+    });
+    const saveAudit = (id: string, repository: string, decision: "allowed" | "blocked", started: string) =>
+      store.saveAuditRecord({
+        id,
+        prId: 7,
+        repository,
+        commitHash: id,
+        reviewStartTimestamp: started,
+        reviewEndTimestamp: started,
+        scanners: [],
+        modelVersion: "model",
+        findingsCount: 1,
+        blockingFindingsCount: decision === "blocked" ? 1 : 0,
+        mergePolicyDecision: decision,
+        supersedesReviewId: null,
+        createdAt: started,
+      });
+    saveAudit("550e8400-e29b-41d4-a716-446655440020", "repo-a", "blocked", "2026-07-15T00:00:00.000Z");
+    saveAudit("550e8400-e29b-41d4-a716-446655440021", "repo-a", "allowed", "2026-07-16T00:00:00.000Z");
+    saveAudit("550e8400-e29b-41d4-a716-446655440022", "repo-b", "blocked", "2026-07-17T00:00:00.000Z");
+
+    const server = createDashboardApp(store).listen(0, "127.0.0.1");
+    await once(server, "listening");
+    try {
+      const { port } = server.address() as AddressInfo;
+      const get = async (route: string) => {
+        const response = await fetch(`http://127.0.0.1:${port}${route}`);
+        expect(response.status).toBe(200);
+        return response.json() as Promise<any>;
+      };
+      expect((await get("/api/findings")).total).toBe(2);
+      expect((await get("/api/findings?prId=7&repo=repo-b")).findings).toHaveLength(1);
+      expect((await get("/api/overrides")).overrides[0]).toMatchObject({
+        overriddenBy: "owner",
+        newResolution: "false-positive",
+      });
+      expect(await get("/api/stats")).toMatchObject({
+        totalReviews: 3,
+        totalPRs: 2,
+        totalFindings: 2,
+      });
+      const prs = await get("/api/prs");
+      expect(prs.total).toBe(2);
+      expect(prs.prs).toEqual(expect.arrayContaining([
+        expect.objectContaining({ repository: "repo-a", status: "allowed", findingCount: 1 }),
+        expect.objectContaining({ repository: "repo-b", status: "blocked", findingCount: 1 }),
+      ]));
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      store.close();
+    }
+  });
+});

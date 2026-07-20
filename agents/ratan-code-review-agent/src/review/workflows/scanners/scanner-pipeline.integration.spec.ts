@@ -183,19 +183,6 @@ function createDefaultMockSonarClient() {
   ]);
 }
 
-// ─── Mock Agents ───────────────────────────────────────────────────────────
-
-function createMockAgents() {
-  return {
-    getAgent: vi.fn().mockReturnValue({
-      generate: vi.fn().mockResolvedValue({
-        object: [],
-        text: "",
-      }),
-    }),
-  };
-}
-
 // ─── Mock Provider ─────────────────────────────────────────────────────────
 
 function createMockProvider(overrides: Record<string, unknown> = {}) {
@@ -242,7 +229,6 @@ function createMockScanContext(overrides: Record<string, unknown> = {}): ScanCon
     adoClient: createMockProvider().getAdoClient(),
     sonarClient: createDefaultMockSonarClient(),
     findingStore,
-    agents: createMockAgents(),
     ...overrides,
   };
 }
@@ -537,7 +523,6 @@ describe("Scanner Pipeline Integration", () => {
         adoClient: {},
         sonarClient,
         findingStore,
-        agents: createMockAgents(),
         workspace: {
           changes: [
             {

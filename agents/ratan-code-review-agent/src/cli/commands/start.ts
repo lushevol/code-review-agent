@@ -316,6 +316,9 @@ export async function startCommand(options: StartOptions) {
     return;
   }
 
+  const autoScan = getAutoScanService();
+  autoScan.setRepoPatterns(options.repoPatterns ?? []);
+
   // 5. Initialize automatic-scan queue with build pipeline check
   const queue = getPRQueue();
   queue.setProcessor(async (item) => {
@@ -338,8 +341,10 @@ export async function startCommand(options: StartOptions) {
     const INTERVAL_MS = rootConfig.watch?.intervalMs ?? 30 * 60 * 1000;
 
     const runScan = async () => {
-      const autoScan = getAutoScanService();
-      const healthy = await autoScan.isLLMEndpointHealthy();
+      const healthy = await autoScan.isLLMEndpointHealthy(
+        rootConfig.openCodeReview.llm.url,
+        rootConfig.openCodeReview.llm.token,
+      );
       if (!healthy) {
         logger.warn("LLM endpoint not healthy — skipping scan cycle");
         return;
@@ -366,7 +371,6 @@ export async function startCommand(options: StartOptions) {
   }
 
   // 8. Default mode: scan once and exit
-  const autoScan = getAutoScanService();
   const enqueued = await autoScan.scan(provider);
   logger.info(`Scan complete: ${enqueued} PR(s) enqueued`);
 

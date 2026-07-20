@@ -447,6 +447,36 @@ export class FindingStore {
     }
   }
 
+  queryFindings(filters: {
+    prId?: number;
+    repository?: string;
+    engine?: string;
+    resolution?: string;
+  }): NormalizedFinding[] {
+    this.assertInitialized();
+    let query = "SELECT * FROM findings WHERE 1=1";
+    const params: unknown[] = [];
+    if (filters.prId !== undefined) {
+      query += " AND pr_id = ?";
+      params.push(filters.prId);
+    }
+    if (filters.repository) {
+      query += " AND repository = ?";
+      params.push(filters.repository);
+    }
+    if (filters.engine) {
+      query += " AND source_engine = ?";
+      params.push(filters.engine);
+    }
+    if (filters.resolution) {
+      query += " AND resolution = ?";
+      params.push(filters.resolution);
+    }
+    query += " ORDER BY created_at DESC";
+    const rows = this.db!.prepare(query).all(...params) as FindingRow[];
+    return rows.map(rowToFinding);
+  }
+
   /**
    * Get a single finding by its ID.
    */
@@ -548,6 +578,29 @@ export class FindingStore {
         `Failed to update resolution for finding ${id}: ${(err as Error).message}`,
       );
     }
+  }
+
+  queryOverrideLog(findingId?: string): OverrideLogEntry[] {
+    this.assertInitialized();
+    const query = [
+      "SELECT * FROM override_log",
+      findingId ? "WHERE finding_id = ?" : "",
+      "ORDER BY created_at DESC, id DESC",
+    ].filter(Boolean).join(" ");
+    const rows = (findingId
+      ? this.db!.prepare(query).all(findingId)
+      : this.db!.prepare(query).all()) as OverrideLogRow[];
+    return rows.map((row) => ({
+      id: row.id,
+      findingId: row.finding_id,
+      overriddenBy: row.overridden_by,
+      oldResolution: row.old_resolution,
+      newResolution: row.new_resolution,
+      justification: row.justification,
+      secondApprover: row.second_approver,
+      expiryDate: row.expiry_date,
+      createdAt: row.created_at,
+    }));
   }
 
   /**

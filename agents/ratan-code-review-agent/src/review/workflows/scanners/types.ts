@@ -2,7 +2,6 @@ import type { ConfigProvider } from "agent-config-manager";
 import type { FindingStore } from "finding-store";
 import type { AzureDevOps, AdoPullRequestMetadata } from "ratan-ado-api";
 import type { SonarQubeClient } from "ratan-sonarqube-api";
-import type { AgentRegistry } from "../../runtime";
 import type { OcrReviewRunner } from "../../open-code-review/runner";
 import type { ReviewWorkspace } from "../../workspace/types";
 import type { EngineType, NormalizedFinding } from "../../types/finding";
@@ -31,7 +30,6 @@ export interface ScanContext {
   adoClient: AzureDevOps;
   sonarClient?: SonarQubeClient | null;
   findingStore: FindingStore;
-  agents: AgentRegistry;
   workItemContext?: string;
   workspace: ReviewWorkspace;
   ocrRunner: OcrReviewRunner;

@@ -252,7 +252,7 @@ export const scannerPipeline = defineStep({
   description: "Run OpenCodeReview and optional local-range scanners",
   inputSchema: ScannerPipelineInputSchema,
   outputSchema: ScannerPipelineOutputSchema,
-  execute: async ({ inputData, agents, requestContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     if (!inputData) throw new Error("Input data not found");
 
     const { prDetails, workItemContext, workspace } = inputData;
@@ -275,7 +275,6 @@ export const scannerPipeline = defineStep({
       adoClient,
       sonarClient: agentConfig.getSonarQubeClient(),
       findingStore,
-      agents,
       workItemContext,
       workspace,
       ocrRunner,

@@ -16,11 +16,17 @@ import {
   type GoldenActualFinding,
   type GoldenTestCase,
 } from "./golden-evaluator";
+import {
+  LlmEvaluationJudge,
+  type EvaluationJudge,
+  type QualitativeJudgement,
+} from "./judge";
 
 export interface GoldenEvaluationOptions {
   caseIds: Set<string>;
   configPath?: string;
   dryRun: boolean;
+  judge: boolean;
 }
 
 export interface GoldenCaseRunResult {
@@ -29,6 +35,7 @@ export interface GoldenCaseRunResult {
   passed: boolean;
   findings: GoldenActualFinding[];
   evaluation: ReturnType<typeof evaluateGoldenCase>;
+  qualitative?: Array<{ findingIndex: number; judgement: QualitativeJudgement }>;
 }
 
 const workspaceRoot = path.resolve(import.meta.dirname, "../../../..");
@@ -49,6 +56,10 @@ export async function main(): Promise<void> {
   const { provider } = await loadConfig(options.configPath ?? defaultConfigPath);
   const config = await provider.getRootConfig();
   const runner = new OpenCodeReviewRunner();
+  const judge = options.judge ? new LlmEvaluationJudge({
+    ...config.openCodeReview.llm,
+    useAnthropic: config.openCodeReview.llm.useAnthropic ?? false,
+  }) : null;
   const results = [];
 
   for (const testCase of cases) {
@@ -69,7 +80,9 @@ export async function main(): Promise<void> {
         },
         ruleFile: provider.resolveConfigPath(config.openCodeReview.rulesPath),
       });
-      results.push(evaluateOcrOutput(testCase, output));
+      const result = evaluateOcrOutput(testCase, output);
+      if (judge) result.qualitative = await judgeFindings(testCase, result, judge);
+      results.push(result);
     } finally {
       fs.rmSync(path.dirname(workspace.repoPath), { recursive: true, force: true });
     }
@@ -189,15 +202,40 @@ export function toActualFinding(
 }
 
 export function parseOptions(args: string[]): GoldenEvaluationOptions {
-  const options: GoldenEvaluationOptions = { caseIds: new Set(), dryRun: false };
+  const options: GoldenEvaluationOptions = {
+    caseIds: new Set(),
+    dryRun: false,
+    judge: false,
+  };
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     if (argument === "--dry-run") options.dryRun = true;
+    else if (argument === "--judge") options.judge = true;
     else if (argument === "--case") options.caseIds.add(requiredValue(args, ++index, argument));
     else if (argument === "--config") options.configPath = requiredValue(args, ++index, argument);
     else throw new Error(`Unknown option: ${argument}`);
   }
   return options;
+}
+
+export async function judgeFindings(
+  testCase: GoldenTestCase,
+  result: GoldenCaseRunResult,
+  judge: EvaluationJudge,
+): Promise<Array<{ findingIndex: number; judgement: QualitativeJudgement }>> {
+  const unexpected = new Set(result.evaluation.unexpectedFindingIndexes);
+  const code = testCase.files
+    .map((file) => `// ${file.path}\n${file.after}`)
+    .join("\n\n");
+  return Promise.all(result.findings.map(async (actualFinding, findingIndex) => ({
+    findingIndex,
+    judgement: await judge.evaluate({
+      code,
+      expectedFindings: testCase.expectedFindings,
+      actualFinding,
+      matchedExpectation: !unexpected.has(findingIndex),
+    }),
+  })));
 }
 
 function requiredValue(args: string[], index: number, option: string): string {

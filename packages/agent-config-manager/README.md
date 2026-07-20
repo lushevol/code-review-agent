@@ -1,23 +1,12 @@
-# Rslib project
+# agent-config-manager
 
-## Setup
+Configuration contracts and providers for PR Guardian Copilot.
 
-Install the dependencies:
-
-```bash
-pnpm install
-```
-
-## Get started
-
-Build the library:
+The package exports `ConfigProvider`, root Zod configuration schemas,
+`AgentConfigClient` for ADO-backed configuration, and `AgentConfigSession` for
+runtime provider registration. Persistence is not part of this package; the
+removed PostgreSQL ORM accessor is intentionally not retained.
 
 ```bash
-pnpm build
-```
-
-Build the library in watch mode:
-
-```bash
-pnpm dev
+pnpm --filter agent-config-manager build
 ```

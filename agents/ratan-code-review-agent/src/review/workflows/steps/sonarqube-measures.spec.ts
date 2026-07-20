@@ -56,7 +56,5 @@ async function executeSonarqubeMeasures(
       correlationSummary: "summary",
     } as never,
     requestContext,
-    agents: { getAgent: vi.fn() },
-    getStepResult: vi.fn(),
   });
 }
