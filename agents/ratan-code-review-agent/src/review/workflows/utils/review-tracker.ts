@@ -23,7 +23,8 @@ export class ReviewTracker {
   /**
    * Mark a review as finished for the given PR.
    */
-  static finishReview(prId: number): void {
+  static finishReview(prId: number, signal?: AbortSignal): void {
+    if (signal && this.runningReviews.get(prId)?.signal !== signal) return;
     this.runningReviews.delete(prId);
   }
 

@@ -128,7 +128,7 @@ prReviewWorkflow(prId):
   sonarqube-measures                 — SonarQube quality gate metrics
   merge-gate                         — Evaluate blocking findings, set ADO PR status (succeeded/failed)
   create-workitems                   — Auto-create ADO Bug (critical severity) and Task (high severity)
-  comment-review-results             — Post consolidated summary + prioritized postable inline comments
+  comment-review-results             — Prioritized inline comments + one newest concise conclusion
 ```
 
 ### Event Detection
@@ -149,6 +149,7 @@ The `ratan-code-review` CLI has two commands:
 
 - **`start`** — Unified entry point. On first run, scaffolds `.ratan/` with default config and native OpenCodeReview rules. Reads config, initializes the PR queue, and starts the scan loop. Runs a background feedback daemon (ADO comment sync) automatically in `--watch` mode. Options: `--config <path>`, `--pr-id <id>` (runs the explicit review directly, waits for completion, surfaces failures, and bypasses the automatic-scan build-status gate), `--watch` (30-min interval + feedback daemon), `--repo-pattern <patterns...>`.
 - **`dashboard`** — Starts the PR Guardian dashboard (Express REST API + React SPA). Serves `/api/health`, `/api/queue`, `/api/findings`, `/api/audit`, `/api/stats`, `/api/prs`.
+- **Root help** — `ratan-code-review --help` ends with a concise cheatsheet for first-run scanning, direct PR review, watch mode, and dashboard startup.
 
 ### Scanner Pipeline
 
@@ -162,7 +163,7 @@ The scanner pipeline runs all scanners concurrently via `Promise.allSettled` (gr
 
 Each scanner produces `NormalizedFinding` objects with a content hash (SHA-256 of `filePath + surrounding code`) for identity across PR iterations. Findings are correlated, deduplicated by content hash, and persisted to the `FindingStore`. Inline ADO thread IDs are linked back to persisted finding IDs so feedback synchronization updates only the finding represented by that thread.
 
-The main PR comment presents correlated findings as `blocking`, `important`, and `advisory` sections grouped by category, lists concise finding details, and includes selected OCR focuses. `important` is presentation only. Inline eligibility requires a valid file/line location; postable findings are ordered by blocking status and severity, deduplicated by content hash, filtered against previously linked finding/thread associations, then capped at 30. These presentation rules do not change merge-gate inputs.
+The main PR comment contains only the merge decision, finding count, compact SonarQube coverage/new-bug/new-vulnerability/new-code-smell results, and reviewed commit. Each review posts the canonical conclusion last so it is the newest/top ADO thread, then deletes prior agent-generated conclusions. Inline notes use a Markdown heading with priority/severity and a concise escaped title, followed by the explanation and an optional suggested fix in a plain fenced code block. Inline eligibility requires a valid file/line location; postable findings are ordered by blocking status and severity, deduplicated by content hash, filtered against previously linked finding/thread associations, then capped at 30. Previously linked inline threads are refreshed in place. These presentation rules do not change merge-gate inputs.
 
 Pilot observability is stored in `audit_records.raw_scanner_outputs` without a schema migration. The allowlisted payload contains review focuses/reasons, OCR status/warnings/duration/reviewed-file count, postable count, duplicate-suppression reasons, inline-suppression reasons, and execution status. Arbitrary OCR/config metadata is not persisted. The existing `/api/audit` endpoint exports this data; do not add focus/status UI controls until operators demonstrate a need.
 
@@ -186,7 +187,7 @@ The wrapper config at `.ratan/config.json` declares the mode (`"local"` or `"ado
 - **OverrideService** — Finding resolution override management. Workflows: waive, false-positive, risk-accept. Two-person approval for critical findings. Expiry management. Full audit trail.
 - **FeedbackService** — Collects ADO comment reactions (👍/👎), aggregates false-positive patterns, generates prompt optimization recommendations (semi-automated, human review required).
 - **AuditService** — Append-only audit records. Every review result captured with commit hash, engine versions, model version, and timestamp. Retention policy.
-- **ReviewTracker** — Tracks reviewed iterations per PR. Compares previous vs new findings via content-hash matching, producing create/supersede/resolve/keep buckets.
+- **ReviewTracker** — Cancels stale in-flight workflow output when a newer review starts for the same PR. Finding reconciliation separately compares prior and current findings by content hash/location, persists create/supersede/resolve/keep transitions after complete reviews, and preserves prior state after incomplete reviews.
 
 ### Webhooks
 
@@ -291,6 +292,15 @@ node agents/ratan-code-review-agent/bin/ratan-code-review.cjs start --watch
 node agents/ratan-code-review-agent/bin/ratan-code-review.cjs start --pr-id 12345
 node agents/ratan-code-review-agent/bin/ratan-code-review.cjs dashboard
 
+# Verify published package, installed CLI, environment, and ADO access (read-only)
+pnpm verify:release -- --pr-id 12345
+
+# Run the same checks and then a side-effecting real PR review
+pnpm verify:release -- --scan-pr 12345 --expect-decision blocked
+
+# Also require a fenced suggested-fix code block
+pnpm verify:release -- --pr-id 12345 --expect-decision blocked --expect-fenced-suggestion
+
 # Run watch mode (starts PR scanning — has side effects)
 pnpm agent:dev
 
@@ -325,14 +335,16 @@ DATABASE_URL=postgres_connection_string
 - The `start` CLI command scaffolds `.ratan/` from `templates/` on first run, then reads config via `ConfigProvider` and runs the scan loop.
 - The scanner pipeline uses `Promise.allSettled` for graceful degradation — individual scanner failures don't block the pipeline.
 - Merge gate sets ADO PR Status (`succeeded`/`failed`) based on policy. Errors are non-fatal.
-- Work item creation step handles errors gracefully (non-fatal).
-- Comment step posts at most 30 valid-location findings after blocking/severity ordering, current-run deduplication, and suppression of findings already linked to ADO threads. It silently skips per-line comment failures and still posts the main PR comment.
+- Work item creation step handles errors and null/missing ADO work-item responses gracefully (non-fatal).
+- Comment step posts at most 30 valid-location findings after blocking/severity ordering and current-run deduplication. It refreshes linked inline threads, marks resolved-finding threads Fixed, renders suggested fixes in fenced code blocks, posts one concise canonical conclusion last, deletes prior agent-generated conclusion threads, and silently skips per-line creation failures. The conclusion is rendered directly from the merge decision, so a blocked result cannot be presented as approval.
 - OpenCodeReview output does not expose a calibrated confidence score; do not restore the obsolete confidence-rescore/filter path or invent confidence values.
 - The test suite covers CLI config/scaffolding, OpenCodeReview configuration and focus routing, a 25-case multilingual synthetic PR finding corpus, merge-gate decisions, work-item creation/context, SonarQube degradation, finding/thread persistence, feedback synchronization, scanners, workflow integration, sensitive-data masking, retry logic, and eligibility gates.
 - `evaluate:golden --dry-run` is offline. Running it without `--dry-run` requires at least one explicit `--case` and sends only selected synthetic fixtures to `config.openCodeReview.llm`; it does not fetch ADO data or post PR comments. Require explicit authorization before evaluating non-synthetic or private code against an external endpoint.
 - Golden fixtures currently model only added and modified files. Treat skipped or errored OCR execution as evaluation failure; do not count an empty clean-case result as a successful review unless OCR completed.
 - A live pilot can post ADO comments and statuses. Do not run the Phase 3 pilot without explicit user authorization, a target cohort, and scoped credentials; do not change merge policy before the pilot report is reviewed.
 - The 2026-07-15 `example-repo` PR `#4` attempt is incomplete, not a successful pilot: it exposed an OCR category-contract mismatch, and the corrected live retry was blocked by the environment's external-data policy.
+- The 2026-07-20 published `ratan-code-review@0.1.8` package completed a two-iteration synthetic `example-repo` PR `#5` pilot: the vulnerable commit produced a critical linked inline finding, failed status, and canonical `Changes requested` summary; the parameterized-query follow-up marked the linked thread Fixed, posted succeeded status, and updated the same summary to `No blocking issues`. SonarQube result and reviewed commit remained visible. A pre-`0.1.8` unlinked inline thread required one-time manual cleanup.
+- The 2026-07-20 published `ratan-code-review@0.1.9` package verified newest-conclusion replacement on fresh synthetic `example-repo` PR `#6`, but rendered inspection exposed literal bold markers in the model title and ADO's apply-suggestion widget. Published `0.1.10` replaced that format with a bounded escaped heading and plain code fence. A real continuation fix commit parameterized the query; its review marked the linked thread Resolved, posted succeeded status, and created the sole allowed conclusion as the highest visible thread.
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence

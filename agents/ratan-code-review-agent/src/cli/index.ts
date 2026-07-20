@@ -14,7 +14,17 @@ const program = new Command();
 program
   .name("ratan-code-review")
   .description("AI-powered code review agent for Azure DevOps")
-  .version(packageJson.default?.version ?? packageJson.version ?? "0.0.1");
+  .version(packageJson.default?.version ?? packageJson.version ?? "0.0.1")
+  .addHelpText(
+    "after",
+    `
+Cheatsheet:
+  ratan-code-review start                    Scaffold .ratan and scan eligible PRs
+  ratan-code-review start --pr-id 123        Review one PR and wait for the result
+  ratan-code-review start --watch            Scan every 30 min and sync feedback
+  ratan-code-review dashboard --port 3000    Open the dashboard on port 3000
+`,
+  );
 
 program
   .command("start")

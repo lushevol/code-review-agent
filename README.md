@@ -71,6 +71,9 @@ After publishing or installing the `ratan-code-review` package:
 ratan-code-review --help
 ```
 
+The root help output includes a compact cheatsheet for first-run scanning,
+single-PR review, watch mode, and dashboard startup.
+
 Commands:
 
 | Command | Description |
@@ -106,6 +109,23 @@ For a specific PR:
 ratan-code-review start --pr-id 12345
 ```
 
+### Verify a published release
+
+From a login shell containing the ADO and DeepSeek variables, run the reusable release verifier. It checks the expected npm versions, the installed CLI version, required variables without printing their values, ADO authentication, and access to the selected PR:
+
+```bash
+pnpm verify:release -- --pr-id 5
+```
+
+The defaults are ADO organization `lushe`, project `project1`, `ratan-code-review@0.1.10`, and `finding-store@0.1.1`. Override them with `ADO_ORGANIZATION`, `ADO_PROJECT`, `EXPECTED_AGENT_VERSION`, or `EXPECTED_STORE_VERSION`. A normal verification is read-only. To deliberately run a real review that can update PR comments and status, use:
+
+```bash
+pnpm verify:release -- --scan-pr 5 --expect-decision blocked
+```
+
+After pushing a fix, rerun with `--expect-decision allowed`. The assertion checks the latest merge-gate state, exactly one canonical summary, its decision heading, SonarQube result, reviewed commit, and current-format inline-thread state.
+It also requires the conclusion to have the highest visible ADO thread ID. Add `--expect-fenced-suggestion` for a fixture expected to produce suggested code.
+
 For continuous scanning with background feedback daemon (every 30 minutes):
 
 ```bash
@@ -135,7 +155,7 @@ PR Event (webhook/poll) → Eligibility Gate → fetchPR → fetchWorkItemContex
   → sonarqubeMeasures
   → mergeGate (set ADO PR status)
   → createWorkItems (Bug/Task for critical/high)
-  → comment (consolidated summary + prioritized postable inline comments)
+  → comment (prioritized inline comments + one newest conclusion)
 ```
 
 ### Scanner Pipeline
@@ -148,12 +168,19 @@ Three scanners run concurrently; individual failures are non-fatal:
 | CVE | SonarQube Issues API | Vulnerabilities, security hotspots |
 | Compliance | Static analysis + YAML rules | TODO/FIXME, console.log, large files |
 
-The main review groups correlated findings into blocking, important, and
-advisory categories, lists concise finding details, and includes the selected
-OCR focuses. Inline comments require a valid code location, are ordered by
-blocking status and severity, deduplicated by content hash, suppressed when the
-finding was already linked to an ADO thread, and capped at 30. These presentation
-rules do not alter persisted severity or merge policy.
+The main review comment contains only the merge decision, finding count, four
+compact SonarQube signals, and reviewed commit. Re-review posts that canonical
+conclusion last so it is the newest/top ADO thread, then removes prior
+agent-generated conclusion threads. Inline notes use a compact
+`priority · severity` heading, concise escaped title, explanation, and plain fenced code block. They
+require a valid code location, are ordered by blocking status and severity,
+deduplicated by content hash, and capped at 30. Previously linked inline threads
+are refreshed in place instead of duplicated; threads for findings fixed by a
+later commit are marked Fixed. Complete re-reviews persist disappeared findings
+as resolved and matching findings as superseded. Incomplete reviews preserve
+prior finding state. A newer review for the same PR cancels stale workflow
+output before it can publish governance results. These rules do not
+alter persisted severity or merge policy.
 
 Pilot metrics are written to each audit record's `rawScannerOutputs`: selected
 focuses and reasons, OCR status/warnings/duration/reviewed-file count, postable
@@ -206,7 +233,7 @@ OpenCodeReview configuration is scaffolded locally under `.ratan/`:
 
 As of the latest local verification:
 
-- `pnpm test` passes — 32 files and 213 tests.
+- The complete suite passes — 36 files and 249 tests, including the loopback dashboard integration and installed-package CLI coverage.
 - Package coverage is 62.35% statements, 51.1% branches, 67.55% functions,
   and 63.37% lines.
 - The offline suite includes golden finding-quality controls plus mocked merge
@@ -218,10 +245,24 @@ As of the latest local verification:
 - The synthetic `ts-sql-injection` live golden case passes with recall `1.0`
   and precision `1.0` against the configured OCR endpoint.
 
-The end-to-end goal is therefore not complete yet. A controlled ADO attempt on
-`example-repo` PR `#4` produced an incomplete audit/comment and exposed an OCR
-category-contract bug; the fix is locally verified, but the environment blocked
-the ADO-to-external-LLM retry. Do not claim a successful live review from it.
+The published `ratan-code-review@0.1.8` package completed a two-iteration pilot
+on `example-repo` PR `#5`. The vulnerable commit produced one critical SQL
+injection, a failed merge status, one concise inline comment, and one canonical
+`Changes requested` summary. After a real parameterization fix commit, the
+same package marked the linked finding thread Fixed, changed the merge status
+to succeeded, and updated that canonical summary in place to `No blocking
+issues`. Both summaries included the SonarQube result (`Not available` for this
+configuration) and the reviewed commit. The older duplicate conclusion was
+deleted. A pre-`0.1.8` inline thread had no persisted association and required
+one-time manual cleanup; new linked threads reconcile automatically.
+Published `ratan-code-review@0.1.9` verified newest-conclusion replacement on
+fresh synthetic ADO PR `#6`, but rendered inspection exposed literal bold
+markers in the long model title and ADO's apply-suggestion widget. Published
+`0.1.10` replaced that format with a bounded escaped heading and plain code
+fence. A real continuation commit parameterized the query; its review marked
+the linked thread Resolved, posted a succeeded status, and created the sole
+allowed conclusion as the highest/newest visible thread.
+The earlier PR `#4` attempt remains incomplete historical evidence.
 
 ## Environment
 

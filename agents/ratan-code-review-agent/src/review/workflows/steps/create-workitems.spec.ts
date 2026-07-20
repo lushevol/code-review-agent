@@ -77,7 +77,7 @@ describe("createWorkItems", () => {
     const createWorkItem = vi
       .fn()
       .mockRejectedValueOnce(new Error("first failed"))
-      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ id: 103 });
     const result = await executeCreateWorkItems(
       [finding(), finding(), finding()],

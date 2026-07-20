@@ -1,5 +1,6 @@
 import type { ConfigProvider } from "agent-config-manager";
 import { runPrReviewWorkflow } from "../review/workflows/pr-review-workflow";
+import { ReviewTracker } from "../review/workflows/utils/review-tracker";
 import { RequestContext } from "../review/runtime";
 import type { CommonRequestContext } from "../review/types";
 import { scanPRs } from "./pr-scan";
@@ -41,17 +42,26 @@ async function runScanLoop(agentConfig: ConfigProvider) {
 
 async function runReviewWorkflow(agentConfig: ConfigProvider, prId: number) {
   console.log(`[startup] Running prReviewWorkflow for PR: ${prId}`);
+  const reviewSignal = ReviewTracker.startReview(prId);
 
   const requestContext: CommonRequestContext = new RequestContext();
   requestContext.set("configSessionId", agentConfig.id);
 
-  for await (const output of runPrReviewWorkflow({
-    inputData: {
-      prId,
-    },
-    requestContext,
-  })) {
-    console.log("PR Review Workflow Output:", output);
+  try {
+    for await (const output of runPrReviewWorkflow({
+      inputData: {
+        prId,
+      },
+      requestContext,
+    })) {
+      if (reviewSignal.aborted) {
+        console.log(`[startup] Stopped stale review for PR: ${prId}`);
+        return;
+      }
+      console.log("PR Review Workflow Output:", output);
+    }
+    console.log(`[startup] Finished processing PR: ${prId}`);
+  } finally {
+    ReviewTracker.finishReview(prId, reviewSignal);
   }
-  console.log(`[startup] Finished processing PR: ${prId}`);
 }

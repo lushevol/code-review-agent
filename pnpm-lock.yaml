@@ -36,8 +36,8 @@ importers:
         specifier: ^4.21.0
         version: 4.22.2
       finding-store:
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.1.1
+        version: 0.1.1
       handlebars:
         specifier: ^4.7.8
         version: 4.7.9
@@ -1874,8 +1874,8 @@ packages:
     resolution: {integrity: sha512-aA4RyPcd3badbdABGDuTXCMTtOneUCAYH/gxoYRTZlIJdF0YPWuGqiAsIrhNnnqdXGswYk6dGujem4w80UJFhg==}
     engines: {node: '>= 0.8'}
 
-  finding-store@0.1.0:
-    resolution: {integrity: sha512-lZlnjcmfnHeBZx9XoZi9gpsVZDmRQfEHAYJKt7oVq6M+kPmFWWGQZqFvKnc9h55BaDjeigsxLdtlrq8SUjI72g==}
+  finding-store@0.1.1:
+    resolution: {integrity: sha512-I4YXWMZNmHbs9nLf3uulVqWDEOgUJRr9XJzVAzh7xH6dHN4jVWo2glwY5HTKyj2fE24xxPEaEyGhGfxGy85sDQ==}
 
   follow-redirects@1.16.0:
     resolution: {integrity: sha512-y5rN/uOsadFT/JfYwhxRS5R7Qce+g3zG97+JrtFZlC9klX/W5hD7iiLzScI4nZqUS7DNUdhPgw4xI8W2LuXlUw==}
@@ -4371,7 +4371,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  finding-store@0.1.0:
+  finding-store@0.1.1:
     dependencies:
       better-sqlite3: 11.10.0
 

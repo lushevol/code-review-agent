@@ -13,7 +13,10 @@ import {
   NormalizedFindingSchema,
 } from "../../types/finding";
 import type { ReviewWorkspace } from "../../workspace/types";
-import { reconcileFindings } from "../utils/finding-reconciler";
+import {
+  type FindingReconciliationStore,
+  reconcileAndPersistFindings,
+} from "../utils/finding-reconciler";
 import { CveScanner } from "./cve-scanner";
 import { complianceEngine } from "./compliance-engine";
 import {
@@ -297,9 +300,16 @@ export const scannerPipeline = defineStep({
       const previous = findingStore.getFindingsByPr(
         prDetails.pullRequestId,
         prDetails.repoName,
-      ) as unknown as NormalizedFinding[];
+      );
       if (previous.length > 0) {
-        const reconciled = reconcileFindings(previous, prioritized);
+        const reconciled = reconcileAndPersistFindings(
+          findingStore as unknown as FindingReconciliationStore,
+          prDetails.pullRequestId,
+          prDetails.repoName,
+          prioritized,
+          reviewExecutionStatus,
+        );
+        prioritized = reconciled.findings;
         const lines = ["#### Changes since last review"];
         if (reconciled.findingsToResolve.length)
           lines.push(`- **${reconciled.findingsToResolve.length}** findings resolved`);
@@ -308,16 +318,13 @@ export const scannerPipeline = defineStep({
         if (reconciled.findingsToCreate.length)
           lines.push(`- **${reconciled.findingsToCreate.length}** new findings`);
         if (lines.length > 1) changesSinceLastReview = `${lines.join("\n")}\n\n`;
+      } else {
+        prioritized = findingStore.batchUpsert(
+          prioritized as Parameters<typeof findingStore.batchUpsert>[0],
+        ) as NormalizedFinding[];
       }
     } catch {
       changesSinceLastReview = "";
-    }
-
-    try {
-      prioritized = findingStore.batchUpsert(
-        prioritized as Parameters<typeof findingStore.batchUpsert>[0],
-      ) as NormalizedFinding[];
-    } catch {
       console.error("[scanner-pipeline] Failed to persist findings");
     }
 

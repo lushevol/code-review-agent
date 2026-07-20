@@ -152,7 +152,7 @@ export const createWorkItems = defineStep({
           workItemType,
         );
 
-        const workItemId = workItem.id;
+        const workItemId = workItem?.id;
         if (workItemId === undefined || workItemId === null) {
           console.warn(
             `[create-workitems] Created work item returned no ID for finding ${finding.id}`,

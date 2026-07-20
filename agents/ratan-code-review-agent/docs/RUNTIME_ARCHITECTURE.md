@@ -34,7 +34,7 @@ flowchart TD
     WorkItems --> ADOWI2["ADO: create Bug (critical)<br/>and Task (high)"]
 
     WorkItems --> Comment["comment-review-results"]
-    Comment --> ADOWrite["ADO: inline comments,<br/>finding/thread links, main comment,<br/>PR properties"]
+    Comment --> ADOWrite["ADO: concise inline comments,<br/>finding/thread links, one canonical conclusion,<br/>PR properties"]
 ```
 
 ## Startup Flow
@@ -120,20 +120,22 @@ fallback retains the focuses already selected for that workspace.
 2. Skip if work item creation is disabled in config.
 3. Create ADO work items via `adoClient.createWorkItem`.
 4. Link work items to PR via artifact link.
-5. Errors are non-fatal; workflow continues.
+5. Treat null or missing-ID responses as warnings; errors are non-fatal and the workflow continues.
 
 ## Comment Flow
 
 `comment-review-results`:
 
-1. Reads normalized scanner findings, the deterministic review summary, and SonarQube measures.
+1. Reads normalized scanner findings and the merge-gate decision.
 2. Reads original PR details from the `fetch-pr-details` step result.
 3. Reconciles with previous review findings (content-hash matching) for re-review.
-4. Selects inline-postable findings with a valid file and positive line, removes findings already associated with an ADO thread, orders by blocking status and severity, suppresses repeated content hashes, then applies the 30-comment cap.
-5. Posts the main PR review comment with the consolidated category/focus summary and SonarQube measures.
-6. Stores the latest reviewed iteration id in PR properties under `CODE_REVIEW_AGENT_LATEST_REVIEW_ID`.
-7. Links each created ADO inline thread to its persisted finding in `finding_comment_threads`.
-8. Returns `mainCommentId` and `codeCommentIds`.
+4. Marks linked threads Fixed when a complete re-review persisted the linked finding, or a later superseding descendant, as resolved.
+5. Refreshes previously linked inline threads with the current compact `priority · severity`, title, explanation, and suggested-fix format.
+6. Selects new inline-postable findings with a valid file and positive line, orders by blocking status and severity, suppresses linked or repeated content hashes, then applies the 30-comment cap.
+7. Posts one canonical main conclusion after all inline work so it is the newest/top ADO thread. It contains only the merge decision, finding count, compact SonarQube coverage/new-bug/new-vulnerability/new-code-smell results, and reviewed commit; prior agent-generated conclusion threads are then deleted. Inline titles are bounded, escaped Markdown headings and suggested fixes use plain fenced code blocks.
+8. Stores the latest reviewed iteration id in PR properties under `CODE_REVIEW_AGENT_LATEST_REVIEW_ID`.
+9. Links each created ADO inline thread to its persisted finding in `finding_comment_threads`.
+10. Returns `mainCommentId` and `codeCommentIds`.
 
 The feedback daemon uses these associations to apply thread reactions or status changes only to the represented finding; it does not apply every PR thread to every finding.
 
@@ -144,6 +146,13 @@ The feedback daemon uses these associations to apply thread reactions or status 
 - **findingsToSupersede** — existing finding with updated details
 - **findingsToResolve** — finding that disappeared → auto-close
 - **findingsToKeep** — active overrides preserved
+
+After a complete review, these transitions are persisted: disappeared findings
+become `resolved`, matches become `superseded`, and all current findings are
+upserted. An incomplete review may persist partial current findings but never
+resolves or supersedes prior findings. Starting a newer review for the same PR
+aborts the prior review's output; stale workflows stop at the next workflow
+event before status, audit, work-item, or comment publication.
 
 ## Webhook Flow
 

@@ -51,6 +51,57 @@ describe("mergeGate", () => {
     expect(error).toHaveBeenCalledWith(expect.stringContaining("offline"));
     error.mockRestore();
   });
+
+  it("changes the PR status from blocked to allowed after the user fixes the finding", async () => {
+    const createPullRequestStatus = vi.fn().mockResolvedValue(undefined);
+
+    const firstReview = await executeMergeGate({
+      findings: [finding({ id: "blocking", blocking: true })],
+    }, createPullRequestStatus);
+    const fixReview = await executeMergeGate({
+      findings: [
+        finding({
+          id: "blocking",
+          blocking: true,
+          resolution: "resolved",
+        }),
+      ],
+    }, createPullRequestStatus);
+
+    expect([firstReview.mergeDecision, fixReview.mergeDecision]).toEqual([
+      "blocked",
+      "allowed",
+    ]);
+    expect(createPullRequestStatus.mock.calls.map(([, , status]) => status.state))
+      .toEqual([3, 2]);
+  });
+
+  it("changes the PR status from allowed to blocked when a later commit adds a blocker", async () => {
+    const createPullRequestStatus = vi.fn().mockResolvedValue(undefined);
+
+    const cleanReview = await executeMergeGate({}, createPullRequestStatus);
+    const regressionReview = await executeMergeGate({
+      findings: [finding({ blocking: true })],
+    }, createPullRequestStatus);
+
+    expect([cleanReview.mergeDecision, regressionReview.mergeDecision]).toEqual([
+      "allowed",
+      "blocked",
+    ]);
+    expect(createPullRequestStatus.mock.calls.map(([, , status]) => status.state))
+      .toEqual([2, 3]);
+  });
+
+  it.each(["waived", "false-positive", "accepted-risk", "superseded", "resolved"] as const)(
+    "does not re-block a continued review for a %s finding",
+    async (resolution) => {
+      const result = await executeMergeGate({
+        findings: [finding({ blocking: true, resolution })],
+      });
+
+      expect(result.mergeDecision).toBe("allowed");
+    },
+  );
 });
 
 async function executeMergeGate(
