@@ -117,7 +117,7 @@ From a login shell containing the ADO and DeepSeek variables, run the reusable r
 pnpm verify:release -- --pr-id 5
 ```
 
-The defaults are ADO organization `lushe`, project `project1`, `ratan-code-review@0.1.10`, and `finding-store@0.1.1`. Override them with `ADO_ORGANIZATION`, `ADO_PROJECT`, `EXPECTED_AGENT_VERSION`, or `EXPECTED_STORE_VERSION`. A normal verification is read-only. To deliberately run a real review that can update PR comments and status, use:
+The defaults are ADO organization `lushe`, project `project1`, `ratan-code-review@0.1.11`, and `finding-store@0.1.1`. Override them with `ADO_ORGANIZATION`, `ADO_PROJECT`, `EXPECTED_AGENT_VERSION`, or `EXPECTED_STORE_VERSION`. A normal verification is read-only. To deliberately run a real review that can update PR comments and status, use:
 
 ```bash
 pnpm verify:release -- --scan-pr 5 --expect-decision blocked
