@@ -15,6 +15,7 @@ import { fetchWorkItemContext } from "./steps/fetch-workitem-context";
 import { mergeGate } from "./steps/merge-gate";
 import { recordAudit } from "./steps/record-audit";
 import { sonarqubeMeasures } from "./steps/sonarqube-measures";
+import { getLogger } from "ratan-logger";
 
 export interface PrReviewWorkflowOptions {
   inputData: { prId: number };
@@ -53,6 +54,8 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
   let attemptedReviewFocuses: ReviewFocusSelection[] = [];
   let reviewAttemptStartedAt: number | undefined;
 
+  const workflowLogger = getLogger("pr-review-workflow");
+
   try {
     current = await workspaceProvider.withWorkspace(
       current.prDetails,
@@ -66,7 +69,16 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
         )) as Record<string, any>;
       },
     );
-  } catch {
+  } catch (error) {
+    workflowLogger.error(
+      "OCRS workspace/scanner pipeline failed; review will be marked incomplete",
+      {
+        error: (error as Error).message,
+        stack: (error as Error).stack,
+        prId: current.prDetails?.pullRequestId,
+        repo: current.prDetails?.repoName,
+      },
+    );
     current = {
       ...current,
       findings: [],

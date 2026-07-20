@@ -5,6 +5,7 @@ import { extractAgentConfig } from "../../../bootstrap/session";
 import { type CommonRequestContext, PullRequestSchema } from "../../types";
 import { NormalizedFindingSchema } from "../../types/finding";
 import { withRetry } from "../../utils/retry";
+import { getLogger } from "ratan-logger";
 
 const PRDetailsInputSchema = z.object({
   prDetails: PullRequestSchema,
@@ -39,8 +40,13 @@ export const sonarqubeMeasures = defineStep({
     );
 
     const sonarQubeClient = agentConfig.getSonarQubeClient();
+    const logger = getLogger("sonarqube-measures");
 
     if (!sonarQubeClient) {
+      logger.warn(
+        "No SonarQube client available; SonarQube measures will not be fetched. " +
+        "Ensure config.sonarQube.url and config.sonarQube.token are set and valid.",
+      );
       return {
         measures: null,
       };
@@ -56,7 +62,12 @@ export const sonarqubeMeasures = defineStep({
         measures,
       };
     } catch (error) {
-      console.error("Error fetching SonarQube measures:", error);
+      logger.error("Failed to fetch SonarQube measures", {
+        error: (error as Error).message,
+        stack: (error as Error).stack,
+        pullRequestId,
+        repoName,
+      });
       return {
         measures: null,
       };

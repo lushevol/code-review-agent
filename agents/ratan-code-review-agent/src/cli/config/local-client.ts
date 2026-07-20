@@ -42,12 +42,24 @@ export class LocalConfigClient implements ConfigProvider {
     }
     const sonarConfig = this.options.config.sonarQube;
     if (sonarConfig?.token) {
+      this.logger.info("Initializing SonarQube client", { url: sonarConfig.url });
       const sonarClient = new SonarQubeClient({ url: sonarConfig.url });
       if (await sonarClient.connect(sonarConfig.token)) {
         this.sonarQubeClient = sonarClient;
+        this.logger.info("SonarQube client connected successfully");
       } else {
-        this.logger.warn("SonarQube connection unavailable; skipping Sonar validation.");
+        this.logger.warn(
+          `SonarQube connection refused at ${sonarConfig.url}. ` +
+          "Check that the URL and token are correct and the server is reachable. " +
+          "SonarQube measures and CVE scanning will be unavailable.",
+        );
       }
+    } else if (sonarConfig?.url) {
+      this.logger.warn(
+        "SonarQube URL is configured but no token is provided. " +
+        "Set config.sonarQube.token or supply the token via 'env:VAR_NAME'. " +
+        "SonarQube measures and CVE scanning will be unavailable.",
+      );
     }
   }
 

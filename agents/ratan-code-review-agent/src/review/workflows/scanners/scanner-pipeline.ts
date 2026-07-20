@@ -113,7 +113,10 @@ export function aggregateScannerResults(
   settled.forEach((result, index) => {
     const scanner = scanners[index];
     if (result.status === "rejected") {
-      console.warn(`[scanner-pipeline] ${scanner.id} failed`);
+      const reason = result.reason;
+      console.warn(
+        `[scanner-pipeline] Scanner "${scanner.id}" (engine: ${scanner.engine}) failed: ${(reason instanceof Error ? reason.message : String(reason))}`,
+      );
       if (scanner.engine === "open-code-review") {
         reviewExecutionStatus = "incomplete";
       }

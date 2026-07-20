@@ -28,12 +28,9 @@ describe("sonarqubeMeasures", () => {
   });
 
   it("degrades to null after retry exhaustion", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const getMeasures = vi.fn().mockRejectedValue(new Error("offline"));
     expect(await executeSonarqubeMeasures({ getMeasures })).toEqual({ measures: null });
     expect(getMeasures).toHaveBeenCalledTimes(1);
-    expect(error).toHaveBeenCalled();
-    error.mockRestore();
   });
 });
 
