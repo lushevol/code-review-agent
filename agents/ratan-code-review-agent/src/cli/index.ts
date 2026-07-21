@@ -11,7 +11,9 @@ const APP_VERSION = pkg.default?.version ?? pkg.version ?? "0.0.1";
 
 function printHelp(): void {
   console.log(
-    `Usage: ratan-code-review [options] [command]
+    `ratan-code-review v${APP_VERSION}
+
+Usage: ratan-code-review [options] [command]
 
 AI-powered code review agent for Azure DevOps
 
@@ -50,7 +52,7 @@ if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
 }
 
 if (args[0] === "--version" || args[0] === "-V") {
-  console.log(APP_VERSION);
+  console.log(`ratan-code-review v${APP_VERSION}`);
   process.exit(0);
 }
 
