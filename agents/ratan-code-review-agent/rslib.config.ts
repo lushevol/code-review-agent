@@ -9,6 +9,10 @@ const npmExternals = {
   hono: "hono",
   "ratan-logger": "ratan-logger",
   "@alibaba-group/open-code-review": "@alibaba-group/open-code-review",
+  // CJS dependencies that must not be bundled into ESM output;
+  // they use CJS globals (__dirname, module.exports) internally.
+  "azure-devops-node-api": "azure-devops-node-api",
+  "sql.js": "sql.js",
 };
 
 export default defineConfig({
