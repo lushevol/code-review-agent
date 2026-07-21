@@ -23,6 +23,9 @@ importers:
       agent-config-manager:
         specifier: workspace:0.1.0
         version: link:../../packages/agent-config-manager
+      azure-devops-node-api:
+        specifier: ^15.1.2
+        version: 15.1.2
       finding-store:
         specifier: workspace:0.2.0
         version: link:../../packages/finding-store
@@ -47,6 +50,9 @@ importers:
       redact-pii:
         specifier: ^3.4.0
         version: 3.4.0
+      sql.js:
+        specifier: ^1.14.1
+        version: 1.14.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3
