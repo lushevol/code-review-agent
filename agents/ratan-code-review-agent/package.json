@@ -1,6 +1,6 @@
 {
   "name": "ratan-code-review",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "private": false,
   "license": "ISC",
   "type": "module",
@@ -52,6 +52,7 @@
     "@alibaba-group/open-code-review": "1.7.13",
     "@hono/node-server": "^2.0.10",
     "agent-config-manager": "workspace:0.1.0",
+    "azure-devops-node-api": "^15.1.2",
     "finding-store": "workspace:0.2.0",
     "hono": "^4.0.0",
     "js-yaml": "^4.1.0",
@@ -60,6 +61,7 @@
     "ratan-logger": "0.1.0",
     "ratan-sonarqube-api": "workspace:0.0.4",
     "redact-pii": "^3.4.0",
+    "sql.js": "^1.14.1",
     "zod": "^4.4.3"
   },
   "author": "Shuai,Lu (shuai.lu@sc.com)",
