@@ -29,6 +29,7 @@ describe("OpenCodeReviewScanner", () => {
           durationMs: 12,
           comments: [],
           warnings: [],
+          rawOutput: "",
         };
       },
     };
@@ -137,6 +138,7 @@ describe("OpenCodeReviewScanner", () => {
         durationMs: 12,
         comments: [],
         warnings: [{ type: "timeout", message: "Review timed out" }],
+        rawOutput: "",
       }),
     };
 

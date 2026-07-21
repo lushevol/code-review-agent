@@ -62,6 +62,14 @@ export class OpenCodeReviewScanner implements Scanner {
         });
       }
     }
+
+    // Save raw OCR output to a persistent file for debugging
+    const rawOutputPath = saveRawOcrOutput(
+      output.rawOutput,
+      prDetails.pullRequestId,
+      prDetails.repoName,
+      rootConfig.findingStorePath ?? ".ratan/data/findings.db",
+    );
     const findings = output.comments.map((comment) =>
       this.toFinding(prDetails, context.workspace, comment),
     );
@@ -78,6 +86,7 @@ export class OpenCodeReviewScanner implements Scanner {
         totalTokens: output.summary?.total_tokens ?? 0,
         warningTypes: output.warnings.map((warning) => warning.type),
         warningMessages: output.warnings.map((warning) => warning.message),
+        rawOutputPath,
         reviewFocuses,
       },
     };
@@ -144,6 +153,27 @@ function buildBackground(
       ({ focus, reasons }) => `- ${focus}: ${reasons.join(" ")}`,
     ),
   ].join("\n");
+}
+
+function saveRawOcrOutput(
+  rawJson: string,
+  prId: number,
+  repoName: string,
+  dbPath: string,
+): string {
+  try {
+    const dataDir = path.dirname(dbPath);
+    const ocrOutputDir = path.join(dataDir, "ocr-outputs");
+    fs.mkdirSync(ocrOutputDir, { recursive: true });
+    const fileName = `pr-${prId}-${repoName.replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
+    const filePath = path.join(ocrOutputDir, fileName);
+    fs.writeFileSync(filePath, rawJson, "utf8");
+    scannerLogger.info(`Raw OCR output saved: ${filePath}`);
+    return filePath;
+  } catch (err) {
+    scannerLogger.warn(`Failed to save raw OCR output: ${(err as Error).message}`);
+    return "unsaved";
+  }
 }
 
 function readLocalContext(

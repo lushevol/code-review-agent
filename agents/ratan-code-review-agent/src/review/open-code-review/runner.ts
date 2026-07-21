@@ -73,6 +73,7 @@ const OcrOutputSchema = z.object({
 export type OcrReviewOutput = z.infer<typeof OcrOutputSchema> & {
   complete: boolean;
   durationMs: number;
+  rawOutput: string;
 };
 
 export interface OcrReviewInput {
@@ -180,6 +181,7 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
         ...parsed,
         complete: parsed.status !== "completed_with_errors",
         durationMs: Date.now() - startedAt,
+        rawOutput: stdout,
       };
     } finally {
       fs.rmSync(stateHome, { recursive: true, force: true });
