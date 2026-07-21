@@ -181,6 +181,7 @@ async function startFeedbackDaemon(
 const PLACEHOLDER_PATTERNS: Array<{ path: string[]; label: string; envVar?: string }> = [
   { path: ["ado", "organization"], label: "Azure DevOps organization" },
   { path: ["ado", "project"], label: "Azure DevOps project" },
+  { path: ["ado", "token"], label: "Azure DevOps PAT (personal access token)", envVar: "ADO_TOKEN" },
   { path: ["openCodeReview", "llm", "url"], label: "LLM endpoint URL", envVar: "OCR_LLM_URL" },
   { path: ["openCodeReview", "llm", "token"], label: "LLM API token", envVar: "OCR_LLM_TOKEN" },
   { path: ["openCodeReview", "llm", "model"], label: "LLM model name" },
@@ -189,15 +190,20 @@ const PLACEHOLDER_PATTERNS: Array<{ path: string[]; label: string; envVar?: stri
 ];
 
 function isPlaceholder(value: unknown): boolean {
-  return (
+  if (typeof value !== "string") return false;
+  if (
     value === "your-organization" ||
     value === "your-project" ||
     value === "set-your-llm-token" ||
     value === "set-your-sonar-token" ||
-    String(value).startsWith("http://your-llm-endpoint") ||
-    String(value).startsWith("https://your-sonarqube") ||
-    String(value).startsWith("your-")
-  );
+    value.startsWith("http://your-llm-endpoint") ||
+    value.startsWith("https://your-sonarqube") ||
+    value.startsWith("your-")
+  ) return true;
+  // env:X references where the env var is not set — treat as unresolved placeholder
+  const envMatch = value.match(/^env:(.+)$/);
+  if (envMatch && !process.env[envMatch[1]]) return true;
+  return false;
 }
 
 function getNested(obj: Record<string, unknown>, pathArr: string[]): unknown {
@@ -329,6 +335,23 @@ function validateConfigInputs(
     );
   } else {
     infos.push("SonarQube: not configured (CVE scanning will be skipped)");
+  }
+
+  // ── ADO validation ──────────────────────────────────────────────────────
+  const ado = config.ado;
+  if (ado?.organization && ado?.project && ado?.token) {
+    infos.push("Azure DevOps: configured (" + ado.organization + "/" + ado.project + ")");
+  } else if (!ado?.token) {
+    warnings.push(
+      "ADO token is missing. " +
+      "Set config.ado.token or supply the token via 'env:VAR_NAME' (e.g. 'env:ADO_TOKEN'). " +
+      "ADO connection and PR review will be unavailable.",
+    );
+  } else {
+    warnings.push(
+      "ADO organization or project is missing. " +
+      "Ensure config.ado.organization and config.ado.project are both set.",
+    );
   }
 
   // ── Compliance scanner ────────────────────────────────────────────────
