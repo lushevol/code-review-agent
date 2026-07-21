@@ -50,6 +50,7 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
     workspaceRoot: rootConfig.openCodeReview?.workspaceRoot,
     adoToken: agentConfig.getAdoClient().getAdoToken(),
     maxGitOutputBytes: rootConfig.workspace?.maxGitOutputBytes,
+    useSsh: rootConfig.workspace?.useSsh,
   });
   let attemptedReviewFocuses: ReviewFocusSelection[] = [];
   let reviewAttemptStartedAt: number | undefined;

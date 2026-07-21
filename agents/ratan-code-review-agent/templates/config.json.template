@@ -29,7 +29,8 @@
   "watch": { "intervalMs": 1800000 },
   "feedbackDaemon": { "enabled": true, "intervalMs": 300000 },
   "workspace": {
-    "maxGitOutputBytes": 33554432
+    "maxGitOutputBytes": 33554432,
+    "useSsh": false
   },
   "sensitiveDataMask": {
     "enabled": true,

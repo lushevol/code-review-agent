@@ -70,6 +70,7 @@ const RemediationTasksConfigSchema = z.object({
 
 const WorkspaceConfigSchema = z.object({
   maxGitOutputBytes: z.number().int().min(1048576).optional(),
+  useSsh: z.boolean().optional(),
 }).strict();
 
 const SensitiveDataMaskCustomPatternSchema = z.object({

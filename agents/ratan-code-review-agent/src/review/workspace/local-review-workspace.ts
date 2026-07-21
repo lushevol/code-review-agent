@@ -19,12 +19,14 @@ export interface LocalReviewWorkspaceOptions {
   workspaceRoot?: string;
   adoToken?: string;
   maxGitOutputBytes?: number;
+  useSsh?: boolean;
 }
 
 export class LocalReviewWorkspaceProvider implements ReviewWorkspaceProvider {
   private readonly workspaceRoot: string;
   private readonly adoToken: string;
   private readonly maxGitOutputBytes: number;
+  private readonly useSsh: boolean;
 
   constructor(options: LocalReviewWorkspaceOptions = {}) {
     this.workspaceRoot = path.resolve(
@@ -32,6 +34,7 @@ export class LocalReviewWorkspaceProvider implements ReviewWorkspaceProvider {
     );
     this.adoToken = options.adoToken ?? "";
     this.maxGitOutputBytes = options.maxGitOutputBytes ?? MAX_GIT_OUTPUT;
+    this.useSsh = options.useSsh ?? false;
   }
 
   async withWorkspace<T>(
@@ -58,12 +61,14 @@ export class LocalReviewWorkspaceProvider implements ReviewWorkspaceProvider {
 
     const targetRef = `refs/ratan/pr/${metadata.pullRequestId}/target`;
     const sourceRef = `refs/ratan/pr/${metadata.pullRequestId}/source`;
+    const targetFetchUrl = this.useSsh && metadata.sshUrl ? metadata.sshUrl : metadata.cloneUrl;
+    const sourceFetchUrl = this.useSsh && metadata.sourceSshUrl ? metadata.sourceSshUrl : metadata.sourceCloneUrl;
     await this.git([
       "--git-dir",
       cachePath,
       "fetch",
       "--force",
-      metadata.cloneUrl,
+      targetFetchUrl,
       `+${metadata.targetRefName}:${targetRef}`,
     ]);
     await this.git([
@@ -71,7 +76,7 @@ export class LocalReviewWorkspaceProvider implements ReviewWorkspaceProvider {
       cachePath,
       "fetch",
       "--force",
-      metadata.sourceCloneUrl,
+      sourceFetchUrl,
       `+${metadata.sourceRefName}:${sourceRef}`,
     ]);
 
@@ -249,7 +254,7 @@ export class LocalReviewWorkspaceProvider implements ReviewWorkspaceProvider {
       GIT_TERMINAL_PROMPT: "0",
       GIT_LFS_SKIP_SMUDGE: "1",
     };
-    if (this.adoToken) {
+    if (this.adoToken && !this.useSsh) {
       env.GIT_CONFIG_COUNT = "1";
       env.GIT_CONFIG_KEY_0 = "http.extraHeader";
       env.GIT_CONFIG_VALUE_0 = `Authorization: Basic ${Buffer.from(`:${this.adoToken}`).toString("base64")}`;
