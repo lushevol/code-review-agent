@@ -109,6 +109,8 @@ export const recordAudit = defineStep({
           postableFindingCount: metricNumber(
             inputData.reviewMetadata.postableFindingCount,
           ),
+          rawOcrOutput: String(inputData.reviewMetadata.rawOutput ?? ""),
+          rawOutputPath: String(inputData.reviewMetadata.rawOutputPath ?? ""),
           duplicateSuppressionReasons: {
             contentHashCorrelation: metricNumber(
               duplicateSuppressionReasons.contentHashCorrelation,

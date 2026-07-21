@@ -87,6 +87,7 @@ export class OpenCodeReviewScanner implements Scanner {
         warningTypes: output.warnings.map((warning) => warning.type),
         warningMessages: output.warnings.map((warning) => warning.message),
         rawOutputPath,
+        rawOutput: output.rawOutput,
         reviewFocuses,
       },
     };

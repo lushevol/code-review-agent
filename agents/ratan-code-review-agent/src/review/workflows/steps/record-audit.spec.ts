@@ -81,6 +81,8 @@ describe("recordAudit", () => {
       ocrDurationMs: 25,
       reviewedFileCount: 4,
       postableFindingCount: 3,
+      rawOcrOutput: "",
+      rawOutputPath: "",
       duplicateSuppressionReasons: {
         contentHashCorrelation: 2,
         inlineContentHash: 0,
