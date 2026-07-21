@@ -24,6 +24,9 @@ export default defineConfig({
       format: "esm",
       syntax: ["node 20"],
       output: { externals: npmExternals },
+      // Polyfill __dirname for libraries bundled into ESM output
+      // (e.g. azure-devops-node-api WebApi constructor uses it)
+      shims: { esm: { __dirname: true } },
     },
     {
       format: "cjs",
