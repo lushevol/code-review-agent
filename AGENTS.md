@@ -206,7 +206,7 @@ A React SPA (Vite + Recharts + React Router) served by an Express backend:
 
 ### LLM Configuration
 
-OpenCodeReview model configuration is read from `config.openCodeReview.llm` (`url`, `token`, `model`, and optional `useAnthropic`). Values may use `env:VAR_NAME`; there is no production fallback to `OPENAI_BASE_URL` or `OPENAI_API_KEY`.
+OpenCodeReview model configuration is read from `config.openCodeReview.llm` (`url`, `token`, `model`, and optional `protocol`). Values may use `env:VAR_NAME`; there is no production fallback to `OPENAI_BASE_URL` or `OPENAI_API_KEY`.
 
 ### Data Privacy
 Before OpenCodeReview sees Git content, the runner creates a temporary two-commit repository and masks changed text via `maskSensitiveData()`. Credential replacements use per-run keyed markers so the LLM can still detect whether a secret changed without receiving the original value or a reusable hash. The source checkout is never modified.

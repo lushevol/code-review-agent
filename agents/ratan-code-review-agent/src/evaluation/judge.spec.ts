@@ -14,7 +14,6 @@ describe("LlmEvaluationJudge", () => {
       url: "https://llm.example/v1",
       token: "secret",
       model: "judge-model",
-      useAnthropic: false,
     }, fetcher as typeof fetch);
 
     const result = await judge.evaluate({

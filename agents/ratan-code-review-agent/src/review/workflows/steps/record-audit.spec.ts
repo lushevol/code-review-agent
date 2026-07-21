@@ -77,6 +77,7 @@ describe("recordAudit", () => {
       ],
       ocrStatus: "timeout",
       ocrWarningTypes: ["timeout"],
+      ocrWarningMessages: [],
       ocrDurationMs: 25,
       reviewedFileCount: 4,
       postableFindingCount: 3,

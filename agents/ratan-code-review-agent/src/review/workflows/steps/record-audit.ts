@@ -95,6 +95,13 @@ export const recordAudit = defineStep({
                 (value): value is string => typeof value === "string",
               )
             : [],
+          ocrWarningMessages: Array.isArray(
+            inputData.reviewMetadata.warningMessages,
+          )
+            ? inputData.reviewMetadata.warningMessages.filter(
+                (value): value is string => typeof value === "string",
+              )
+            : [],
           ocrDurationMs: metricNumber(inputData.reviewMetadata.durationMs),
           reviewedFileCount: metricNumber(
             inputData.reviewMetadata.filesReviewed,

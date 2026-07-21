@@ -82,7 +82,7 @@ export interface OcrReviewInput {
     url: string;
     token: string;
     model: string;
-    useAnthropic: boolean;
+    protocol?: "anthropic" | "openai" | "openai-responses";
   };
   ruleFile: string;
 }
@@ -131,16 +131,17 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
         throw new Error("OpenCodeReview rule file is invalid");
       }
       const configPath = path.join(stateHome, "config.json");
+      const llmConfig: Record<string, unknown> = {
+        url: input.llm.url,
+        auth_token: input.llm.token,
+        model: input.llm.model,
+      };
+      if (input.llm.protocol) {
+        llmConfig.protocol = input.llm.protocol;
+      }
       fs.writeFileSync(
         configPath,
-        JSON.stringify({
-          llm: {
-            url: input.llm.url,
-            auth_token: input.llm.token,
-            model: input.llm.model,
-            use_anthropic: input.llm.useAnthropic,
-          },
-        }),
+        JSON.stringify({ llm: llmConfig }),
         { mode: 0o600 },
       );
 
@@ -166,7 +167,7 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
         ],
         stateHome,
         configPath,
-        input.llm.useAnthropic,
+        input.llm.protocol,
       );
       let json: unknown;
       try {
@@ -190,9 +191,9 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
     args: string[],
     home: string,
     configPath: string,
-    useAnthropic: boolean,
+    protocol?: string,
   ): Promise<string> {
-    const env = this.buildEnvironment(home, configPath, useAnthropic);
+    const env = this.buildEnvironment(home, configPath, protocol);
     return new Promise((resolve, reject) => {
       const child = spawn(this.binaryPath, args, {
         env,
@@ -240,16 +241,19 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
   private buildEnvironment(
     home: string,
     configPath: string,
-    useAnthropic: boolean,
+    protocol?: string,
   ): NodeJS.ProcessEnv {
-    return {
+    const env: NodeJS.ProcessEnv = {
       ...process.env,
       ...this.environment,
       HOME: home,
       OCR_CONFIG_PATH: configPath,
       OCR_NO_UPDATE: "1",
-      OCR_USE_ANTHROPIC: String(useAnthropic),
     };
+    if (protocol) {
+      env.OCR_LLM_PROTOCOL = protocol;
+    }
+    return env;
   }
 }
 

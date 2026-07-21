@@ -57,8 +57,10 @@ export async function main(): Promise<void> {
   const config = await provider.getRootConfig();
   const runner = new OpenCodeReviewRunner();
   const judge = options.judge ? new LlmEvaluationJudge({
-    ...config.openCodeReview.llm,
-    useAnthropic: config.openCodeReview.llm.useAnthropic ?? false,
+    url: config.openCodeReview.llm.url,
+    token: config.openCodeReview.llm.token,
+    model: config.openCodeReview.llm.model,
+    protocol: config.openCodeReview.llm.protocol,
   }) : null;
   const results = [];
 
@@ -75,8 +77,10 @@ export async function main(): Promise<void> {
           "Review only the changed code. Report concrete, actionable defects.",
         ].join("\n"),
         llm: {
-          ...config.openCodeReview.llm,
-          useAnthropic: config.openCodeReview.llm.useAnthropic ?? false,
+          url: config.openCodeReview.llm.url,
+          token: config.openCodeReview.llm.token,
+          model: config.openCodeReview.llm.model,
+          protocol: config.openCodeReview.llm.protocol,
         },
         ruleFile: provider.resolveConfigPath(config.openCodeReview.rulesPath),
       });

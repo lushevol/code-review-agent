@@ -103,7 +103,7 @@ const OpenCodeReviewLlmConfigSchema = z.object({
   url: z.string().url(),
   token: z.string().min(1),
   model: z.string().min(1),
-  useAnthropic: z.boolean().optional(),
+  protocol: z.enum(["anthropic", "openai", "openai-responses"]).optional(),
 });
 
 const OpenCodeReviewConfigSchema = z.object({

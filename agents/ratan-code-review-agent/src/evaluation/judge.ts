@@ -26,7 +26,7 @@ export class LlmEvaluationJudge implements EvaluationJudge {
       url: string;
       token: string;
       model: string;
-      useAnthropic: boolean;
+      protocol?: "anthropic" | "openai" | "openai-responses";
     },
     private readonly fetcher: typeof fetch = fetch,
   ) {}
@@ -41,7 +41,7 @@ export class LlmEvaluationJudge implements EvaluationJudge {
       `Expected findings:\n${JSON.stringify(input.expectedFindings)}`,
       `Actual finding:\n${JSON.stringify(input.actualFinding)}`,
     ].join("\n\n");
-    const response = this.llm.useAnthropic
+    const response = this.llm.protocol === "anthropic"
       ? await this.callAnthropic(prompt)
       : await this.callOpenAi(prompt);
     return QualitativeJudgementSchema.parse(JSON.parse(extractJson(response)));

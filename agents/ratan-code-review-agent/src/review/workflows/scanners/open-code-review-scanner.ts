@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { AdoPullRequestMetadata } from "ratan-ado-api";
+import { getLogger } from "ratan-logger";
 import type { OcrReviewRunner } from "../../open-code-review/runner";
 import type { ReviewWorkspace } from "../../workspace/types";
 import {
@@ -10,6 +11,8 @@ import {
 } from "../../types/finding";
 import type { ScanContext, Scanner } from "./types";
 import { selectReviewFocuses } from "../../open-code-review/review-focus-router";
+
+const scannerLogger = getLogger("open-code-review-scanner");
 
 const OCR_VERSION = "1.7.7";
 
@@ -34,11 +37,31 @@ export class OpenCodeReviewScanner implements Scanner {
         reviewFocuses,
       ),
       llm: {
-        ...openCodeReview.llm,
-        useAnthropic: openCodeReview.llm.useAnthropic ?? false,
+        url: openCodeReview.llm.url,
+        token: openCodeReview.llm.token,
+        model: openCodeReview.llm.model,
+        protocol: openCodeReview.llm.protocol,
       },
       ruleFile: context.provider.resolveConfigPath(openCodeReview.rulesPath),
     });
+
+    // Log OCR warnings — especially error messages — when the status indicates partial failure
+    if (output.warnings.length > 0) {
+      if (output.status === "completed_with_errors") {
+        scannerLogger.error(`OCR status "${output.status}":`, {
+          status: output.status,
+          totalWarnings: output.warnings.length,
+          warnings: output.warnings.map((w) => ({ type: w.type, message: w.message })),
+          durationMs: output.durationMs,
+        });
+      } else {
+        scannerLogger.warn(`OCR warnings (status: ${output.status}):`, {
+          status: output.status,
+          totalWarnings: output.warnings.length,
+          warnings: output.warnings.map((w) => ({ type: w.type, message: w.message })),
+        });
+      }
+    }
     const findings = output.comments.map((comment) =>
       this.toFinding(prDetails, context.workspace, comment),
     );
@@ -54,6 +77,7 @@ export class OpenCodeReviewScanner implements Scanner {
         filesReviewed: output.summary?.files_reviewed ?? 0,
         totalTokens: output.summary?.total_tokens ?? 0,
         warningTypes: output.warnings.map((warning) => warning.type),
+        warningMessages: output.warnings.map((warning) => warning.message),
         reviewFocuses,
       },
     };

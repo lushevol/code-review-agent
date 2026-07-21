@@ -79,7 +79,7 @@ describe("OpenCodeReviewRunner", () => {
         changes: [{ path: "config.ts", status: "modified", addedLines: [] }],
       },
       background: "",
-      llm: { url: "https://llm.example/v1", token: "secret", model: "model", useAnthropic: false },
+      llm: { url: "https://llm.example/v1", token: "secret", model: "model" },
       ruleFile: ruleFile(fixture.dir),
     })).rejects.toThrow();
 
@@ -129,7 +129,7 @@ describe("OpenCodeReviewRunner", () => {
         }],
       },
       background: "",
-      llm: { url: "https://llm.example/v1", token: "secret", model: "model", useAnthropic: false },
+      llm: { url: "https://llm.example/v1", token: "secret", model: "model" },
       ruleFile: ruleFile(fixture.dir),
     });
 
@@ -175,7 +175,7 @@ describe("OpenCodeReviewRunner", () => {
     const result = await runner.review({
       workspace: reviewWorkspace,
       background: "PR context",
-      llm: { url: "https://llm.example/v1", token: "secret", model: "model", useAnthropic: false },
+      llm: { url: "https://llm.example/v1", token: "secret", model: "model" },
       ruleFile: reviewRuleFile,
     });
 
@@ -227,7 +227,7 @@ describe("OpenCodeReviewRunner", () => {
     const result = await runner.review({
       workspace: workspace(fixture.dir),
       background: "",
-      llm: { url: "https://llm.example/v1", token: "secret", model: "model", useAnthropic: false },
+      llm: { url: "https://llm.example/v1", token: "secret", model: "model" },
       ruleFile: ruleFile(fixture.dir),
     });
 
@@ -263,7 +263,6 @@ describe("OpenCodeReviewRunner", () => {
         url: "https://llm.example/v1",
         token: "secret",
         model: "model",
-        useAnthropic: false,
       },
       ruleFile: ruleFile(fixture.dir),
     });
@@ -299,7 +298,6 @@ describe("OpenCodeReviewRunner", () => {
         url: "https://llm.example/v1",
         token: "secret",
         model: "model",
-        useAnthropic: false,
       },
       ruleFile: ruleFile(fixture.dir),
     });
@@ -336,8 +334,7 @@ describe("OpenCodeReviewRunner", () => {
           url: "https://llm.example/v1",
           token: "secret",
           model: "model",
-          useAnthropic: false,
-        },
+          },
         ruleFile: ruleFile(fixture.dir),
       }),
     ).rejects.toThrow();
@@ -359,7 +356,7 @@ describe("OpenCodeReviewRunner", () => {
       runner.review({
         workspace: workspace(fixture.dir),
         background: "",
-        llm: { url: "https://llm.example/v1", token: "secret", model: "model", useAnthropic: false },
+        llm: { url: "https://llm.example/v1", token: "secret", model: "model" },
         ruleFile: ruleFile(fixture.dir),
       }),
     ).rejects.toThrow("invalid JSON output");

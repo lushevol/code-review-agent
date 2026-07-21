@@ -129,7 +129,7 @@ The wrapper configuration contains Azure DevOps connection settings and a root
         "url": "https://llm.example.com/v1",
         "token": "env:OCR_LLM_TOKEN",
         "model": "review-model",
-        "useAnthropic": false
+        "protocol": "openai"
       }
     }
   }

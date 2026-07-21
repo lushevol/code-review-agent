@@ -363,7 +363,8 @@ function validateConfigInputs(
   // ── OpenCodeReview ────────────────────────────────────────────────────
   const ocr = config.openCodeReview;
   if (ocr?.llm?.url && ocr?.llm?.token && ocr?.llm?.model) {
-    infos.push("OpenCodeReview: configured (" + ocr.llm.model + " at " + ocr.llm.url + ")");
+    const protocolInfo = ocr.llm.protocol ? ` (protocol: ${ocr.llm.protocol})` : "";
+    infos.push("OpenCodeReview: configured (" + ocr.llm.model + " at " + ocr.llm.url + protocolInfo + ")");
   } else {
     warnings.push(
       "OpenCodeReview LLM config is incomplete. " +
