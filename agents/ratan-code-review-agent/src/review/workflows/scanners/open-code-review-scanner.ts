@@ -70,6 +70,12 @@ export class OpenCodeReviewScanner implements Scanner {
       prDetails.repoName,
       rootConfig.findingStorePath ?? ".ratan/data/findings.db",
     );
+    scannerLogger.debug("Raw OCR output", {
+      prId: prDetails.pullRequestId,
+      repoName: prDetails.repoName,
+      status: output.status,
+      rawOutput: output.rawOutput,
+    });
     const findings = output.comments.map((comment) =>
       this.toFinding(prDetails, context.workspace, comment),
     );
