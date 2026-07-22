@@ -2,6 +2,10 @@ import type { FindingStore } from "finding-store";
 import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
 import { OpenCodeReviewRunner } from "../../open-code-review/runner";
+import {
+  selectReviewFocuses,
+  type ReviewFocusSelection,
+} from "../../open-code-review/review-focus-router";
 import { defineStep } from "../../runtime";
 import { type CommonRequestContext, PullRequestSchema } from "../../types";
 import {
@@ -9,11 +13,21 @@ import {
   NormalizedFindingSchema,
 } from "../../types/finding";
 import type { ReviewWorkspace } from "../../workspace/types";
-import { reconcileFindings } from "../utils/finding-reconciler";
+import {
+  type FindingReconciliationStore,
+  reconcileAndPersistFindings,
+} from "../utils/finding-reconciler";
 import { CveScanner } from "./cve-scanner";
 import { complianceEngine } from "./compliance-engine";
+import {
+  evaluatePostableFindings,
+  indexPreviouslyLinkedFindings,
+  type PreviouslyLinkedFindings,
+} from "./finding-eligibility";
+import { FINDING_SEVERITY_RANK } from "./finding-priority";
 import { OpenCodeReviewScanner } from "./open-code-review-scanner";
 import type { Scanner, ScannerResult } from "./types";
+import { configureSensitiveDataMask } from "../../utils/sensitive-data-mask";
 
 const ScannerPipelineInputSchema = z.object({
   prDetails: PullRequestSchema,
@@ -34,15 +48,7 @@ const ScannerPipelineOutputSchema = z.object({
   changesSinceLastReview: z.string().optional(),
 });
 
-const SEVERITY_ORDER: Record<string, number> = {
-  critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-  informational: 4,
-};
-
-function correlateFindings(findings: NormalizedFinding[]): NormalizedFinding[] {
+export function correlateFindings(findings: NormalizedFinding[]): NormalizedFinding[] {
   const map = new Map<string, NormalizedFinding>();
   for (const finding of findings) {
     const existing = map.get(finding.contentHash);
@@ -50,8 +56,8 @@ function correlateFindings(findings: NormalizedFinding[]): NormalizedFinding[] {
       map.set(finding.contentHash, finding);
       continue;
     }
-    const existingRank = SEVERITY_ORDER[existing.severity] ?? 99;
-    const currentRank = SEVERITY_ORDER[finding.severity] ?? 99;
+    const existingRank = FINDING_SEVERITY_RANK[existing.severity];
+    const currentRank = FINDING_SEVERITY_RANK[finding.severity];
     if (currentRank < existingRank) {
       finding.evidence = [existing.evidence, finding.evidence]
         .filter(Boolean)
@@ -66,17 +72,20 @@ function correlateFindings(findings: NormalizedFinding[]): NormalizedFinding[] {
   return Array.from(map.values());
 }
 
-function prioritizeFindings(findings: NormalizedFinding[]): NormalizedFinding[] {
+export function prioritizeFindings(
+  findings: NormalizedFinding[],
+  limit: number = 100,
+): NormalizedFinding[] {
   return findings
     .sort(
       (a, b) =>
-        (SEVERITY_ORDER[a.severity] ?? 99) -
-        (SEVERITY_ORDER[b.severity] ?? 99),
+        FINDING_SEVERITY_RANK[a.severity] -
+        FINDING_SEVERITY_RANK[b.severity],
     )
-    .slice(0, 100);
+    .slice(0, limit);
 }
 
-function severityCounts(findings: NormalizedFinding[]): Record<string, number> {
+export function severityCounts(findings: NormalizedFinding[]): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const finding of findings) {
     counts[finding.severity] = (counts[finding.severity] ?? 0) + 1;
@@ -84,12 +93,174 @@ function severityCounts(findings: NormalizedFinding[]): Record<string, number> {
   return counts;
 }
 
+export function aggregateScannerResults(
+  scanners: Pick<Scanner, "id" | "engine">[],
+  settled: PromiseSettledResult<ScannerResult>[],
+  fallbackReviewMetadata: Record<string, unknown> = {},
+): {
+  findings: NormalizedFinding[];
+  reviewExecutionStatus: "complete" | "incomplete";
+  reviewMetadata: Record<string, unknown>;
+} {
+  const findings: NormalizedFinding[] = [];
+  let reviewExecutionStatus: "complete" | "incomplete" = "complete";
+  let reviewMetadata: Record<string, unknown> = {
+    status: "failed",
+    durationMs: 0,
+    ...fallbackReviewMetadata,
+  };
+
+  settled.forEach((result, index) => {
+    const scanner = scanners[index];
+    if (result.status === "rejected") {
+      const reason = result.reason;
+      console.warn(
+        `[scanner-pipeline] Scanner "${scanner.id}" (engine: ${scanner.engine}) failed: ${(reason instanceof Error ? reason.message : String(reason))}`,
+      );
+      if (scanner.engine === "open-code-review") {
+        reviewExecutionStatus = "incomplete";
+      }
+      return;
+    }
+    const value = result.value;
+    findings.push(...value.findings);
+    if (scanner.engine === "open-code-review") {
+      reviewExecutionStatus = value.executionStatus ?? "complete";
+      reviewMetadata = {
+        ...(value.metadata ?? {}),
+        durationMs: value.durationMs,
+      };
+    }
+  });
+
+  return { findings, reviewExecutionStatus, reviewMetadata };
+}
+
+export function loadPreviouslyLinkedFindings(
+  findingStore: Pick<
+    FindingStore,
+    "getFindingsByPr" | "getCommentThreadsByPr"
+  >,
+  prId: number,
+  repository: string,
+): PreviouslyLinkedFindings {
+  try {
+    return indexPreviouslyLinkedFindings(
+      findingStore.getFindingsByPr(prId, repository),
+      findingStore.getCommentThreadsByPr(prId, repository),
+    );
+  } catch {
+    console.error("[scanner-pipeline] Failed to load linked findings");
+    return { findingIds: new Set(), contentHashes: new Set() };
+  }
+}
+
+export function buildReviewOutcomeMetadata(
+  reviewMetadata: Record<string, unknown>,
+  findings: NormalizedFinding[],
+  previouslyLinked: PreviouslyLinkedFindings,
+  correlatedDuplicateCount: number,
+  inlineCommentLimit: number = 30,
+): Record<string, unknown> {
+  const selection = evaluatePostableFindings(findings, previouslyLinked, inlineCommentLimit);
+  return {
+    ...reviewMetadata,
+    postableFindingCount: selection.findings.length,
+    duplicateSuppressionReasons: {
+      contentHashCorrelation: correlatedDuplicateCount,
+      inlineContentHash: selection.suppressionReasons.duplicateContentHash,
+      previouslyLinkedThread:
+        selection.suppressionReasons.previouslyLinkedThread,
+    },
+    inlineSuppressionReasons: {
+      invalidCodeLocation:
+        selection.suppressionReasons.invalidCodeLocation,
+      commentLimit: selection.suppressionReasons.commentLimit,
+    },
+  };
+}
+
+export function buildCorrelationSummary(
+  findings: NormalizedFinding[],
+  reviewFocuses: ReviewFocusSelection[] = [],
+): string {
+  const buckets = [
+    {
+      label: "Blocking",
+      findings: findings.filter((finding) => finding.blocking),
+    },
+    {
+      label: "Important",
+      findings: findings.filter(
+        (finding) =>
+          !finding.blocking &&
+          ["critical", "high", "medium"].includes(finding.severity),
+      ),
+    },
+    {
+      label: "Advisory",
+      findings: findings.filter(
+        (finding) =>
+          !finding.blocking &&
+          ["low", "informational"].includes(finding.severity),
+      ),
+    },
+  ];
+  const lines = ["### Consolidated findings"];
+
+  for (const bucket of buckets) {
+    lines.push(`#### ${bucket.label} (${bucket.findings.length})`);
+    const categories = new Map<string, NormalizedFinding[]>();
+    for (const finding of bucket.findings) {
+      const grouped = categories.get(finding.category) ?? [];
+      grouped.push(finding);
+      categories.set(finding.category, grouped);
+    }
+    if (categories.size === 0) {
+      lines.push("- None");
+      continue;
+    }
+    for (const [category, grouped] of [...categories].sort(([a], [b]) =>
+      a.localeCompare(b),
+    )) {
+      lines.push(`- **${category}**`);
+      for (const finding of [...grouped].sort(
+        (a, b) =>
+          FINDING_SEVERITY_RANK[a.severity] -
+          FINDING_SEVERITY_RANK[b.severity],
+      )) {
+        const location = finding.filePath
+          ? `${finding.filePath}${finding.lineStart === null ? "" : `:${finding.lineStart}`}`
+          : "PR-level";
+        const description = finding.description.replace(/\s+/g, " ").trim();
+        const remediation = finding.remediation.replace(/\s+/g, " ").trim();
+        lines.push(
+          `  - ${finding.severity.toUpperCase()} — ${finding.title} (` +
+            `\`${location}\`)` +
+            (description ? `: ${description}` : "") +
+            (remediation ? ` Suggestion: ${remediation}` : ""),
+        );
+      }
+    }
+  }
+
+  lines.push("#### Review focuses");
+  if (reviewFocuses.length === 0) {
+    lines.push("- Not recorded");
+  } else {
+    for (const selection of reviewFocuses) {
+      lines.push(`- ${selection.focus}: ${selection.reasons.join(" ")}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 export const scannerPipeline = defineStep({
   id: "scanner-pipeline",
   description: "Run OpenCodeReview and optional local-range scanners",
   inputSchema: ScannerPipelineInputSchema,
   outputSchema: ScannerPipelineOutputSchema,
-  execute: async ({ inputData, agents, requestContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     if (!inputData) throw new Error("Input data not found");
 
     const { prDetails, workItemContext, workspace } = inputData;
@@ -99,11 +270,16 @@ export const scannerPipeline = defineStep({
     const adoClient = agentConfig.getAdoClient();
     const rootConfig = await agentConfig.getRootConfig();
     const findingStore: FindingStore = new (await import("finding-store")).FindingStore();
-    findingStore.init(rootConfig.findingStorePath ?? ".ratan/data/findings.db");
+    await findingStore.init(rootConfig.findingStorePath ?? ".ratan/data/findings.db");
 
-    const ocrRunner = new OpenCodeReviewRunner();
-    const scanners: Scanner[] = [new OpenCodeReviewScanner(ocrRunner)];
     const scannerSettings = rootConfig.scannerSettings ?? {};
+    // Configure sensitive data masking from root config
+    configureSensitiveDataMask(rootConfig.sensitiveDataMask);
+    const ocrRunner = new OpenCodeReviewRunner({
+      concurrency: rootConfig.openCodeReview?.concurrency,
+      timeoutMs: rootConfig.openCodeReview?.timeoutMs,
+    });
+    const scanners: Scanner[] = [new OpenCodeReviewScanner(ocrRunner)];
     if (scannerSettings.cve?.enabled !== false) scanners.push(new CveScanner());
     if (scannerSettings.compliance?.enabled === true) scanners.push(complianceEngine);
 
@@ -112,7 +288,6 @@ export const scannerPipeline = defineStep({
       adoClient,
       sonarClient: agentConfig.getSonarQubeClient(),
       findingStore,
-      agents,
       workItemContext,
       workspace,
       ocrRunner,
@@ -121,40 +296,34 @@ export const scannerPipeline = defineStep({
       scanners.map((scanner) => scanner.scan(prDetails, scanContext)),
     );
 
-    const allFindings: NormalizedFinding[] = [];
-    let reviewExecutionStatus: "complete" | "incomplete" = "complete";
-    let reviewMetadata: Record<string, unknown> = {
-      status: "failed",
-      durationMs: 0,
-    };
-
-    settled.forEach((result, index) => {
-      const scanner = scanners[index];
-      if (result.status === "rejected") {
-        console.warn(`[scanner-pipeline] ${scanner.id} failed`);
-        if (scanner.engine === "open-code-review") reviewExecutionStatus = "incomplete";
-        return;
-      }
-      const value = result.value as ScannerResult;
-      allFindings.push(...value.findings);
-      if (scanner.engine === "open-code-review") {
-        reviewExecutionStatus = value.executionStatus ?? "complete";
-        reviewMetadata = {
-          ...(value.metadata ?? {}),
-          durationMs: value.durationMs,
-        };
-      }
+    const {
+      findings: allFindings,
+      reviewExecutionStatus,
+      reviewMetadata: baseReviewMetadata,
+    } = aggregateScannerResults(scanners, settled, {
+      reviewFocuses: selectReviewFocuses(workspace.changes),
     });
 
-    const prioritized = prioritizeFindings(correlateFindings(allFindings));
+    const correlated = correlateFindings(allFindings);
+    const correlatedDuplicateCount = allFindings.length - correlated.length;
+    const maxFindings = scannerSettings.maxPrioritizedFindings ?? 100;
+    const inlineLimit = scannerSettings.inlineCommentLimit ?? 30;
+    let prioritized = prioritizeFindings(correlated, maxFindings);
     let changesSinceLastReview = "";
     try {
       const previous = findingStore.getFindingsByPr(
         prDetails.pullRequestId,
         prDetails.repoName,
-      ) as unknown as NormalizedFinding[];
+      );
       if (previous.length > 0) {
-        const reconciled = reconcileFindings(previous, prioritized);
+        const reconciled = reconcileAndPersistFindings(
+          findingStore as unknown as FindingReconciliationStore,
+          prDetails.pullRequestId,
+          prDetails.repoName,
+          prioritized,
+          reviewExecutionStatus,
+        );
+        prioritized = reconciled.findings;
         const lines = ["#### Changes since last review"];
         if (reconciled.findingsToResolve.length)
           lines.push(`- **${reconciled.findingsToResolve.length}** findings resolved`);
@@ -163,18 +332,28 @@ export const scannerPipeline = defineStep({
         if (reconciled.findingsToCreate.length)
           lines.push(`- **${reconciled.findingsToCreate.length}** new findings`);
         if (lines.length > 1) changesSinceLastReview = `${lines.join("\n")}\n\n`;
+      } else {
+        prioritized = findingStore.batchUpsert(
+          prioritized as Parameters<typeof findingStore.batchUpsert>[0],
+        ) as NormalizedFinding[];
       }
     } catch {
       changesSinceLastReview = "";
-    }
-
-    try {
-      findingStore.batchUpsert(
-        prioritized as Parameters<typeof findingStore.batchUpsert>[0],
-      );
-    } catch {
       console.error("[scanner-pipeline] Failed to persist findings");
     }
+
+    const previouslyLinked = loadPreviouslyLinkedFindings(
+      findingStore,
+      prDetails.pullRequestId,
+      prDetails.repoName,
+    );
+    const reviewMetadata = buildReviewOutcomeMetadata(
+      baseReviewMetadata,
+      prioritized,
+      previouslyLinked,
+      correlatedDuplicateCount,
+      inlineLimit,
+    );
 
     const counts = severityCounts(prioritized);
     const severitySummary = ["critical", "high", "medium", "low", "informational"]
@@ -195,7 +374,12 @@ export const scannerPipeline = defineStep({
       prDetails,
       workItemContext,
       findings: prioritized,
-      correlationSummary: `Found ${prioritized.length} issues (${severitySummary})`,
+      correlationSummary: buildCorrelationSummary(
+        prioritized,
+        Array.isArray(reviewMetadata.reviewFocuses)
+          ? (reviewMetadata.reviewFocuses as ReviewFocusSelection[])
+          : [],
+      ),
       reviewSummary,
       reviewExecutionStatus,
       reviewMetadata,

@@ -26,12 +26,10 @@ export const fetchWorkItemContext = defineStep({
 
     const {
       prDetails: {
-        pullRequestId,
         repoName,
-        repoId,
-        workItemIds,
         latestTargetCommitId,
         latestSourceCommitId,
+        workItemIds = [],
       },
     } = inputData;
 
@@ -43,8 +41,7 @@ export const fetchWorkItemContext = defineStep({
     // 1. Collect work item IDs from multiple sources
     const allWorkItemIds = new Set<number>();
 
-    // Already-linked work items from the PR
-    for (const id of workItemIds ?? []) {
+    for (const id of workItemIds) {
       allWorkItemIds.add(id);
     }
 

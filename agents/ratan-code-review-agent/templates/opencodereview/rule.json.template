@@ -1,0 +1,10 @@
+{
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["**/*.test.*", "**/*.spec.*", "**/generated/**"],
+  "rules": [
+    {
+      "path": "**/*",
+      "rule": "Report correctness, security, reliability, and maintainability issues in changed code. Do not report formatting-only suggestions. For changed production code without tests, identify behavioral test gaps. For error handling, examine catches, retries, fallbacks, and defaults. For exported or domain-model types, examine invariants and invalid states. For changed comments or documentation, report only inaccuracies or rot. Every finding must name a changed-code location, a concrete consequence, and a remediation."
+    }
+  ]
+}

@@ -29,9 +29,21 @@ export const fetchPR = defineStep({
 
     const adoClient = agentConfig.getAdoClient();
     const prDetails = await adoClient.getPullRequestMetadataById(inputData.prId);
+    let workItemIds: number[] = [];
+    try {
+      const linkedDetails = await adoClient.getPullRequestById(
+        inputData.prId,
+        true,
+        false,
+        false,
+      );
+      workItemIds = linkedDetails.workItemIds;
+    } catch (error) {
+      console.error("Error fetching linked work items:", error);
+    }
 
     return {
-      prDetails,
+      prDetails: { ...prDetails, workItemIds },
     };
   },
 });

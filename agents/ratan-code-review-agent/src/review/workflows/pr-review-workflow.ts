@@ -1,4 +1,8 @@
 import { extractAgentConfig } from "../../bootstrap/session";
+import {
+  selectReviewFocuses,
+  type ReviewFocusSelection,
+} from "../open-code-review/review-focus-router";
 import type { RequestContext } from "../runtime";
 import { runSteps } from "../runtime";
 import type { CommonRequestContext } from "../types";
@@ -11,20 +15,14 @@ import { fetchWorkItemContext } from "./steps/fetch-workitem-context";
 import { mergeGate } from "./steps/merge-gate";
 import { recordAudit } from "./steps/record-audit";
 import { sonarqubeMeasures } from "./steps/sonarqube-measures";
+import { getLogger } from "ratan-logger";
 
 export interface PrReviewWorkflowOptions {
   inputData: { prId: number };
   requestContext: RequestContext<any>;
 }
 
-const noAgents = {
-  getAgent() {
-    throw new Error("Legacy review agents are not available in the PR review runtime");
-  },
-};
-
 export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
-  const stepResults = new Map<string, unknown>();
   const events: Array<{ stepId: string; output: unknown }> = [];
   const onStepComplete = (event: { stepId: string; output: unknown }) => {
     events.push(event);
@@ -34,7 +32,6 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
   };
   const stepOptions = {
     requestContext: options.requestContext,
-    stepResults,
     onStepComplete,
   };
 
@@ -52,19 +49,37 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
   const workspaceProvider = new LocalReviewWorkspaceProvider({
     workspaceRoot: rootConfig.openCodeReview?.workspaceRoot,
     adoToken: agentConfig.getAdoClient().getAdoToken(),
+    maxGitOutputBytes: rootConfig.workspace?.maxGitOutputBytes,
+    useSsh: rootConfig.workspace?.useSsh,
   });
+  let attemptedReviewFocuses: ReviewFocusSelection[] = [];
+  let reviewAttemptStartedAt: number | undefined;
+
+  const workflowLogger = getLogger("pr-review-workflow");
 
   try {
     current = await workspaceProvider.withWorkspace(
       current.prDetails,
-      async (workspace) =>
-        (await runSteps(
+      async (workspace) => {
+        attemptedReviewFocuses = selectReviewFocuses(workspace.changes);
+        reviewAttemptStartedAt = Date.now();
+        return (await runSteps(
           [scannerPipeline],
           { ...current, workspace },
           stepOptions,
-        )) as Record<string, any>,
+        )) as Record<string, any>;
+      },
     );
-  } catch {
+  } catch (error) {
+    workflowLogger.error(
+      "OCRS workspace/scanner pipeline failed; review will be marked incomplete",
+      {
+        error: (error as Error).message,
+        stack: (error as Error).stack,
+        prId: current.prDetails?.pullRequestId,
+        repo: current.prDetails?.repoName,
+      },
+    );
     current = {
       ...current,
       findings: [],
@@ -75,22 +90,26 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
         "OCR status: failed",
       ].join("\n"),
       reviewExecutionStatus: "incomplete",
-      reviewMetadata: { status: "failed", durationMs: 0 },
+      reviewMetadata: {
+        status: "failed",
+        durationMs:
+          reviewAttemptStartedAt === undefined
+            ? 0
+            : Math.max(1, Date.now() - reviewAttemptStartedAt),
+        reviewFocuses: attemptedReviewFocuses,
+      },
       changesSinceLastReview: "",
     };
-    stepResults.set(scannerPipeline.id, current);
     yield { stepId: scannerPipeline.id, output: current };
   }
   yield* emitEvents();
 
-  const measuresResult = await sonarqubeMeasures.execute({
-    inputData: current,
-    requestContext: options.requestContext,
-    agents: noAgents,
-    getStepResult: (id) => stepResults.get(id),
-  });
-  stepResults.set(sonarqubeMeasures.id, measuresResult);
-  yield { stepId: sonarqubeMeasures.id, output: measuresResult };
+  const measuresResult = await runSteps(
+    [sonarqubeMeasures],
+    current,
+    stepOptions,
+  );
+  yield* emitEvents();
   current = { ...current, ...(measuresResult as Record<string, unknown>) };
 
   await runSteps(

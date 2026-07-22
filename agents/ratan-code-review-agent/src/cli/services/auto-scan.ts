@@ -1,4 +1,4 @@
-import { minimatch } from "minimatch";
+import picomatch from "picomatch";
 import { getLogger } from "../utils/logger";
 import type { ConfigProvider } from "agent-config-manager";
 import { getPRQueue } from "./pr-queue";
@@ -6,7 +6,6 @@ import { getPRQueue } from "./pr-queue";
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const REPO_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const LLM_HEALTH_CHECK_URL = "http://localhost:1212/v1/models";
 const LLM_HEALTH_CHECK_TIMEOUT_MS = 5_000;
 
 // ─── Repo Cache ──────────────────────────────────────────────────────────────
@@ -38,24 +37,24 @@ export class AutoScanService {
   /**
    * Check if the LLM endpoint is reachable before scanning.
    */
-  async isLLMEndpointHealthy(): Promise<boolean> {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(
-        () => controller.abort(),
-        LLM_HEALTH_CHECK_TIMEOUT_MS,
-      );
+  async isLLMEndpointHealthy(url: string, token: string): Promise<boolean> {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      LLM_HEALTH_CHECK_TIMEOUT_MS,
+    );
 
-      const response = await fetch(LLM_HEALTH_CHECK_URL, {
+    try {
+      const response = await fetch(url, {
         signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "x-api-key": token,
+        },
       });
-      clearTimeout(timeout);
 
       if (response.ok) {
-        const models = await response.json();
-        if (Array.isArray(models.data) && models.data.length > 0) {
-          return true;
-        }
+        return true;
       }
       this.logger.warn(
         `LLM endpoint returned: ${response.status} ${response.statusText}`,
@@ -63,9 +62,11 @@ export class AutoScanService {
       return false;
     } catch (err) {
       this.logger.warn(
-        `LLM endpoint not reachable (${LLM_HEALTH_CHECK_URL}): ${(err as Error).message}`,
+        `LLM endpoint not reachable (${url}): ${(err as Error).message}`,
       );
       return false;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -118,7 +119,7 @@ export class AutoScanService {
       ? myRepos.filter(
           (repo) =>
             repo.name &&
-            patterns.some((pattern: string) => minimatch(repo.name, pattern)),
+            patterns.some((pattern: string) => picomatch(pattern)(repo.name)),
         )
       : myRepos;
 

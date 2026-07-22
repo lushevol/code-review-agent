@@ -3,7 +3,6 @@ import {
   BuildResult,
   BuildStatus,
 } from "azure-devops-node-api/interfaces/BuildInterfaces.js";
-import dayjs from "dayjs";
 import { html2markdown } from "ratan-markdown-tool";
 import type { AdoWebApi, FormattedBuild } from "./interfaces";
 import { extractBranchFromSourceBranch } from "./utils";
@@ -88,7 +87,7 @@ export async function getBuildAttachmentContent(
     const sortedRecords = timeline.records
       ?.filter((i) => i.refName === timelineRefName)
       .toSorted(
-        (a, b) => dayjs(b.finishTime).valueOf() - dayjs(a.finishTime).valueOf(),
+        (a, b) => new Date(b.finishTime).getTime() - new Date(a.finishTime).getTime(),
       );
     const recordId = sortedRecords?.at(0)?.id ?? "";
     const testReportReadableStream = await buildApi.getAttachment(

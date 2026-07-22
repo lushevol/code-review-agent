@@ -1,62 +1,46 @@
 import type { AzureDevOps } from "ratan-ado-api";
 import type { SonarQubeClient } from "ratan-sonarqube-api";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type { Pool } from "pg";
-import type { schema } from "ratan-code-review-agent-orm";
 import { z } from "zod";
-
-export const AgentConfigCreationOptionsSchema = z.object({
-  adoToken: z.string(),
-  sonarQubeToken: z.string().optional(),
-  ormConnectionUrl: z.string().optional(),
-  organization: z.string().optional(),
-  project: z.string().optional(),
-  adoProxyUrl: z.string().optional(),
-  repoName: z.string(),
-  branch: z.string(),
-  basePath: z.string().optional(),
-  refreshIntervalMs: z.number().optional(), // Default 5 mins
-});
-
-export type AgentConfigCreationOptions = z.infer<
-  typeof AgentConfigCreationOptionsSchema
->;
-
-/**
- * Agent config including agent settings and prompt paths.
- */
-export const AgentConfigSchema = z.object({
-  url: z.string().optional(),
-  model: z.string().optional(),
-  temperature: z.number().optional(),
-  /**
-   * Array of Path strings
-   */
-  prompts: z
-    .union([z.string(), z.array(z.string())])
-    .optional()
-    .describe("Array of prompt file paths"),
-  evaluationTestcases: z
-    .array(z.string())
-    .optional()
-    .describe("Array of dataset folder paths"),
-});
-
-export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
 const CveScannerSettingsSchema = z.object({
   enabled: z.boolean().optional(),
   sonarqubeProjectKey: z.string().optional(),
 });
 
+const RetryConfigSchema = z.object({
+  maxAttempts: z.number().int().min(1).max(10).optional(),
+  baseDelayMs: z.number().int().min(0).optional(),
+  maxDelayMs: z.number().int().min(0).optional(),
+  jitterMs: z.number().int().min(0).optional(),
+}).strict();
+
+const LoggingConfigSchema = z.object({
+  level: z.enum(["debug", "info", "warn", "error"]).optional(),
+  directory: z.string().min(1).optional(),
+  retentionDays: z.number().int().min(1).optional(),
+  format: z.enum(["pretty", "json"]).optional(),
+  console: z.boolean().optional(),
+  file: z.boolean().optional(),
+}).strict();
+
+const SonarQubeConfigSchema = z.object({
+  url: z.string().url(),
+  token: z.string().min(1).optional(),
+}).strict();
+
 const ComplianceScannerSettingsSchema = z.object({
   enabled: z.boolean().optional(),
   rulesPath: z.string().optional(),
+  largeFileThreshold: z.number().int().min(50).optional(),
+  consoleDetectionEnabled: z.boolean().optional(),
+  todoDetectionEnabled: z.boolean().optional(),
 });
 
 const ScannerSettingsSchema = z.object({
   cve: CveScannerSettingsSchema.optional(),
   compliance: ComplianceScannerSettingsSchema.optional(),
+  maxPrioritizedFindings: z.number().int().min(1).max(500).optional(),
+  inlineCommentLimit: z.number().int().min(1).max(100).optional(),
 });
 
 const OverrideAuthRulesSchema = z.object({
@@ -80,7 +64,27 @@ const DashboardConfigSchema = z.object({
 
 const RemediationTasksConfigSchema = z.object({
   enabled: z.boolean().optional(),
+  adoUrlTemplate: z.string().optional(),
+  workItemTags: z.string().optional(),
 });
+
+const WorkspaceConfigSchema = z.object({
+  maxGitOutputBytes: z.number().int().min(1048576).optional(),
+  useSsh: z.boolean().optional(),
+}).strict();
+
+const SensitiveDataMaskCustomPatternSchema = z.object({
+  pattern: z.string(),
+  replaceWith: z.string(),
+});
+
+const SensitiveDataMaskConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  redactors: z.object({
+    credentials: z.boolean().optional(),
+  }).optional(),
+  customPatterns: z.array(SensitiveDataMaskCustomPatternSchema).optional(),
+}).strict();
 
 const AuditConfigSchema = z.object({
   retentionDays: z.number().optional(),
@@ -91,8 +95,23 @@ const FeedbackDaemonConfigSchema = z.object({
   intervalMs: z.number().optional(),
 });
 
+const WatchConfigSchema = z.object({
+  intervalMs: z.number().int().min(1_000).optional(),
+}).strict();
+
+const OpenCodeReviewLlmConfigSchema = z.object({
+  url: z.string().url(),
+  token: z.string().min(1),
+  model: z.string().min(1),
+  protocol: z.enum(["anthropic", "openai", "openai-responses"]).optional(),
+});
+
 const OpenCodeReviewConfigSchema = z.object({
   workspaceRoot: z.string().optional(),
+  rulesPath: z.string().min(1),
+  llm: OpenCodeReviewLlmConfigSchema,
+  concurrency: z.number().int().min(1).max(64).optional(),
+  timeoutMs: z.number().int().min(30000).max(7200000).optional(),
 });
 
 /**
@@ -101,47 +120,37 @@ const OpenCodeReviewConfigSchema = z.object({
 export const RootAgentConfigSchema = z.object({
   scanPRCreatedDaysAgo: z.number().optional(),
   scanRepoNames: z.array(z.string()).optional(),
-  filePathsAllowlist: z.array(z.string()).optional(),
-  filePathsBlocklist: z.array(z.string()).optional(),
-  defaultAgentConfig: AgentConfigSchema.optional(),
-  agents: z.record(z.string(), AgentConfigSchema).optional().default({}),
-  openCodeReview: OpenCodeReviewConfigSchema.optional(),
+  openCodeReview: OpenCodeReviewConfigSchema,
   findingStorePath: z.string().optional(),
+  logging: LoggingConfigSchema.optional(),
+  retry: RetryConfigSchema.optional(),
+  sonarQube: SonarQubeConfigSchema.optional(),
   scannerSettings: ScannerSettingsSchema.optional(),
   mergePolicy: MergePolicySchema.optional(),
   webhook: WebhookConfigSchema.optional(),
   dashboard: DashboardConfigSchema.optional(),
   remediationTasks: RemediationTasksConfigSchema.optional(),
   audit: AuditConfigSchema.optional(),
+  workspace: WorkspaceConfigSchema.optional(),
+  sensitiveDataMask: SensitiveDataMaskConfigSchema.optional(),
   feedbackDaemon: FeedbackDaemonConfigSchema.optional(),
-});
+  watch: WatchConfigSchema.optional(),
+  ado: z.object({
+    organization: z.string().min(1),
+    project: z.string().min(1),
+    token: z.string().optional(),
+  }).optional(),
+  adoProxyUrl: z.string().optional(),
+  databaseUrl: z.string().optional(),
+}).strict();
 
 export type RootAgentConfig = z.infer<typeof RootAgentConfigSchema>;
-
-export const VariablesSchema = z.record(z.string(), z.string());
-
-export type Variables = z.infer<typeof VariablesSchema>;
-
-/**
- * Context for resolving prompts and injecting variables.
- */
-export const PromptContextSchema = z.object({
-  /** Variables used to resolve file paths (e.g. { lang: 'ts' }) */
-  pathVars: VariablesSchema.optional(),
-
-  /** Variables injected into the markdown content (e.g. { code_diff: '...' }) */
-  contentVars: VariablesSchema.optional(),
-});
-
-export type PromptContext = z.infer<typeof PromptContextSchema>;
 
 export interface ConfigProvider {
   id: string;
   connect(): Promise<void>;
   getRootConfig(): Promise<RootAgentConfig>;
-  getAgentConfig(agentName: string): Promise<AgentConfig>;
-  buildPrompt(promptKey: string, context?: PromptContext): Promise<string>;
+  resolveConfigPath(relativePath: string): string;
   getAdoClient(): AzureDevOps;
   getSonarQubeClient(): SonarQubeClient | null;
-  getOrmClient(): Promise<NodePgDatabase<typeof schema> & { $client: Pool } | null>;
 }

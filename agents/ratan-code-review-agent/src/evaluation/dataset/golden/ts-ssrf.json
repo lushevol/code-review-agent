@@ -1,0 +1,9 @@
+{
+  "id": "ts-ssrf",
+  "language": "typescript",
+  "title": "Preview remote webhook",
+  "description": "Fetches a user-provided webhook URL.",
+  "files": [{ "path": "src/webhook-preview.ts", "changeType": "added", "after": "export async function preview(url: string) {\n  return fetch(url);\n}" }],
+  "expectedFindings": [{ "id": "ssrf", "filePath": "src/webhook-preview.ts", "lineStart": 2, "lineEnd": 2, "category": "security", "allowedSeverities": ["critical", "high"], "messageIncludes": ["url", "allowlist"] }],
+  "allowedExtraFindings": 0
+}

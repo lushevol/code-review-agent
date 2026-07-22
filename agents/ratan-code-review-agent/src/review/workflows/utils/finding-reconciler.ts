@@ -13,6 +13,16 @@ export interface ReconciliationResult {
   findingsToKeep: string[];
 }
 
+export interface FindingReconciliationStore {
+  batchUpsert(findings: NormalizedFinding[]): NormalizedFinding[];
+  getFindingsByPr(prId: number, repository: string): NormalizedFinding[];
+  updateResolution(id: string, resolution: string): void;
+}
+
+export interface PersistedReconciliationResult extends ReconciliationResult {
+  findings: NormalizedFinding[];
+}
+
 // ─── Constants ─────────────────────────────────────────────────────────────
 
 const LINE_FALLBACK_RANGE = 3;
@@ -159,5 +169,41 @@ export function reconcileFindings(
     findingsToSupersede,
     findingsToResolve,
     findingsToKeep,
+  };
+}
+
+export function reconcileAndPersistFindings(
+  store: FindingReconciliationStore,
+  prId: number,
+  repository: string,
+  newFindings: NormalizedFinding[],
+  reviewExecutionStatus: "complete" | "incomplete",
+): PersistedReconciliationResult {
+  const previous = store.getFindingsByPr(prId, repository).filter(
+    (finding) => finding.resolution !== "resolved" &&
+      finding.resolution !== "superseded",
+  );
+
+  if (reviewExecutionStatus === "incomplete") {
+    return {
+      findings: store.batchUpsert(newFindings),
+      findingsToCreate: [],
+      findingsToSupersede: [],
+      findingsToResolve: [],
+      findingsToKeep: previous.map((finding) => finding.id),
+    };
+  }
+
+  const reconciled = reconcileFindings(previous, newFindings);
+  for (const id of reconciled.findingsToResolve) {
+    store.updateResolution(id, "resolved");
+  }
+  for (const id of reconciled.findingsToSupersede) {
+    store.updateResolution(id, "superseded");
+  }
+
+  return {
+    ...reconciled,
+    findings: store.batchUpsert(newFindings),
   };
 }

@@ -1,0 +1,9 @@
+{
+  "id": "python-weak-random-token",
+  "language": "python",
+  "title": "Generate password reset token",
+  "description": "Uses the general random module for security tokens.",
+  "files": [{ "path": "auth/tokens.py", "changeType": "added", "after": "import random\ndef reset_token():\n    return str(random.randint(100000, 999999))" }],
+  "expectedFindings": [{ "id": "weak-random-token", "filePath": "auth/tokens.py", "lineStart": 3, "lineEnd": 3, "category": "security", "allowedSeverities": ["high", "medium"], "messageIncludes": ["cryptographic", "random"] }],
+  "allowedExtraFindings": 0
+}

@@ -1,4 +1,4 @@
-import { minimatch } from "minimatch";
+import picomatch from "picomatch";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { ChangedFile } from "../../workspace/types";
@@ -9,6 +9,7 @@ import {
   generateFindingId,
 } from "../../types/finding";
 import type { Scanner, ScanContext } from "./types";
+import type { RootAgentConfig } from "agent-config-manager";
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -51,7 +52,7 @@ interface YamlRule {
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 function isTestFile(filePath: string): boolean {
-  return TEST_FILE_PATTERNS.some((pattern) => minimatch(filePath, pattern));
+  return TEST_FILE_PATTERNS.some((pattern) => picomatch(pattern)(filePath));
 }
 
 function isSourceFile(filePath: string): boolean {
@@ -96,12 +97,12 @@ function normalizeSeverity(severity: string): NormalizedFinding["severity"] {
 
 // ─── Rule File Loading ────────────────────────────────────────────────────
 
-let yamlModule: typeof import("yaml") | null | undefined;
+let yamlModule: typeof import("js-yaml") | null | undefined;
 
-async function getYamlModule(): Promise<typeof import("yaml") | null> {
+async function getYamlModule(): Promise<typeof import("js-yaml") | null> {
   if (yamlModule !== undefined) return yamlModule;
   try {
-    yamlModule = await import("yaml");
+    yamlModule = await import("js-yaml");
     return yamlModule;
   } catch {
     console.warn(
@@ -136,7 +137,7 @@ async function loadRuleFiles(
     const filePath = path.join(rulesDir, file);
     try {
       const content = await fs.readFile(filePath, "utf-8");
-      const parsed = yaml.parse(content) as Record<string, unknown>;
+      const parsed = yamlModule.load(content) as Record<string, unknown>;
 
       // Validate required fields
       if (
@@ -190,11 +191,22 @@ export const complianceEngine: Scanner = {
       };
     }
 
+    let rootConfig: RootAgentConfig;
+    try {
+      rootConfig = await context.provider.getRootConfig();
+    } catch {
+      // Config reading is optional; proceed without it
+      rootConfig = {} as unknown as RootAgentConfig;
+    }
+    const complianceSettings = rootConfig.scannerSettings?.compliance ?? {};
+    const largeFileThreshold = complianceSettings.largeFileThreshold ?? LARGE_FILE_THRESHOLD;
+    const consoleDetectionEnabled = complianceSettings.consoleDetectionEnabled ?? true;
+    const todoDetectionEnabled = complianceSettings.todoDetectionEnabled ?? true;
+
     // Load YAML rules from config base path (if available)
     let yamlRules: YamlRule[] = [];
     try {
-      const rootConfig = await context.provider.getRootConfig();
-      const basePath = rootConfig.scannerSettings?.compliance?.rulesPath ?? process.cwd();
+      const basePath = complianceSettings.rulesPath ?? process.cwd();
       yamlRules = await loadRuleFiles(basePath);
     } catch {
       // Config reading is optional; proceed without rule files
@@ -204,6 +216,7 @@ export const complianceEngine: Scanner = {
       const targetFilePath = change.path;
 
       // ── Built-in Check 1: TODO / FIXME / HACK / XXX ─────────────────
+      if (todoDetectionEnabled) {
       for (const addedLine of change.addedLines) {
           const line = addedLine.text;
           const matchedPattern = TODO_PATTERNS.find((p) => p.test(line));
@@ -243,10 +256,11 @@ export const complianceEngine: Scanner = {
             resolvedAt: null,
           });
       }
+      }
 
       // ── Built-in Check 2: Large file warning ─────────────────────────
       const totalChanged = countChangedLines(change);
-      if (totalChanged > LARGE_FILE_THRESHOLD) {
+      if (totalChanged > largeFileThreshold) {
         findings.push({
           id: generateFindingId(),
           prId: prDetails.pullRequestId,
@@ -257,7 +271,7 @@ export const complianceEngine: Scanner = {
           category: "compliance",
           severity: "informational",
           title: `Large file change in ${targetFilePath ?? "unknown"}`,
-          description: `This file has ${totalChanged} changed lines, exceeding the ${LARGE_FILE_THRESHOLD}-line threshold.`,
+          description: `This file has ${totalChanged} changed lines, exceeding the ${largeFileThreshold}-line threshold.`,
           evidence: `${totalChanged} lines changed`,
           businessImpact:
             "Large diffs are harder to review thoroughly and may hide subtle issues.",
@@ -280,6 +294,7 @@ export const complianceEngine: Scanner = {
 
       // ── Built-in Check 3: console.log / console.error ────────────────
       if (
+        consoleDetectionEnabled &&
         targetFilePath &&
         isSourceFile(targetFilePath) &&
         !isTestFile(targetFilePath)
@@ -327,7 +342,7 @@ export const complianceEngine: Scanner = {
       if (yamlRules.length > 0 && targetFilePath) {
         for (const rule of yamlRules) {
           const matchesFilePattern = rule.file_patterns.some((pattern) =>
-            minimatch(targetFilePath, pattern),
+            picomatch(pattern)(targetFilePath),
           );
           if (!matchesFilePattern) continue;
 

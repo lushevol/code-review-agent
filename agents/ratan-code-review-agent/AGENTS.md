@@ -1,46 +1,75 @@
 # AI Agent Instructions
 
-This package implements a TypeScript code review agent for company pull request reviews. Treat it as an automation package that reads Azure DevOps pull requests, asks LLM agents to review and summarize diffs, optionally adds SonarQube context, and posts comments back to the PR.
+This package is the production Azure DevOps review runtime. OpenCodeReview is
+the sole LLM review engine; the surrounding TypeScript workflow owns workspace
+preparation, optional scanners, persistence, governance, comments, evaluation,
+and dashboard APIs.
 
 ## Working Rules
 
-- Keep changes scoped to `ratan-code-review-agent` unless the caller explicitly asks for workspace-level changes.
-- Prefer the existing lightweight review runtime and step patterns over introducing new orchestration code.
-- Preserve structured outputs. Review, rescore, classification, and evaluation agents rely on Zod schemas in `src/review/types` and `src/evaluation/type`.
-- Do not hard-code company tokens, Azure DevOps URLs, SonarQube tokens, or model credentials.
-- Be careful with PR-commenting behavior. `comment-review-results` writes to Azure DevOps and updates the latest-review property.
-- Before changing filtering, confidence thresholds, or masking, check the user impact: those changes can alter which issues are posted publicly to PRs.
+- Keep live ADO, SonarQube, and LLM calls opt-in. Unit and integration tests use
+  mocks or synthetic repositories.
+- Preserve native OpenCodeReview rule ownership. Do not add a second production
+  review agent, confidence rescore chain, or invented confidence value.
+- Keep `RequestContext` limited to session-scoped dependencies; pass workflow
+  data through validated step inputs and outputs.
+- Treat comment and status publication as governance output. A newer review must
+  not allow stale output to overwrite the latest decision.
+- Never hard-code credentials or provider URLs. Use
+  `config.openCodeReview.llm` and `env:NAME` references.
+- Changed Git content must reach OpenCodeReview only through the runner's
+  temporary masked repository. Do not bypass that adapter.
 
 ## Repo Map
 
-- `src/index.ts`: package exports.
-- `src/bootstrap`: startup, runtime config session handling, and PR scanning.
-- `src/review/index.ts`: local review agent registry.
-- `src/review/agents`: LLM agents for review, summary, rescore, classification, and evaluation judge.
-- `src/review/workflows`: plain TypeScript workflow runners and steps for PR review.
-- `src/review/types`: shared Zod schemas and TypeScript types.
-- `src/review/utils`: diff chunking, file filtering, masking, prompt formatting, sorting, and comment helpers.
-- `src/evaluation`: evaluation schemas, dataset fixtures, and judge/evaluator helpers.
+- `src/index.ts`: intentionally narrow programmatic exports.
+- `src/bootstrap`: config sessions and explicit PR review startup.
+- `src/cli`: start/dashboard commands, queue, auto-scan, and config loading.
+- `src/review/open-code-review`: OCR process adapter, masking boundary, and
+  deterministic focus routing.
+- `src/review/runtime`: small schema-validated sequential-step runner.
+- `src/review/workflows`: scanner pipeline, governance steps, persistence,
+  comments, feedback, audit, and reconciliation.
+- `src/review/types`: current PR and finding contracts.
+- `src/evaluation`: 25-case synthetic golden corpus, deterministic evaluation,
+  and opt-in qualitative LLM judge.
+- `dashboard`: React SPA; `src/cli/dashboard` is its Express API.
 
 ## Commands
 
-- `pnpm install`: install dependencies. This package uses pnpm 9 and workspace dependencies.
-- `pnpm build`: build the library through Rslib.
-- `pnpm dev`: run the CLI in `start --watch` mode.
-- `pnpm demo`: run `src/demo.ts` with local environment values.
-- `pnpm codegen`: regenerate the evaluation JSON schema.
+```bash
+pnpm --filter ratan-code-review typecheck
+pnpm --filter ratan-code-review exec vitest run
+pnpm --filter ratan-code-review build
+pnpm --filter ratan-code-review evaluate:golden --dry-run
+pnpm --filter ratan-code-review evaluate:golden --case ts-sql-injection
+pnpm --filter ratan-code-review evaluate:golden --case ts-sql-injection --judge
+```
+
+`start`, `start --watch`, and `start --pr-id` can call external systems and post
+ADO comments/statuses. The dashboard API integration test binds loopback and may
+need execution outside a restricted sandbox.
 
 ## Runtime Assumptions
 
-- Node.js `>=20.11.0`, npm `>=10`, and pnpm 9 are expected.
-- `ADO_TOKEN` is required for Azure DevOps access.
-- `SONARQUBE_TOKEN` is optional, but SonarQube measures return `null` when unavailable or failing.
-- The OpenAI-compatible model endpoint is currently configured in `src/review/agents/openai-client.ts` as `http://localhost:1218/v1` with an empty API key.
-- `startup` creates an `agent-config-manager` config session and stores only the session id in the local request context.
+- Node.js 20+ and pnpm 9+ (including pnpm 11) are supported.
+- `ADO_TOKEN` is required for live ADO access.
+- `config.openCodeReview.llm` owns URL, token, model, and Anthropic mode. Watch
+  health checks use that configured endpoint and credential.
+- `--repo-pattern` overrides configured scan repository globs for that process.
+- SonarQube is optional and degrades to unavailable results.
+- SQLite `FindingStore` is the only runtime persistence implementation.
+- The optional evaluation judge sends synthetic golden content to the configured
+  endpoint; its scores are reported separately and never change pass/fail.
 
 ## Known Care Points
 
-- The workspace dependencies `agent-config-manager`, `ratan-ado-api`, and `ratan-sonarqube-api` are required but are not defined inside this package.
-- `src/review/workflows/steps/locate-changes.ts` builds a filtered and masked `codeChangesArray`, but returns the original `codeDiffsArray`. Verify intended behavior before relying on incremental filtering.
-- `src/evaluation/scorer.ts` is currently empty, and `startupEvaluation` is a placeholder.
-- Comment posting silently ignores per-line comment failures in `comment.ts`, then still posts the main PR comment.
+- Per-line ADO comment failures are non-fatal; the canonical conclusion is still
+  posted last and older generated conclusions are removed.
+- Dashboard finding queries must preserve repository identity because ADO PR ids
+  can collide across repositories.
+- Linked and commit-referenced work-item ids are deduplicated before context is
+  fetched.
+- The runner masks changed text in an isolated Git range with per-run keyed
+  replacement markers, preserving changed-versus-unchanged evidence without
+  exposing raw secrets or reusable hashes.

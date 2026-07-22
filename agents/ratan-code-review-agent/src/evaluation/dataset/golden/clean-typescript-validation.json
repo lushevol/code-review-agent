@@ -1,0 +1,9 @@
+{
+  "id": "clean-typescript-validation",
+  "language": "typescript",
+  "title": "Validate page size",
+  "description": "Adds bounded input validation.",
+  "files": [{ "path": "src/paging.ts", "changeType": "added", "after": "export function pageSize(value: number) {\n  if (!Number.isInteger(value) || value < 1 || value > 100) {\n    throw new RangeError(\"page size must be between 1 and 100\");\n  }\n  return value;\n}" }],
+  "expectedFindings": [],
+  "allowedExtraFindings": 0
+}

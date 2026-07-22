@@ -2,16 +2,10 @@
  * @see https://docs.sonarqube.org/latest/extend/web-api/#header-2
  */
 
-import type { AxiosError, AxiosResponse } from "axios";
-import Sonar from "sonarqube-webapis";
-import {
-  SonarIssuesSeverity,
-  SonarMetricKey,
-  SonarType,
-} from "sonarqube-webapis/dist/src/enums.js";
-import { IssuesStatus } from "sonarqube-webapis/dist/src/resources/index.js";
-import { MeasuresAdditionalFields } from "sonarqube-webapis/dist/src/resources/index.js";
 import type { MeasuresComponent, ParsedMeasuresComponent } from "./interfaces";
+import { getLogger } from "ratan-logger";
+
+export interface SonarQubeClientOptions { url?: string; }
 
 export interface SonarIssueSearchResult {
   total: number;
@@ -45,40 +39,130 @@ export interface SonarIssue {
 }
 
 export class SonarQubeClient {
-  private sonar!: Sonar;
+  private baseUrl: string;
+  private authHeader: string | null = null;
+  private logger = getLogger("sonarqube");
 
-  // response indecate whether login is successful or not.
+  // All SonarQube metric keys used for measures fetching.
+  // Derived from the SonarMetricKey enum (sonarqube-webapis) minus
+  // new_xxx_violations, xxx_violations, and branch_coverage_hits_data,
+  // plus extra keys used by the deployment.
+  private static readonly METRIC_KEYS = [
+    // Custom / deployment-specific keys
+    "conditions_to_cover",
+    "new_software_quality_maintainability_rating",
+    "new_software_quality_reliability_rating",
+    "new_software_quality_security_rating",
+    "software_quality_maintainability_issues",
+    "software_quality_maintainability_rating",
+    "software_quality_reliability_issues",
+    "software_quality_reliability_rating",
+    "software_quality_security_issues",
+    "software_quality_security_rating",
+
+    // SonarMetricKey values (minus excluded ones)
+    "complexity",
+    "cognitive_complexity",
+    "duplicated_blocks",
+    "duplicated_files",
+    "duplicated_lines",
+    "duplicated_lines_density",
+    "new_violations",
+    "violations",
+    "false_positive_issues",
+    "open_issues",
+    "confirmed_issues",
+    "reopened_issues",
+    "code_smells",
+    "new_code_smells",
+    "sqale_rating",
+    "sqale_index",
+    "new_technical_debt",
+    "sqale_debt_ratio",
+    "new_sqale_debt_ratio",
+    "alert_status",
+    "quality_gate_details",
+    "bugs",
+    "new_bugs",
+    "reliability_rating",
+    "reliability_remediation_effort",
+    "new_reliability_remediation_effort",
+    "vulnerabilities",
+    "new_vulnerabilities",
+    "security_rating",
+    "security_remediation_effort",
+    "new_security_remediation_effort",
+    "security_hotspots",
+    "new_security_hotspots",
+    "security_review_rating",
+    "new_security_review_rating",
+    "security_hotspots_reviewed",
+    "classes",
+    "comment_lines",
+    "comment_lines_density",
+    "directories",
+    "files",
+    "lines",
+    "ncloc",
+    "ncloc_language_distribution",
+    "functions",
+    "projects",
+    "statements",
+    "branch_coverage",
+    "new_branch_coverage",
+    "conditions_by_line",
+    "covered_conditions_by_line",
+    "coverage",
+    "new_coverage",
+    "line_coverage",
+    "new_line_coverage",
+    "coverage_line_hits_data",
+    "lines_to_cover",
+    "new_lines_to_cover",
+    "skipped_tests",
+    "uncovered_conditions",
+    "new_uncovered_conditions",
+    "uncovered_lines",
+    "new_uncovered_lines",
+    "tests",
+    "test_execution_time",
+    "test_errors",
+    "test_failures",
+    "test_success_density",
+  ];
+
+  constructor(private readonly options: SonarQubeClientOptions = {}) {
+    this.baseUrl = options.url ?? "https://sonarqube.vx.standardchartered.com/api";
+  }
+
+  // response indicates whether login is successful or not.
   public async connect(token: string): Promise<boolean> {
     if (!token) {
-      console.error("SonarQube token is required.");
+      this.logger.error("SonarQube token is required.");
       return false;
     }
-    let SonarClass = Sonar;
-    if ("default" in Sonar) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      SonarClass = (Sonar as any).default;
-    }
-    this.sonar = new SonarClass({
-      // 1. User token: set your token in the username, set empty string password.
-      // 2. Basic access: set your standard login username & password.
-      auth: {
-        username: token,
-        password: "",
-      },
-      // You can use sonarcloud / sonarqube web api url.
-      baseURL: "https://sonarqube.vx.standardchartered.com/api",
-    });
     try {
-      // {@link https://sonarcloud.io/web_api/api/authentication/validate}
-      const result = await this.sonar.authentication.validate();
-      if (result.data.valid) {
-        console.log("\n\nSonarQube Login Successfully\n\n");
+      const encoded = Buffer.from(`${token}:`).toString("base64");
+      const response = await fetch(`${this.baseUrl}/authentication/validate`, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${encoded}`,
+        },
+      });
+      if (!response.ok) {
+        const errorBody = await response.text();
+        this.logger.error("SonarQube login failed", { status: response.status, body: errorBody });
+        return false;
+      }
+      const data = (await response.json()) as { valid: boolean };
+      if (data.valid) {
+        this.authHeader = `Basic ${encoded}`;
+        this.logger.info("SonarQube login succeeded");
         return true;
       }
       return false;
     } catch (error) {
-      // This is to show error messages from sonar.
-      console.error("Errors: ", (error as AxiosError).response?.data);
+      this.logger.error("SonarQube login failed", error);
       return false;
     }
   }
@@ -97,58 +181,33 @@ export class SonarQubeClient {
     } = {},
   ): Promise<SonarIssueSearchResult> {
     try {
-      // The sonarqube-webapis library expects arrays of enum values for
-      // filter parameters. We accept comma-separated strings for convenience
-      // and split them into the expected types at call time.
-      const severities = params.severities?.split(",").filter(Boolean) as
-        | SonarIssuesSeverity[]
-        | undefined;
-      const statuses = params.statuses?.split(",").filter(Boolean) as
-        | IssuesStatus[]
-        | undefined;
-      const types = params.types?.split(",").filter(Boolean) as
-        | SonarType[]
-        | undefined;
+      const url = new URL(`${this.baseUrl}/issues/search`);
+      url.searchParams.set("componentKeys", projectKey);
+      url.searchParams.set("additionalFields", "_all");
+      if (params.types) url.searchParams.set("types", params.types);
+      if (params.severities) url.searchParams.set("severities", params.severities);
+      if (params.statuses) url.searchParams.set("statuses", params.statuses);
+      if (params.pullRequest !== undefined) url.searchParams.set("pullRequest", String(params.pullRequest));
+      if (params.branch) url.searchParams.set("branch", params.branch);
+      if (params.resolutions) url.searchParams.set("resolutions", params.resolutions);
+      url.searchParams.set("p", String(params.p ?? 1));
+      url.searchParams.set("ps", String(params.ps ?? 100));
 
-      const resp = await this.sonar.issues.search(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        [projectKey],
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        params.pullRequest !== undefined
-          ? String(params.pullRequest)
-          : undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        severities,
-        undefined,
-        statuses,
-        undefined,
-        types,
-        true,
-        false,
-        params.p ?? 1,
-        params.ps ?? 100,
-      );
+      const response = await fetch(url.toString(), {
+        headers: {
+          Authorization: this.authHeader!,
+        },
+      });
 
-      return this.parseIssuesResponse(resp.data);
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`SonarQube issue search failed (${response.status}): ${errorBody}`);
+      }
+
+      const data = await response.json();
+      return this.parseIssuesResponse(data);
     } catch (error) {
-      console.error("Error searching SonarQube issues:", (error as AxiosError).message);
+      this.logger.error("Error searching SonarQube issues", error);
       throw error;
     }
   }
@@ -214,84 +273,41 @@ export class SonarQubeClient {
           new_coverage: "-",
         } as unknown as ParsedMeasuresComponent;
       }
-      const resp = (await this.sonar.measures.component(
-        repoName,
-        Array.from(
-          new Set([
-            "conditions_to_cover",
-            // "accepted_issues",
-            // "alert_status",
-            // "bugs",
-            // "code_smells",
-            // "coverage",
-            // "duplicated_blocks",
-            // "duplicated_lines_density",
-            // "high_impact_accepted_issues",
-            // "lines",
-            // "lines_to_cover",
-            // "ncloc",
-            // "ncloc_language_distribution",
-            // "new_accepted_issues",
-            // "new_bugs",
-            // "new_code_smells",
-            // "new_coverage",
-            // "new_duplicated_lines_density",
-            // "new_lines",
-            // "new_lines_to_cover",
-            // "new_maintainability_rating",
-            // "new_reliability_rating",
-            // "new_security_hotspots",
-            // "new_security_hotspots_reviewed",
-            // "new_security_rating",
-            // "new_security_review_rating",
-            "new_software_quality_maintainability_rating",
-            "new_software_quality_reliability_rating",
-            "new_software_quality_security_rating",
-            // "new_technical_debt",
-            // "new_violations",
-            // "new_vulnerabilities",
-            // "projects",
-            // "quality_gate_details",
-            // "reliability_rating",
-            // "security_hotspots",
-            // "security_hotspots_reviewed",
-            // "security_rating",
-            // "security_review_rating",
-            "software_quality_maintainability_issues",
-            "software_quality_maintainability_rating",
-            "software_quality_reliability_issues",
-            "software_quality_reliability_rating",
-            "software_quality_security_issues",
-            "software_quality_security_rating",
-            // "sqale_index",
-            // "sqale_rating",
-            // "tests",
-            // "violations",
-            // "vulnerabilities",
-            ...(Object.values(SonarMetricKey) as Array<SonarMetricKey>).filter(
-              (key) => {
-                return ![
-                  SonarMetricKey.newXXXViolations,
-                  SonarMetricKey.xxxViolations,
-                  SonarMetricKey.branchCoverageHitsData,
-                ].includes(key);
-              },
-            ),
-          ]),
-        ) as SonarMetricKey[],
-        [MeasuresAdditionalFields.metrics],
-        branch,
-        prId,
-      )) as AxiosResponse<MeasuresComponent>;
 
-      const result = resp.data.component.measures.reduce((acc: Record<string, unknown>, measure) => {
-        acc[measure.metric] = Number(measure.value ?? measure.period.value);
-        return acc;
-      }, {} as ParsedMeasuresComponent) as ParsedMeasuresComponent;
+      const url = new URL(`${this.baseUrl}/measures/component`);
+      url.searchParams.set("component", repoName);
+      url.searchParams.set("metricKeys", SonarQubeClient.METRIC_KEYS.join(","));
+      url.searchParams.set("additionalFields", "metrics");
+      if (prId !== undefined) {
+        url.searchParams.set("pullRequest", String(prId));
+      } else if (branch !== undefined) {
+        url.searchParams.set("branch", branch);
+      }
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          Authorization: this.authHeader!,
+        },
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`SonarQube measures fetch failed (${response.status}): ${errorBody}`);
+      }
+
+      const data = (await response.json()) as MeasuresComponent;
+
+      const result = data.component.measures.reduce(
+        (acc: Record<string, unknown>, measure) => {
+          acc[measure.metric] = Number(measure.value ?? measure.period.value);
+          return acc;
+        },
+        {} as ParsedMeasuresComponent,
+      ) as ParsedMeasuresComponent;
 
       return result;
     } catch (error) {
-      console.error("Error fetching measures: ", (error as AxiosError).message);
+      this.logger.error("Error fetching SonarQube measures", error);
       throw error;
     }
   }

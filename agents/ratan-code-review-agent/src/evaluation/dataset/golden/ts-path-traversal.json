@@ -1,0 +1,9 @@
+{
+  "id": "ts-path-traversal",
+  "language": "typescript",
+  "title": "Download generated report",
+  "description": "Reads a report selected by request parameter.",
+  "files": [{ "path": "src/reports.ts", "changeType": "added", "after": "export function readReport(name: string) {\n  const reportRoot = \"/srv/reports\";\n  return fs.readFileSync(path.join(reportRoot, name));\n}" }],
+  "expectedFindings": [{ "id": "path-traversal", "filePath": "src/reports.ts", "lineStart": 3, "lineEnd": 3, "category": "security", "allowedSeverities": ["critical", "high"], "messageIncludes": ["path", "validate"] }],
+  "allowedExtraFindings": 0
+}

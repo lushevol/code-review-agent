@@ -37,7 +37,7 @@ describe("FindingStore integration", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "finding-store-"));
     const store = new FindingStore(path.join(dir, "findings.db"));
     try {
-      store.init();
+      await store.init();
       const finding = createFinding(null) as ReturnType<typeof createFinding> & {
         confidence?: number;
       };
@@ -57,7 +57,7 @@ describe("FindingStore integration", () => {
     const dir = await mkdtemp(path.join(tmpdir(), "finding-store-"));
     const store = new FindingStore(path.join(dir, "findings.db"));
     try {
-      store.init();
+      await store.init();
       store.upsertFinding(createFinding(null));
       store.upsertFinding({
         ...createFinding(999),
@@ -66,6 +66,58 @@ describe("FindingStore integration", () => {
 
       const finding = store.getFindingsByPr(7, "repo")[0];
       expect(finding.linkedTaskId).toBe(999);
+    } finally {
+      store.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("queries findings across repositories for dashboard views", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "finding-store-"));
+    const store = new FindingStore(path.join(dir, "findings.db"));
+    try {
+      await store.init();
+      store.batchUpsert([
+        createFinding(null),
+        {
+          ...createFinding(null),
+          id: "550e8400-e29b-41d4-a716-446655440002",
+          prId: 8,
+          repository: "other-repo",
+          sourceEngine: "compliance",
+          contentHash: "other-hash",
+        },
+      ]);
+
+      expect(store.queryFindings({})).toHaveLength(2);
+      expect(store.queryFindings({ engine: "compliance" })).toEqual([
+        expect.objectContaining({ prId: 8, repository: "other-repo" }),
+      ]);
+    } finally {
+      store.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("queries recorded override actions", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "finding-store-"));
+    const store = new FindingStore(path.join(dir, "findings.db"));
+    try {
+      await store.init();
+      store.upsertFinding(createFinding(null));
+      store.updateResolution(createFinding(null).id, "false-positive", {
+        overriddenBy: "reviewer@example.invalid",
+        justification: "Confirmed by owner",
+      });
+
+      expect(store.queryOverrideLog()).toEqual([
+        expect.objectContaining({
+          findingId: createFinding(null).id,
+          overriddenBy: "reviewer@example.invalid",
+          newResolution: "false-positive",
+          justification: "Confirmed by owner",
+        }),
+      ]);
     } finally {
       store.close();
       await rm(dir, { recursive: true, force: true });

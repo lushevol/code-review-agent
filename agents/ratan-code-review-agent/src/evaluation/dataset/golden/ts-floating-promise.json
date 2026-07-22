@@ -1,0 +1,9 @@
+{
+  "id": "ts-floating-promise",
+  "language": "typescript",
+  "title": "Persist audit event",
+  "description": "Adds asynchronous event persistence.",
+  "files": [{ "path": "src/audit.ts", "changeType": "added", "after": "export async function handleEvent(event: Event) {\n  saveEvent(event);\n  return { accepted: true };\n}" }],
+  "expectedFindings": [{ "id": "floating-promise", "filePath": "src/audit.ts", "lineStart": 2, "lineEnd": 2, "category": "bug", "allowedSeverities": ["high", "medium"], "messageIncludes": ["await", "failure"] }],
+  "allowedExtraFindings": 0
+}

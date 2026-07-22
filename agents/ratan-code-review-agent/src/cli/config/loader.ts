@@ -3,27 +3,12 @@ import path from "node:path";
 import {
   type ConfigProvider,
   type RootAgentConfig,
-  createAgentConfigClient,
+  RootAgentConfigSchema,
 } from "agent-config-manager";
+import { configureLogging } from "ratan-logger";
 import { LocalConfigClient } from "./local-client";
 
-const DEFAULT_CONFIG_DIR = ".ratan/code-review-agent";
-
-interface RawWrapperConfig {
-  mode: "local" | "ado";
-  ado: {
-    organization: string;
-    project: string;
-    token?: string;
-  };
-  adoProxyUrl?: string;
-  sonarQubeToken?: string;
-  databaseUrl?: string;
-  config?: RootAgentConfig;
-  configRepo?: string;
-  configBranch?: string;
-  configBasePath?: string;
-}
+const DEFAULT_CONFIG_DIR = ".ratan";
 
 function resolveEnvToken(value: string): string {
   const envMatch = value.match(/^env:(.+)$/);
@@ -39,12 +24,15 @@ function resolveEnvToken(value: string): string {
   return value;
 }
 
-function resolveSecrets(raw: RawWrapperConfig): RawWrapperConfig {
-  const resolved = { ...raw, ado: { ...raw.ado } };
-  if (raw.ado.token) resolved.ado.token = resolveEnvToken(raw.ado.token);
-  if (raw.sonarQubeToken) resolved.sonarQubeToken = resolveEnvToken(raw.sonarQubeToken);
-  if (raw.databaseUrl) resolved.databaseUrl = resolveEnvToken(raw.databaseUrl);
-  return resolved;
+function resolveSecrets<T>(value: T): T {
+  if (typeof value === "string") return resolveEnvToken(value) as T;
+  if (Array.isArray(value)) return value.map(resolveSecrets) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [key, resolveSecrets(nested)]),
+    ) as T;
+  }
+  return value;
 }
 
 export interface LoadConfigResult {
@@ -61,10 +49,29 @@ export async function loadConfig(
 
   const configFile = path.resolve(configDir, "config.json");
 
-  let raw: RawWrapperConfig;
   try {
     const content = await readFile(configFile, "utf-8");
-    raw = JSON.parse(content) as RawWrapperConfig;
+    const raw = JSON.parse(content) as Record<string, unknown>;
+    const resolved = resolveSecrets(raw);
+    let config: RootAgentConfig;
+    try {
+      config = RootAgentConfigSchema.parse(resolved);
+    } catch (err) {
+      throw new Error(`Invalid configuration in ${configFile}: ${(err as Error).message}`);
+    }
+    const logging = config.logging;
+    configureLogging({
+      ...logging,
+      directory: logging?.directory
+        ? path.resolve(configDir, logging.directory)
+        : path.resolve(configDir, "logs"),
+    });
+    const provider: ConfigProvider = new LocalConfigClient({
+      configDir,
+      config,
+    });
+
+    return { provider, configDir };
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       console.error(
@@ -75,49 +82,4 @@ export async function loadConfig(
     }
     throw new Error(`Failed to parse ${configFile}: ${(err as Error).message}`);
   }
-
-  if (raw.mode !== "local" && raw.mode !== "ado") {
-    throw new Error(`Invalid mode "${raw.mode}" in ${configFile}. Must be "local" or "ado".`);
-  }
-
-  const resolved = resolveSecrets(raw);
-
-  let provider: ConfigProvider;
-
-  if (resolved.mode === "local") {
-    if (!resolved.config) {
-      throw new Error(
-        `Missing "config" field in ${configFile}. In local mode, the config must be inline.`,
-      );
-    }
-    provider = new LocalConfigClient({
-      configDir,
-      config: resolved.config,
-      ado: resolved.ado,
-      adoToken: resolved.ado.token,
-      adoProxyUrl: resolved.adoProxyUrl,
-      sonarQubeToken: resolved.sonarQubeToken,
-      databaseUrl: resolved.databaseUrl,
-    });
-  } else {
-    // ADO mode
-    if (!resolved.configRepo || !resolved.configBranch) {
-      throw new Error(
-        `Missing "configRepo" or "configBranch" in ${configFile}. These are required in ADO mode.`,
-      );
-    }
-    provider = await createAgentConfigClient({
-      adoToken: resolved.ado.token || "",
-      organization: resolved.ado.organization,
-      project: resolved.ado.project,
-      repoName: resolved.configRepo,
-      branch: resolved.configBranch,
-      basePath: resolved.configBasePath,
-      adoProxyUrl: resolved.adoProxyUrl,
-      sonarQubeToken: resolved.sonarQubeToken,
-      ormConnectionUrl: resolved.databaseUrl,
-    });
-  }
-
-  return { provider, configDir };
 }

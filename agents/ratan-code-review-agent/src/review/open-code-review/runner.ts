@@ -1,12 +1,22 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { createHmac, randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { FindingCategory } from "../types/finding";
+import { maskSensitiveData } from "../utils/sensitive-data-mask";
 import type { ReviewWorkspace } from "../workspace/types";
 
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000;
+const OcrCommentCategorySchema = z.preprocess(
+  (value) =>
+    typeof value === "string" && !FindingCategory.safeParse(value).success
+      ? "other"
+      : value,
+  FindingCategory,
+);
 
 const OcrCommentSchema = z.object({
   path: z.string(),
@@ -16,18 +26,7 @@ const OcrCommentSchema = z.object({
   start_line: z.number().int(),
   end_line: z.number().int(),
   thinking: z.string().optional(),
-  category: z
-    .enum([
-      "bug",
-      "security",
-      "performance",
-      "maintainability",
-      "test",
-      "style",
-      "documentation",
-      "other",
-    ])
-    .optional(),
+  category: OcrCommentCategorySchema.optional(),
   severity: z.enum(["critical", "high", "medium", "low"]).optional(),
 });
 
@@ -74,18 +73,23 @@ const OcrOutputSchema = z.object({
 export type OcrReviewOutput = z.infer<typeof OcrOutputSchema> & {
   complete: boolean;
   durationMs: number;
+  rawOutput: string;
 };
 
 export interface OcrReviewInput {
   workspace: ReviewWorkspace;
   background: string;
-  include: string[];
-  exclude: string[];
+  llm: {
+    url: string;
+    token: string;
+    model: string;
+    protocol?: "anthropic" | "openai" | "openai-responses";
+  };
+  ruleFile: string;
 }
 
 export interface OcrReviewRunner {
   review(input: OcrReviewInput): Promise<OcrReviewOutput>;
-  checkHealth(): Promise<boolean>;
 }
 
 export interface OpenCodeReviewRunnerOptions {
@@ -110,34 +114,47 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
 
   async review(input: OcrReviewInput): Promise<OcrReviewOutput> {
     const startedAt = Date.now();
+    const maskedRange = createMaskedGitRange(input.workspace);
     const stateHome = path.join(input.workspace.runDirectory, "ocr-home");
     const backgroundFile = path.join(
       input.workspace.runDirectory,
       "review-background.md",
     );
-    const ruleFile = path.join(input.workspace.runDirectory, "ocr-rule.json");
-    fs.mkdirSync(stateHome, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(backgroundFile, input.background, { mode: 0o600 });
-    fs.writeFileSync(
-      ruleFile,
-      JSON.stringify({
-        rules: [],
-        include: input.include,
-        exclude: input.exclude,
-      }),
-      { mode: 0o600 },
-    );
-
     try {
+      fs.mkdirSync(stateHome, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(backgroundFile, maskSensitiveData(input.background), { mode: 0o600 });
+      if (!fs.existsSync(input.ruleFile)) {
+        throw new Error("OpenCodeReview rule file not found");
+      }
+      try {
+        JSON.parse(fs.readFileSync(input.ruleFile, "utf8"));
+      } catch {
+        throw new Error("OpenCodeReview rule file is invalid");
+      }
+      const configPath = path.join(stateHome, "config.json");
+      const llmConfig: Record<string, unknown> = {
+        url: input.llm.url,
+        auth_token: input.llm.token,
+        model: input.llm.model,
+      };
+      if (input.llm.protocol) {
+        llmConfig.protocol = input.llm.protocol;
+      }
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({ llm: llmConfig }),
+        { mode: 0o600 },
+      );
+
       const stdout = await this.execute(
         [
           "review",
           "--repo",
-          input.workspace.repoPath,
+          maskedRange.repoPath,
           "--from",
-          input.workspace.mergeBaseCommit,
+          maskedRange.mergeBaseCommit,
           "--to",
-          input.workspace.headCommit,
+          maskedRange.headCommit,
           "--format",
           "json",
           "--audience",
@@ -145,11 +162,13 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
           "--background-file",
           backgroundFile,
           "--rule",
-          ruleFile,
+          input.ruleFile,
           "--concurrency",
           String(this.concurrency),
         ],
         stateHome,
+        configPath,
+        input.llm.protocol,
       );
       let json: unknown;
       try {
@@ -162,26 +181,21 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
         ...parsed,
         complete: parsed.status !== "completed_with_errors",
         durationMs: Date.now() - startedAt,
+        rawOutput: stdout,
       };
     } finally {
       fs.rmSync(stateHome, { recursive: true, force: true });
+      maskedRange.cleanup();
     }
   }
 
-  async checkHealth(): Promise<boolean> {
-    const home = fs.mkdtempSync(path.join(process.cwd(), ".ocr-health-"));
-    try {
-      await this.execute(["llm", "test"], home);
-      return true;
-    } catch {
-      return false;
-    } finally {
-      fs.rmSync(home, { recursive: true, force: true });
-    }
-  }
-
-  private execute(args: string[], home: string): Promise<string> {
-    const env = this.buildEnvironment(home);
+  private execute(
+    args: string[],
+    home: string,
+    configPath: string,
+    protocol?: string,
+  ): Promise<string> {
+    const env = this.buildEnvironment(home, configPath, protocol);
     return new Promise((resolve, reject) => {
       const child = spawn(this.binaryPath, args, {
         env,
@@ -226,28 +240,119 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
     });
   }
 
-  private buildEnvironment(home: string): NodeJS.ProcessEnv {
-    const source = this.environment;
-    const url = source.OCR_LLM_URL ?? source.OPENAI_BASE_URL;
-    const token = source.OCR_LLM_TOKEN ?? source.OPENAI_API_KEY;
-    const model = source.OCR_LLM_MODEL;
-    if (!url || !token || !model) {
-      throw new Error(
-        "OpenCodeReview requires OCR_LLM_MODEL and an OCR or OPENAI endpoint/token",
-      );
-    }
-    return {
+  private buildEnvironment(
+    home: string,
+    configPath: string,
+    protocol?: string,
+  ): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = {
       ...process.env,
-      ...source,
+      ...this.environment,
       HOME: home,
-      OCR_CONFIG_PATH: path.join(home, "config.json"),
+      OCR_CONFIG_PATH: configPath,
       OCR_NO_UPDATE: "1",
-      OCR_LLM_URL: url,
-      OCR_LLM_TOKEN: token,
-      OCR_LLM_MODEL: model,
-      OCR_USE_ANTHROPIC: "false",
+    };
+    if (protocol) {
+      env.OCR_LLM_PROTOCOL = protocol;
+    }
+    return env;
+  }
+}
+
+function createMaskedGitRange(workspace: ReviewWorkspace): {
+  repoPath: string;
+  mergeBaseCommit: string;
+  headCommit: string;
+  cleanup(): void;
+} {
+  if (workspace.changes.length === 0) {
+    return {
+      repoPath: workspace.repoPath,
+      mergeBaseCommit: workspace.mergeBaseCommit,
+      headCommit: workspace.headCommit,
+      cleanup() {},
     };
   }
+
+  const repoPath = path.join(workspace.runDirectory, "masked-review-repo");
+  const redactionKey = randomBytes(32);
+  const git = (...args: string[]) =>
+    execFileSync("git", args, {
+      cwd: repoPath,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      windowsHide: true,
+    }).trim();
+
+  try {
+    execFileSync(
+      "git",
+      ["clone", "--quiet", "--shared", "--no-checkout", workspace.repoPath, repoPath],
+      { encoding: "utf8", windowsHide: true },
+    );
+    git("config", "user.email", "masked-review@localhost.invalid");
+    git("config", "user.name", "PR Guardian Masking");
+    git("checkout", "--quiet", "--detach", workspace.mergeBaseCommit);
+    maskChangedFiles(repoPath, workspace.changes, "base", redactionKey);
+    git("add", "--all");
+    git("commit", "--quiet", "--allow-empty", "-m", "masked review base");
+    const mergeBaseCommit = git("rev-parse", "HEAD");
+
+    git("read-tree", "--reset", "-u", workspace.headCommit);
+    maskChangedFiles(repoPath, workspace.changes, "head", redactionKey);
+    git("add", "--all");
+    git("commit", "--quiet", "--allow-empty", "-m", "masked review head");
+    const headCommit = git("rev-parse", "HEAD");
+
+    return {
+      repoPath,
+      mergeBaseCommit,
+      headCommit,
+      cleanup() {
+        fs.rmSync(repoPath, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    fs.rmSync(repoPath, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+function maskChangedFiles(
+  repoPath: string,
+  changes: ReviewWorkspace["changes"],
+  revision: "base" | "head",
+  redactionKey: Buffer,
+): void {
+  for (const change of changes) {
+    const relativePath = revision === "base" ? change.previousPath ?? change.path : change.path;
+    const filePath = path.join(repoPath, relativePath);
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) continue;
+    const bytes = fs.readFileSync(filePath);
+    if (bytes.includes(0)) continue;
+    fs.writeFileSync(
+      filePath,
+      maskDiffContent(bytes.toString("utf8"), redactionKey),
+    );
+  }
+}
+
+function maskDiffContent(content: string, redactionKey: Buffer): string {
+  const masked = maskSensitiveData(content);
+  const originalLines = content.split("\n");
+  return masked
+    .split("\n")
+    .map((line, index) => {
+      if (!/(\*\*\*\*|API_KEY|TOKEN)/.test(line)) return line;
+      const digest = createHmac("sha256", redactionKey)
+        .update(originalLines[index] ?? "")
+        .digest("hex")
+        .slice(0, 12);
+      return line.replaceAll("****", `****:${digest}`)
+        .replaceAll("API_KEY", `[REDACTED:${digest}]`)
+        .replaceAll("TOKEN", `[REDACTED:${digest}]`);
+    })
+    .join("\n");
 }
 
 function resolveOcrBinary(): string {

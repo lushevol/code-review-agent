@@ -1,0 +1,9 @@
+{
+  "id": "go-ignored-error",
+  "language": "go",
+  "title": "Load service configuration",
+  "description": "Reads configuration without handling the read failure.",
+  "files": [{ "path": "config/load.go", "changeType": "added", "after": "func Load(path string) []byte {\n    data, _ := os.ReadFile(path)\n    return data\n}" }],
+  "expectedFindings": [{ "id": "ignored-error", "filePath": "config/load.go", "lineStart": 2, "lineEnd": 2, "category": "bug", "allowedSeverities": ["high", "medium"], "messageIncludes": ["error", "handle"] }],
+  "allowedExtraFindings": 0
+}

@@ -1,0 +1,9 @@
+{
+  "id": "csharp-sql-injection",
+  "language": "csharp",
+  "title": "Look up invoice",
+  "description": "Adds invoice lookup by request value.",
+  "files": [{ "path": "Billing/InvoiceRepository.cs", "changeType": "added", "after": "public Invoice Find(string id) {\n  using var command = connection.CreateCommand();\n  command.CommandText = \"SELECT * FROM invoices WHERE id = '\" + id + \"'\";\n  return Read(command);\n}" }],
+  "expectedFindings": [{ "id": "sql-injection", "filePath": "Billing/InvoiceRepository.cs", "lineStart": 3, "lineEnd": 3, "category": "security", "allowedSeverities": ["critical", "high"], "messageIncludes": ["sql", "parameter"] }],
+  "allowedExtraFindings": 0
+}

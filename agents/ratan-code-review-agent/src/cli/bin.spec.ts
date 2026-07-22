@@ -11,7 +11,7 @@ describe("CLI binary", () => {
       cwd: packageRoot,
       stdio: "pipe",
     });
-  });
+  }, 30_000);
 
   it("prints help through the published bin entrypoint", () => {
     const output = execFileSync("node", [binPath, "--help"], {
@@ -22,6 +22,10 @@ describe("CLI binary", () => {
     expect(output).toContain("Usage: ratan-code-review");
     expect(output).toContain("start");
     expect(output).toContain("dashboard");
+    expect(output).toContain("Cheatsheet:");
+    expect(output).toContain("ratan-code-review start --pr-id 123");
+    expect(output).toContain("ratan-code-review start --watch");
+    expect(output).toContain("ratan-code-review dashboard --port 3000");
   });
 
   it("documents direct PR review for start", () => {
