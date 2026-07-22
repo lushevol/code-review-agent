@@ -4,6 +4,8 @@ import { LocalConfigClient } from "./local-client";
 import { SonarQubeClient } from "ratan-sonarqube-api";
 
 const config = {
+  ado: { organization: "o", project: "p" },
+  adoProxyUrl: "",
   logging: {
     level: "debug" as const,
     directory: ".ratan/logs",
@@ -31,11 +33,11 @@ const config = {
 
 describe("LocalConfigClient", () => {
   afterEach(() => vi.restoreAllMocks());
+
   it("returns the OpenCodeReview root configuration", async () => {
     const client = new LocalConfigClient({
       configDir: "/tmp/ratan",
       config,
-      ado: { organization: "test-org", project: "test-project" },
     });
 
     expect((await client.getRootConfig()).openCodeReview.llm.model).toBe("model");
@@ -45,7 +47,6 @@ describe("LocalConfigClient", () => {
     const client = new LocalConfigClient({
       configDir: "/tmp/ratan",
       config,
-      ado: { organization: "test-org", project: "test-project" },
     });
 
     expect(client.resolveConfigPath("opencodereview/rule.json")).toBe(
@@ -57,11 +58,10 @@ describe("LocalConfigClient", () => {
     const client = new LocalConfigClient({
       configDir: "/tmp/ratan",
       config,
-      ado: { organization: "o", project: "p" },
     });
 
     expect(() => client.getAdoClient()).toThrow(
-      "ADO client not connected. Call connect() first.",
+      "ADO client not connected. Ensure config has ado.organization, ado.project, and ado.token.",
     );
   });
 
@@ -70,7 +70,6 @@ describe("LocalConfigClient", () => {
     const client = new LocalConfigClient({
       configDir: "/tmp/ratan",
       config,
-      ado: { organization: "o", project: "p" },
     });
 
     await client.connect();

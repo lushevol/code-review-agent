@@ -11,7 +11,6 @@ import {
   PullRequestStatus,
   PullRequestTimeRangeType,
 } from "azure-devops-node-api/interfaces/GitInterfaces.js";
-import dayjs from "dayjs";
 import {
   filterChanges,
   getCodeDiffFromHierarchyQuery,
@@ -37,8 +36,10 @@ export async function getPullRequestMetadataById(
 
   const repository = pr.repository;
   const cloneUrl = repository?.remoteUrl ?? "";
+  const sshUrl = repository?.sshUrl || "";
   const sourceRepository = pr.forkSource?.repository ?? repository;
   const sourceCloneUrl = sourceRepository?.remoteUrl ?? cloneUrl;
+  const sourceSshUrl = sourceRepository?.sshUrl || "";
   if (!repository?.id || !repository.name || !cloneUrl) {
     throw new Error(`Pull request ${pullRequestId} has no cloneable target repository`);
   }
@@ -53,9 +54,11 @@ export async function getPullRequestMetadataById(
     repoId: repository.id,
     repoName: repository.name,
     cloneUrl,
+    sshUrl: sshUrl || undefined,
     sourceRepoId: sourceRepository.id,
     sourceRepoName: sourceRepository.name ?? repository.name,
     sourceCloneUrl,
+    sourceSshUrl: sourceSshUrl || undefined,
     projectName: repository.project?.name ?? "",
     pullRequestId: Number(pullRequestId),
     latestTargetCommitId: pr.lastMergeTargetCommit?.commitId ?? "",
@@ -242,7 +245,10 @@ export async function getPullRequestById(
 }
 
 const isDateIn2Months = (date: Date | string) => {
-  return dayjs().diff(dayjs(date), "month", true) <= 2;
+  const now = new Date();
+  const d = new Date(date);
+  const months = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
+  return months <= 2;
 };
 
 export const isValidPullRequest = (

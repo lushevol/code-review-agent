@@ -1,4 +1,10 @@
-import type { NormalizedFinding, AuditRecord } from "./index";
+import type {
+  AuditRecord,
+  FindingEngine,
+  FindingCommentThread,
+  FindingResolution,
+  NormalizedFinding,
+} from "./index";
 
 /**
  * In-memory implementation of the FindingStore interface.
@@ -13,8 +19,9 @@ import type { NormalizedFinding, AuditRecord } from "./index";
 export class MemoryFindingStore {
   private findings: Map<string, NormalizedFinding> = new Map();
   private auditRecords: AuditRecord[] = [];
+  private commentThreads: FindingCommentThread[] = [];
 
-  init(_dbPath?: string): void {
+  async init(_dbPath?: string): Promise<void> {
     // No-op; in-memory store is ready immediately.
   }
 
@@ -60,6 +67,39 @@ export class MemoryFindingStore {
     return this.findings.get(id) ?? null;
   }
 
+  linkCommentThread(
+    thread: Omit<FindingCommentThread, "createdAt">,
+  ): void {
+    const finding = this.getFindingById(thread.findingId);
+    if (
+      !finding ||
+      finding.prId !== thread.prId ||
+      finding.repository !== thread.repository
+    ) {
+      throw new Error("Comment thread must belong to the finding's PR and repository");
+    }
+    if (
+      this.commentThreads.some(
+        (existing) =>
+          existing.repository === thread.repository &&
+          existing.prId === thread.prId &&
+          existing.threadId === thread.threadId,
+      )
+    ) {
+      return;
+    }
+    this.commentThreads.push({ ...thread, createdAt: new Date().toISOString() });
+  }
+
+  getCommentThreadsByPr(
+    prId: number,
+    repository: string,
+  ): FindingCommentThread[] {
+    return this.commentThreads.filter(
+      (thread) => thread.prId === prId && thread.repository === repository,
+    );
+  }
+
   /**
    * Update the resolution of a finding. When resolution is "resolved",
    * also sets `resolvedAt`. When `options.overriddenBy` is provided,
@@ -67,7 +107,7 @@ export class MemoryFindingStore {
    */
   updateResolution(
     id: string,
-    resolution: string,
+    resolution: FindingResolution,
     options?: {
       overriddenBy?: string;
       justification?: string;
@@ -114,7 +154,7 @@ export class MemoryFindingStore {
   /**
    * Find findings by source engine.
    */
-  getFindingsByEngine(engine: string): NormalizedFinding[] {
+  getFindingsByEngine(engine: FindingEngine): NormalizedFinding[] {
     return Array.from(this.findings.values()).filter(
       (f) => f.sourceEngine === engine,
     );
@@ -169,6 +209,7 @@ export class MemoryFindingStore {
   close(): void {
     this.findings.clear();
     this.auditRecords = [];
+    this.commentThreads = [];
     this.overrideLog = [];
   }
 

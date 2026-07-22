@@ -1,3 +1,5 @@
+import type { z } from "zod";
+
 export class RequestContext<T extends Record<string, unknown> = Record<string, unknown>> {
   private readonly values = new Map<keyof T, T[keyof T]>();
 
@@ -10,25 +12,16 @@ export class RequestContext<T extends Record<string, unknown> = Record<string, u
   }
 }
 
-export interface AgentRegistry {
-  getAgent(id: string): {
-    generate(prompt: string, options?: { requestContext?: RequestContext<any> }): Promise<{
-      object?: unknown;
-      text: string;
-    }>;
-  };
-}
-
 export interface StepExecutionContext<TInput = any> {
   inputData: TInput;
   requestContext: RequestContext<any>;
-  agents: AgentRegistry;
-  getStepResult: (id: string) => any;
 }
 
 export interface ReviewStep<TInput = any, TOutput = any> {
   id: string;
   description?: string;
+  inputSchema?: z.ZodType<TInput>;
+  outputSchema?: z.ZodType<TOutput>;
   execute(context: StepExecutionContext<TInput>): Promise<TOutput>;
 }
 
@@ -43,29 +36,18 @@ export async function runSteps(
   inputData: unknown,
   options: {
     requestContext: RequestContext<any>;
-    agents?: AgentRegistry;
-    stepResults?: Map<string, unknown>;
     onStepComplete?: (event: { stepId: string; output: unknown }) => void;
   },
 ) {
-  const stepResults = options.stepResults ?? new Map<string, unknown>();
-  const agents =
-    options.agents ??
-    ({
-      getAgent() {
-        throw new Error("Agent registry is not configured");
-      },
-    } satisfies AgentRegistry);
-
   let current = inputData;
   for (const step of steps) {
-    current = await step.execute({
+    step.inputSchema?.parse(current);
+    const output = await step.execute({
       inputData: current,
       requestContext: options.requestContext,
-      agents,
-      getStepResult: (id) => stepResults.get(id) as any,
     });
-    stepResults.set(step.id, current);
+    step.outputSchema?.parse(output);
+    current = output;
     options.onStepComplete?.({ stepId: step.id, output: current });
   }
 

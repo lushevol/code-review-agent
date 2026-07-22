@@ -1,0 +1,12 @@
+{
+  "id": "ts-swallowed-http-error",
+  "language": "typescript",
+  "title": "Fetch account profile",
+  "description": "Adds a remote account lookup with fallback behavior.",
+  "files": [{ "path": "src/account.ts", "changeType": "added", "after": "export async function loadAccount(url: string) {\n  try {\n    const response = await fetch(url);\n    return await response.json();\n  } catch {\n    return {};\n  }\n}" }],
+  "expectedFindings": [
+    { "id": "unchecked-http-status", "filePath": "src/account.ts", "lineStart": 3, "lineEnd": 4, "category": "bug", "allowedSeverities": ["high", "medium"], "messageIncludes": ["response", "status"] },
+    { "id": "swallowed-error", "filePath": "src/account.ts", "lineStart": 5, "lineEnd": 6, "category": "bug", "allowedSeverities": ["high", "medium"], "messageIncludes": ["error", "catch"] }
+  ],
+  "allowedExtraFindings": 0
+}

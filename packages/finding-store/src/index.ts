@@ -1,4 +1,5 @@
-import Database from "better-sqlite3";
+import initSqlJs from "sql.js";
+import type { Database as SqlJsDatabase, SqlJsStatic } from "sql.js";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -21,14 +22,28 @@ export interface NormalizedFinding {
   remediation: string;
   blocking: boolean;
   linkedTaskId: number | null;
-  resolution: string;
-  sourceEngine: string;
+  resolution: FindingResolution;
+  sourceEngine: FindingEngine;
   sourceVersion: string;
   supersedesFindingId: string | null;
   contentHash: string;
   createdAt: string;
   resolvedAt: string | null;
 }
+
+export type FindingEngine =
+  | "ai-review"
+  | "open-code-review"
+  | "sonarqube-cve"
+  | "compliance";
+
+export type FindingResolution =
+  | "open"
+  | "resolved"
+  | "superseded"
+  | "waived"
+  | "false-positive"
+  | "accepted-risk";
 
 export interface AuditRecord {
   id: string;
@@ -57,6 +72,14 @@ export interface OverrideLogEntry {
   justification: string | null;
   secondApprover: string | null;
   expiryDate: string | null;
+  createdAt: string;
+}
+
+export interface FindingCommentThread {
+  repository: string;
+  prId: number;
+  findingId: string;
+  threadId: number;
   createdAt: string;
 }
 
@@ -118,29 +141,87 @@ interface AuditRecordRow {
   created_at: string;
 }
 
+interface FindingCommentThreadRow {
+  repository: string;
+  pr_id: number;
+  finding_id: string;
+  thread_id: number;
+  created_at: string;
+}
+
 // ─── Statement ID Constants ──────────────────────────────────────────────────
 
 const STMT = {
-  INIT_FINDINGS: "ddl:findings",
-  INIT_OVERRIDE_LOG: "ddl:override_log",
-  INIT_AUDIT: "ddl:audit",
   UPSERT_FINDING: "stmt:upsertFinding",
   GET_FINDING_BY_ID: "stmt:getFindingById",
   GET_FINDINGS_BY_PR: "stmt:getFindingsByPr",
   GET_FINDINGS_BY_HASH: "stmt:getFindingsByHash",
   GET_FINDINGS_BY_ENGINE: "stmt:getFindingsByEngine",
   UPDATE_RESOLUTION: "stmt:updateResolution",
-  RESOLVED_AT: "stmt:resolvedAt",
   INSERT_OVERRIDE: "stmt:insertOverride",
   INSERT_AUDIT: "stmt:insertAudit",
   GET_EXPIRED_OVERRIDES: "stmt:getExpiredOverrides",
+  INSERT_FINDING_COMMENT_THREAD: "stmt:insertFindingCommentThread",
+  GET_FINDING_COMMENT_THREADS_BY_PR: "stmt:getFindingCommentThreadsByPr",
 } as const;
+
+// ─── sql.js Compatibility Helpers ───────────────────────────────────────────
+
+/**
+ * Execute a prepared statement and return all result rows as objects.
+ * The statement is freed after use (required in sql.js to avoid memory leaks).
+ */
+function rows<T>(stmt: any, params?: any): T[] {
+  if (params) stmt.bind(params);
+  const results: T[] = [];
+  while (stmt.step()) results.push(stmt.getAsObject() as T);
+  stmt.reset();
+  stmt.free();
+  return results;
+}
+
+/**
+ * Execute a prepared statement and return the first result row, or undefined.
+ * The statement is freed after use.
+ */
+function row<T>(stmt: any, params?: any): T | undefined {
+  if (params) stmt.bind(params);
+  const result = stmt.step() ? (stmt.getAsObject() as T) : undefined;
+  stmt.reset();
+  stmt.free();
+  return result;
+}
+
+/**
+ * Execute a prepared statement that produces no result rows (INSERT/UPDATE/DELETE).
+ * The statement is freed after use.
+ */
+function exec(stmt: any, params?: any): void {
+  if (params) stmt.bind(params);
+  stmt.step();
+  stmt.reset();
+  stmt.free();
+}
+
+/**
+ * sql.js requires named-parameter keys to include the `@` prefix (e.g., `@pr_id`).
+ * This helper adds the prefix to every key in a bind-params object.
+ */
+function prefixBindParams(params: object): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(params)) {
+    result[`@${key}`] = (params as Record<string, unknown>)[key];
+  }
+  return result;
+}
 
 // ─── FindingStore Class ─────────────────────────────────────────────────────
 
 export class FindingStore {
-  private db: Database.Database | null = null;
-  private stmts: Map<string, Database.Statement> = new Map();
+  private sql: SqlJsStatic | null = null;
+  private db: SqlJsDatabase | null = null;
+  /** Stores SQL strings keyed by STMT constant — fresh prepared each execution. */
+  private sqls: Map<string, string> = new Map();
 
   private dbPath: string;
 
@@ -150,9 +231,9 @@ export class FindingStore {
 
   /**
    * Initialize the database: ensure the directory exists, open/create the
-   * SQLite file, enable WAL mode, and run DDL to create tables and indexes.
+   * SQLite file using sql.js, and run DDL to create tables and indexes.
    */
-  init(pathOverride?: string): void {
+  async init(pathOverride?: string): Promise<void> {
     const effectivePath = pathOverride ?? this.dbPath;
     const resolved = path.resolve(effectivePath);
     const dir = path.dirname(resolved);
@@ -160,17 +241,21 @@ export class FindingStore {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    this.db = new Database(resolved);
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("foreign_keys = ON");
+    this.sql = await initSqlJs();
+    const buffer = fs.existsSync(resolved)
+      ? fs.readFileSync(resolved)
+      : null;
+    this.db = new this.sql.Database(buffer);
+    this.db.run("PRAGMA journal_mode=MEMORY");
+    this.db.run("PRAGMA foreign_keys=ON");
     this.runDDL();
-    this.prepareStatements();
+    this.storeSQLs();
   }
 
   // ─── Private: DDL ────────────────────────────────────────────────────────
 
   private runDDL(): void {
-    this.db!.exec(`
+    this.db!.run(`
       CREATE TABLE IF NOT EXISTS findings (
         id TEXT PRIMARY KEY,
         pr_id INTEGER NOT NULL,
@@ -233,107 +318,107 @@ export class FindingStore {
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE INDEX IF NOT EXISTS idx_audit_pr ON audit_records(pr_id, repository);
+
+      CREATE TABLE IF NOT EXISTS finding_comment_threads (
+        repository TEXT NOT NULL,
+        pr_id INTEGER NOT NULL,
+        finding_id TEXT NOT NULL REFERENCES findings(id),
+        thread_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (repository, pr_id, thread_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_finding_comment_threads_finding
+        ON finding_comment_threads(finding_id);
     `);
   }
 
-  // ─── Private: Statement Preparation ───────────────────────────────────────
+  // ─── Private: Store SQL Strings ─────────────────────────────────────────
 
-  private prepareStatements(): void {
-    const db = this.db!;
+  private storeSQLs(): void {
+    const upsertSQL = `
+      INSERT INTO findings (
+        id, pr_id, repository, file_path, line_start, line_end,
+        category, severity, confidence, title, description,
+        evidence, business_impact, remediation, blocking, linked_task_id, resolution,
+        source_engine, source_version, supersedes_finding_id,
+        content_hash, created_at
+      ) VALUES (
+        @id, @pr_id, @repository, @file_path, @line_start, @line_end,
+        @category, @severity, @confidence, @title, @description,
+        @evidence, @business_impact, @remediation, @blocking, @linked_task_id, @resolution,
+        @source_engine, @source_version, @supersedes_finding_id,
+        @content_hash, @created_at
+      )
+      ON CONFLICT(pr_id, content_hash, source_engine) DO UPDATE SET
+        pr_id=excluded.pr_id, repository=excluded.repository,
+        file_path=excluded.file_path, line_start=excluded.line_start,
+        line_end=excluded.line_end, category=excluded.category,
+        severity=excluded.severity, confidence=excluded.confidence,
+        title=excluded.title, description=excluded.description,
+        evidence=excluded.evidence, business_impact=excluded.business_impact,
+        remediation=excluded.remediation, blocking=excluded.blocking,
+        linked_task_id=excluded.linked_task_id, resolution=excluded.resolution,
+        source_engine=excluded.source_engine, source_version=excluded.source_version,
+        supersedes_finding_id=excluded.supersedes_finding_id,
+        content_hash=excluded.content_hash
+      RETURNING *`;
 
-    this.stmts.set(
-      STMT.GET_FINDINGS_BY_PR,
-      db.prepare(
-        "SELECT * FROM findings WHERE pr_id = ? AND repository = ? ORDER BY created_at DESC",
-      ),
-    );
-    this.stmts.set(
+    this.sqls.set(STMT.UPSERT_FINDING, upsertSQL);
+    this.sqls.set(
       STMT.GET_FINDING_BY_ID,
-      db.prepare("SELECT * FROM findings WHERE id = ?"),
+      "SELECT * FROM findings WHERE id = ?",
     );
-    this.stmts.set(
+    this.sqls.set(
+      STMT.GET_FINDINGS_BY_PR,
+      "SELECT * FROM findings WHERE pr_id = ? AND repository = ? ORDER BY created_at DESC",
+    );
+    this.sqls.set(
       STMT.GET_FINDINGS_BY_HASH,
-      db.prepare(
-        "SELECT * FROM findings WHERE pr_id = ? AND content_hash = ? ORDER BY created_at DESC",
-      ),
+      "SELECT * FROM findings WHERE pr_id = ? AND content_hash = ? ORDER BY created_at DESC",
     );
-    this.stmts.set(
+    this.sqls.set(
       STMT.GET_FINDINGS_BY_ENGINE,
-      db.prepare(
-        "SELECT * FROM findings WHERE source_engine = ? ORDER BY created_at DESC",
-      ),
+      "SELECT * FROM findings WHERE source_engine = ? ORDER BY created_at DESC",
     );
-
-    const upsertCols =
-      "pr_id=excluded.pr_id, repository=excluded.repository, file_path=excluded.file_path, line_start=excluded.line_start, line_end=excluded.line_end, category=excluded.category, severity=excluded.severity, confidence=excluded.confidence, title=excluded.title, description=excluded.description, evidence=excluded.evidence, business_impact=excluded.business_impact, remediation=excluded.remediation, blocking=excluded.blocking, linked_task_id=excluded.linked_task_id, resolution=excluded.resolution, source_engine=excluded.source_engine, source_version=excluded.source_version, supersedes_finding_id=excluded.supersedes_finding_id, content_hash=excluded.content_hash";
-
-    this.stmts.set(
-      STMT.UPSERT_FINDING,
-      db.prepare(`
-        INSERT INTO findings (
-          id, pr_id, repository, file_path, line_start, line_end,
-          category, severity, confidence, title, description,
-          evidence, business_impact, remediation, blocking, linked_task_id, resolution,
-          source_engine, source_version, supersedes_finding_id,
-          content_hash, created_at
-        ) VALUES (
-          @id, @pr_id, @repository, @file_path, @line_start, @line_end,
-          @category, @severity, @confidence, @title, @description,
-          @evidence, @business_impact, @remediation, @blocking, @linked_task_id, @resolution,
-          @source_engine, @source_version, @supersedes_finding_id,
-          @content_hash, @created_at
-        )
-        ON CONFLICT(pr_id, content_hash, source_engine) DO UPDATE SET
-          ${upsertCols}
-        RETURNING *
-      `),
-    );
-
-    this.stmts.set(
+    this.sqls.set(
       STMT.UPDATE_RESOLUTION,
-      db.prepare(
-        "UPDATE findings SET resolution = ?, resolved_at = ? WHERE id = ?",
-      ),
+      "UPDATE findings SET resolution = ?, resolved_at = ? WHERE id = ?",
     );
-
-    this.stmts.set(
-      STMT.RESOLVED_AT,
-      db.prepare("SELECT resolved_at FROM findings WHERE id = ?"),
-    );
-
-    this.stmts.set(
+    this.sqls.set(
       STMT.INSERT_OVERRIDE,
-      db.prepare(`
-        INSERT INTO override_log
-          (finding_id, overridden_by, old_resolution, new_resolution,
-           justification, second_approver, expiry_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `),
+      `INSERT INTO override_log
+        (finding_id, overridden_by, old_resolution, new_resolution,
+         justification, second_approver, expiry_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     );
-
-    this.stmts.set(
+    this.sqls.set(
       STMT.INSERT_AUDIT,
-      db.prepare(`
-        INSERT INTO audit_records
-          (id, pr_id, repository, commit_hash, base_commit_hash,
-           review_start_timestamp, review_end_timestamp, scanners,
-           model_version, findings_count, blocking_findings_count,
-           merge_policy_decision, supersedes_review_id, raw_scanner_outputs)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `),
+      `INSERT INTO audit_records
+        (id, pr_id, repository, commit_hash, base_commit_hash,
+         review_start_timestamp, review_end_timestamp, scanners,
+         model_version, findings_count, blocking_findings_count,
+         merge_policy_decision, supersedes_review_id, raw_scanner_outputs)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
-
-    this.stmts.set(
+    this.sqls.set(
+      STMT.INSERT_FINDING_COMMENT_THREAD,
+      `INSERT OR IGNORE INTO finding_comment_threads
+        (repository, pr_id, finding_id, thread_id, created_at)
+       VALUES (@repository, @pr_id, @finding_id, @thread_id, @created_at)`,
+    );
+    this.sqls.set(
+      STMT.GET_FINDING_COMMENT_THREADS_BY_PR,
+      "SELECT repository, pr_id, finding_id, thread_id, created_at FROM finding_comment_threads WHERE pr_id = ? AND repository = ?",
+    );
+    this.sqls.set(
       STMT.GET_EXPIRED_OVERRIDES,
-      db.prepare(`
-        SELECT DISTINCT ol.finding_id, f.resolution
-        FROM override_log ol
-        JOIN findings f ON f.id = ol.finding_id
-        WHERE ol.expiry_date IS NOT NULL
-          AND ol.expiry_date < datetime('now')
-          AND ol.new_resolution NOT IN ('open')
-        ORDER BY ol.created_at DESC
-      `),
+      `SELECT DISTINCT ol.finding_id, f.resolution
+       FROM override_log ol
+       JOIN findings f ON f.id = ol.finding_id
+       WHERE ol.expiry_date IS NOT NULL
+         AND ol.expiry_date < datetime('now')
+         AND ol.new_resolution NOT IN ('open')
+       ORDER BY ol.created_at DESC`,
     );
   }
 
@@ -345,10 +430,11 @@ export class FindingStore {
     }
   }
 
-  private getStmt(id: string): Database.Statement {
-    const stmt = this.stmts.get(id);
-    if (!stmt) throw new Error(`Statement not found: ${id}`);
-    return stmt;
+  /** Prepare a fresh statement from the stored SQL. Freed after use by helpers. */
+  private prep(id: string): any {
+    const sql = this.sqls.get(id);
+    if (!sql) throw new Error(`Statement not found: ${id}`);
+    return this.db!.prepare(sql);
   }
 
   // ─── Public API ──────────────────────────────────────────────────────────
@@ -359,11 +445,9 @@ export class FindingStore {
    */
   upsertFinding(finding: NormalizedFinding): NormalizedFinding {
     this.assertInitialized();
-    const row = findingToRow(finding);
+    const rowData = findingToRow(finding);
     try {
-      const result = this.getStmt(STMT.UPSERT_FINDING).get(row) as
-        | FindingRow
-        | undefined;
+      const result = row<FindingRow>(this.prep(STMT.UPSERT_FINDING), prefixBindParams(rowData));
       return result ? rowToFinding(result) : finding;
     } catch (err) {
       throw new Error(
@@ -377,12 +461,17 @@ export class FindingStore {
    */
   batchUpsert(findings: NormalizedFinding[]): NormalizedFinding[] {
     this.assertInitialized();
-    const upsert = this.db!.transaction(
-      (items: NormalizedFinding[]) => {
-        return items.map((f) => this.upsertFinding(f));
-      },
-    );
-    return upsert(findings);
+    try {
+      this.db!.run("BEGIN");
+      const results = findings.map((f) => this.upsertFinding(f));
+      this.db!.run("COMMIT");
+      return results;
+    } catch (err) {
+      this.db!.run("ROLLBACK");
+      throw new Error(
+        `Failed to batch upsert findings: ${(err as Error).message}`,
+      );
+    }
   }
 
   /**
@@ -391,15 +480,46 @@ export class FindingStore {
   getFindingsByPr(prId: number, repository: string): NormalizedFinding[] {
     this.assertInitialized();
     try {
-      const rows = this.getStmt(
-        STMT.GET_FINDINGS_BY_PR,
-      ).all(prId, repository) as FindingRow[];
-      return rows.map(rowToFinding);
+      const resultRows = rows<FindingRow>(
+        this.prep(STMT.GET_FINDINGS_BY_PR),
+        [prId, repository],
+      );
+      return resultRows.map(rowToFinding);
     } catch (err) {
       throw new Error(
         `Failed to get findings for PR ${prId}: ${(err as Error).message}`,
       );
     }
+  }
+
+  queryFindings(filters: {
+    prId?: number;
+    repository?: string;
+    engine?: FindingEngine;
+    resolution?: FindingResolution;
+  }): NormalizedFinding[] {
+    this.assertInitialized();
+    let query = "SELECT * FROM findings WHERE 1=1";
+    const params: unknown[] = [];
+    if (filters.prId !== undefined) {
+      query += " AND pr_id = ?";
+      params.push(filters.prId);
+    }
+    if (filters.repository) {
+      query += " AND repository = ?";
+      params.push(filters.repository);
+    }
+    if (filters.engine) {
+      query += " AND source_engine = ?";
+      params.push(filters.engine);
+    }
+    if (filters.resolution) {
+      query += " AND resolution = ?";
+      params.push(filters.resolution);
+    }
+    query += " ORDER BY created_at DESC";
+    const resultRows = rows<FindingRow>(this.db!.prepare(query), params);
+    return resultRows.map(rowToFinding);
   }
 
   /**
@@ -408,15 +528,55 @@ export class FindingStore {
   getFindingById(id: string): NormalizedFinding | null {
     this.assertInitialized();
     try {
-      const row = this.getStmt(STMT.GET_FINDING_BY_ID).get(id) as
-        | FindingRow
-        | undefined;
-      return row ? rowToFinding(row) : null;
+      const result = row<FindingRow>(this.prep(STMT.GET_FINDING_BY_ID), [id]);
+      return result ? rowToFinding(result) : null;
     } catch (err) {
       throw new Error(
         `Failed to get finding ${id}: ${(err as Error).message}`,
       );
     }
+  }
+
+  linkCommentThread(
+    thread: Omit<FindingCommentThread, "createdAt">,
+  ): void {
+    this.assertInitialized();
+    const finding = this.getFindingById(thread.findingId);
+    if (
+      !finding ||
+      finding.prId !== thread.prId ||
+      finding.repository !== thread.repository
+    ) {
+      throw new Error("Comment thread must belong to the finding's PR and repository");
+    }
+    exec(
+      this.prep(STMT.INSERT_FINDING_COMMENT_THREAD),
+      prefixBindParams({
+        repository: thread.repository,
+        pr_id: thread.prId,
+        finding_id: thread.findingId,
+        thread_id: thread.threadId,
+        created_at: new Date().toISOString(),
+      }),
+    );
+  }
+
+  getCommentThreadsByPr(
+    prId: number,
+    repository: string,
+  ): FindingCommentThread[] {
+    this.assertInitialized();
+    const resultRows = rows<FindingCommentThreadRow>(
+      this.prep(STMT.GET_FINDING_COMMENT_THREADS_BY_PR),
+      [prId, repository],
+    );
+    return resultRows.map((row) => ({
+      repository: row.repository,
+      prId: row.pr_id,
+      findingId: row.finding_id,
+      threadId: row.thread_id,
+      createdAt: row.created_at,
+    }));
   }
 
   /**
@@ -425,7 +585,7 @@ export class FindingStore {
    */
   updateResolution(
     id: string,
-    resolution: string,
+    resolution: FindingResolution,
     options?: {
       overriddenBy?: string;
       justification?: string;
@@ -436,20 +596,21 @@ export class FindingStore {
     this.assertInitialized();
     try {
       // Get current resolution before updating
-      const current = this.getStmt(STMT.GET_FINDING_BY_ID).get(id) as
-        | FindingRow
-        | undefined;
+      const current = row<FindingRow>(
+        this.prep(STMT.GET_FINDING_BY_ID),
+        [id],
+      );
       if (!current) {
         throw new Error(`Finding not found: ${id}`);
       }
 
       const resolvedAt =
         resolution === "resolved" ? new Date().toISOString() : null;
-      this.getStmt(STMT.UPDATE_RESOLUTION).run(resolution, resolvedAt, id);
+      exec(this.prep(STMT.UPDATE_RESOLUTION), [resolution, resolvedAt, id]);
 
       // If override options provided, log the override
       if (options?.overriddenBy) {
-        this.getStmt(STMT.INSERT_OVERRIDE).run(
+        exec(this.prep(STMT.INSERT_OVERRIDE), [
           id,
           options.overriddenBy,
           current.resolution,
@@ -457,13 +618,37 @@ export class FindingStore {
           options.justification ?? null,
           options.secondApprover ?? null,
           options.expiryDate ?? null,
-        );
+        ]);
       }
     } catch (err) {
       throw new Error(
         `Failed to update resolution for finding ${id}: ${(err as Error).message}`,
       );
     }
+  }
+
+  queryOverrideLog(findingId?: string): OverrideLogEntry[] {
+    this.assertInitialized();
+    const query = [
+      "SELECT * FROM override_log",
+      findingId ? "WHERE finding_id = ?" : "",
+      "ORDER BY created_at DESC, id DESC",
+    ].filter(Boolean).join(" ");
+    const rowsList = rows<OverrideLogRow>(
+      this.db!.prepare(query),
+      findingId ? [findingId] : undefined,
+    );
+    return rowsList.map((rowItem) => ({
+      id: rowItem.id,
+      findingId: rowItem.finding_id,
+      overriddenBy: rowItem.overridden_by,
+      oldResolution: rowItem.old_resolution,
+      newResolution: rowItem.new_resolution,
+      justification: rowItem.justification,
+      secondApprover: rowItem.second_approver,
+      expiryDate: rowItem.expiry_date,
+      createdAt: rowItem.created_at,
+    }));
   }
 
   /**
@@ -473,11 +658,11 @@ export class FindingStore {
   getFindingsByContentHash(prId: number, hash: string): NormalizedFinding[] {
     this.assertInitialized();
     try {
-      const rows = this.getStmt(STMT.GET_FINDINGS_BY_HASH).all(
-        prId,
-        hash,
-      ) as FindingRow[];
-      return rows.map(rowToFinding);
+      const resultRows = rows<FindingRow>(
+        this.prep(STMT.GET_FINDINGS_BY_HASH),
+        [prId, hash],
+      );
+      return resultRows.map(rowToFinding);
     } catch (err) {
       throw new Error(
         `Failed to get findings by hash for PR ${prId}: ${(err as Error).message}`,
@@ -488,13 +673,14 @@ export class FindingStore {
   /**
    * Get all findings for a given scanner engine.
    */
-  getFindingsByEngine(engine: string): NormalizedFinding[] {
+  getFindingsByEngine(engine: FindingEngine): NormalizedFinding[] {
     this.assertInitialized();
     try {
-      const rows = this.getStmt(STMT.GET_FINDINGS_BY_ENGINE).all(
-        engine,
-      ) as FindingRow[];
-      return rows.map(rowToFinding);
+      const resultRows = rows<FindingRow>(
+        this.prep(STMT.GET_FINDINGS_BY_ENGINE),
+        [engine],
+      );
+      return resultRows.map(rowToFinding);
     } catch (err) {
       throw new Error(
         `Failed to get findings for engine ${engine}: ${(err as Error).message}`,
@@ -508,7 +694,7 @@ export class FindingStore {
   saveAuditRecord(record: AuditRecord): void {
     this.assertInitialized();
     try {
-      this.getStmt(STMT.INSERT_AUDIT).run(
+      exec(this.prep(STMT.INSERT_AUDIT), [
         record.id,
         record.prId,
         record.repository,
@@ -525,7 +711,7 @@ export class FindingStore {
         record.rawScannerOutputs
           ? JSON.stringify(record.rawScannerOutputs)
           : null,
-      );
+      ]);
     } catch (err) {
       throw new Error(
         `Failed to save audit record ${record.id}: ${(err as Error).message}`,
@@ -566,8 +752,11 @@ export class FindingStore {
 
       query += " ORDER BY created_at DESC";
 
-      const rows = this.db!.prepare(query).all(...params) as AuditRecordRow[];
-      return rows.map(rowToAuditRecord);
+      const resultRows = rows<AuditRecordRow>(
+        this.db!.prepare(query),
+        params,
+      );
+      return resultRows.map(rowToAuditRecord);
     } catch (err) {
       throw new Error(
         `Failed to query audit records: ${(err as Error).message}`,
@@ -581,11 +770,11 @@ export class FindingStore {
   getExpiredOverrides(): { findingId: string; resolution: string }[] {
     this.assertInitialized();
     try {
-      const rows = this.getStmt(STMT.GET_EXPIRED_OVERRIDES).all() as {
+      const resultRows = rows<{
         finding_id: string;
         resolution: string;
-      }[];
-      return rows.map((r) => ({
+      }>(this.prep(STMT.GET_EXPIRED_OVERRIDES));
+      return resultRows.map((r) => ({
         findingId: r.finding_id,
         resolution: r.resolution,
       }));
@@ -597,13 +786,25 @@ export class FindingStore {
   }
 
   /**
-   * Close the database connection.
+   * Persist the current in-memory database to disk.
+   */
+  saveToDisk(): void {
+    if (!this.db || !this.sql) return;
+    const effectivePath = path.resolve(this.dbPath);
+    const data = this.db.export();
+    fs.writeFileSync(effectivePath, Buffer.from(data));
+  }
+
+  /**
+   * Save to disk and close the database connection.
    */
   close(): void {
     if (this.db) {
-      this.stmts.clear();
+      this.saveToDisk();
+      this.sqls.clear();
       this.db.close();
       this.db = null;
+      this.sql = null;
     }
   }
 }
@@ -656,8 +857,8 @@ function rowToFinding(r: FindingRow): NormalizedFinding {
     remediation: r.remediation,
     blocking: r.blocking === 1,
     linkedTaskId: r.linked_task_id,
-    resolution: r.resolution,
-    sourceEngine: r.source_engine,
+    resolution: r.resolution as FindingResolution,
+    sourceEngine: r.source_engine as FindingEngine,
     sourceVersion: r.source_version,
     supersedesFindingId: r.supersedes_finding_id,
     contentHash: r.content_hash,

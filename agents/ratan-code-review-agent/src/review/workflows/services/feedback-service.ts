@@ -1,4 +1,8 @@
-import { FindingStore } from "finding-store";
+import {
+  FindingStore,
+  type FindingEngine,
+  type FindingResolution,
+} from "finding-store";
 import type { ConfigProvider } from "agent-config-manager";
 import { getLogger } from "../../../cli/utils/logger";
 
@@ -55,7 +59,7 @@ export class FeedbackService {
     );
 
     // Map feedback type to resolution
-    const resolutionMap: Record<string, string> = {
+    const resolutionMap: Partial<Record<FeedbackEntry["feedbackType"], FindingResolution>> = {
       "false-positive": "resolved",
       "already-addressed": "resolved",
       "by-design": "resolved",
@@ -99,74 +103,55 @@ export class FeedbackService {
     let dismissedByDev = 0;
     let flaggedFalsePositive = 0;
 
-    // Get all findings for this PR that have a linked comment thread
-    const findings = this.findingStore.getFindingsByPr(prId, repoName);
+    const linkedThreads = this.findingStore.getCommentThreadsByPr(prId, repoName);
+    if (linkedThreads.length === 0) {
+      return { syncedCount, resolvedByDev, dismissedByDev, flaggedFalsePositive };
+    }
 
-    for (const finding of findings) {
-      // Try to find matching thread — we can match by finding's linked properties
-      // In practice, comment threads for this finding are tracked via the
-      // FindingStore's override/audit mechanisms. We query ADO to get the
-      // latest status of threads associated with the review.
+    try {
+      const threads = await adoClient.getPullRequestThreads(repoName, prId);
+      const threadsById = new Map((threads ?? []).map((thread) => [thread.id, thread]));
 
-      // Fetch all comment threads on this PR
-      try {
-        const threads = await adoClient.getPullRequestThreads(
-          repoName,
-          prId,
+      for (const link of linkedThreads) {
+        const thread = threadsById.get(link.threadId);
+        if (!thread || thread.status === undefined || thread.status === null) continue;
+
+        const statusKey = CommentThreadStatus[thread.status] || "Unknown";
+        const hasFalsePositiveIndication = (thread.comments ?? []).some(
+          (entry: { content?: string }) =>
+            entry.content?.toLowerCase().startsWith("no") ||
+            entry.content?.toLowerCase().includes("false positive") ||
+            entry.content?.toLowerCase().includes("not a bug"),
         );
 
-        for (const thread of threads ?? []) {
-          if (thread.status === undefined || thread.status === null) continue;
-
-          const statusKey = CommentThreadStatus[thread.status] || "Unknown";
-
-          // Check if this thread's comments indicate false positive
-          const hasFalsePositiveIndication = (thread.comments ?? []).some(
-            (c: { content?: string }) =>
-              c.content?.toLowerCase().startsWith("no") ||
-              c.content?.toLowerCase().includes("false positive") ||
-              c.content?.toLowerCase().includes("not a bug"),
-          );
-
-          if (hasFalsePositiveIndication) {
-            this.findingStore.updateResolution(finding.id, "resolved", {
-              overriddenBy: "system",
-              justification: `Auto-detected false positive from ADO comment: ${statusKey}`,
-            });
-            flaggedFalsePositive++;
-          }
-
-          // Map thread status to finding resolution
-          if (
-            statusKey === "Fixed" ||
-            statusKey === "Closed"
-          ) {
-            // Developer has resolved/fixed the issue — mark as resolved
-            this.findingStore.updateResolution(finding.id, "resolved", {
-              overriddenBy: "system",
-              justification: `Issue resolved by developer (ADO: ${statusKey})`,
-            });
-            resolvedByDev++;
-            syncedCount++;
-          } else if (
-            statusKey === "WontFix" ||
-            statusKey === "ByDesign"
-          ) {
-            // Developer has dismissed the issue
-            this.findingStore.updateResolution(finding.id, "waived", {
-              overriddenBy: "system",
-              justification: `Issue dismissed by developer (ADO: ${statusKey})`,
-            });
-            dismissedByDev++;
-            syncedCount++;
-          }
+        if (hasFalsePositiveIndication) {
+          this.findingStore.updateResolution(link.findingId, "resolved", {
+            overriddenBy: "system",
+            justification: `Auto-detected false positive from ADO comment: ${statusKey}`,
+          });
+          flaggedFalsePositive++;
         }
-      } catch (err) {
-        this.logger.debug(
-          `Error syncing thread for finding ${finding.id}: ${(err as Error).message}`,
-        );
-        // Continue with next finding
+
+        if (statusKey === "Fixed" || statusKey === "Closed") {
+          this.findingStore.updateResolution(link.findingId, "resolved", {
+            overriddenBy: "system",
+            justification: `Issue resolved by developer (ADO: ${statusKey})`,
+          });
+          resolvedByDev++;
+          syncedCount++;
+        } else if (statusKey === "WontFix" || statusKey === "ByDesign") {
+          this.findingStore.updateResolution(link.findingId, "waived", {
+            overriddenBy: "system",
+            justification: `Issue dismissed by developer (ADO: ${statusKey})`,
+          });
+          dismissedByDev++;
+          syncedCount++;
+        }
       }
+    } catch (err) {
+      this.logger.debug(
+        `Error syncing comment threads for PR ${prId}: ${(err as Error).message}`,
+      );
     }
 
     this.logger.info(
@@ -192,7 +177,11 @@ export class FeedbackService {
       { total: number; falsePositive: number; fpRate: number }
     > = {};
     const highFpRules: string[] = [];
-    const engines = ["ai-review", "sonarqube-cve", "compliance"];
+    const engines: FindingEngine[] = [
+      "open-code-review",
+      "sonarqube-cve",
+      "compliance",
+    ];
 
     for (const engine of engines) {
       let findings;
@@ -204,8 +193,7 @@ export class FeedbackService {
 
       const total = findings.length;
       const falsePositive = findings.filter(
-        (f: { resolution?: string }) =>
-          f.resolution === "resolved" || f.resolution === "waived",
+        (finding) => finding.resolution === "false-positive",
       ).length;
       const fpRate = total > 0 ? falsePositive / total : 0;
 

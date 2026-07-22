@@ -116,7 +116,7 @@ async function startFeedbackDaemon(
 
   try {
     findingStore = new FindingStore(findingStorePath);
-    findingStore.init();
+    await findingStore.init();
   } catch (err) {
     logger.warn(
       `Cannot init FindingStore for feedback daemon: ${(err as Error).message}`,
@@ -181,19 +181,29 @@ async function startFeedbackDaemon(
 const PLACEHOLDER_PATTERNS: Array<{ path: string[]; label: string; envVar?: string }> = [
   { path: ["ado", "organization"], label: "Azure DevOps organization" },
   { path: ["ado", "project"], label: "Azure DevOps project" },
+  { path: ["ado", "token"], label: "Azure DevOps PAT (personal access token)", envVar: "ADO_TOKEN" },
   { path: ["openCodeReview", "llm", "url"], label: "LLM endpoint URL", envVar: "OCR_LLM_URL" },
   { path: ["openCodeReview", "llm", "token"], label: "LLM API token", envVar: "OCR_LLM_TOKEN" },
   { path: ["openCodeReview", "llm", "model"], label: "LLM model name" },
+  { path: ["sonarQube", "url"], label: "SonarQube server URL", envVar: "SONARQUBE_URL" },
+  { path: ["sonarQube", "token"], label: "SonarQube API token", envVar: "SONARQUBE_TOKEN" },
 ];
 
 function isPlaceholder(value: unknown): boolean {
-  return (
+  if (typeof value !== "string") return false;
+  if (
     value === "your-organization" ||
     value === "your-project" ||
     value === "set-your-llm-token" ||
-    String(value).startsWith("http://your-llm-endpoint") ||
-    String(value).startsWith("your-")
-  );
+    value === "set-your-sonar-token" ||
+    value.startsWith("http://your-llm-endpoint") ||
+    value.startsWith("https://your-sonarqube") ||
+    value.startsWith("your-")
+  ) return true;
+  // env:X references where the env var is not set — treat as unresolved placeholder
+  const envMatch = value.match(/^env:(.+)$/);
+  if (envMatch && !process.env[envMatch[1]]) return true;
+  return false;
 }
 
 function getNested(obj: Record<string, unknown>, pathArr: string[]): unknown {
@@ -273,6 +283,106 @@ async function configureDefaults(ratanDir: string): Promise<void> {
   console.log("  Config updated.\n");
 }
 
+// ─── Startup Validation ───────────────────────────────────────────────────────
+
+const PLACEHOLDER_SONAR_TOKEN = "set-your-sonar-token";
+
+function isSonarPlaceholder(value: string): boolean {
+  return (
+    value === PLACEHOLDER_SONAR_TOKEN ||
+    value.startsWith("https://your-sonarqube") ||
+    value.startsWith("http://your-sonarqube") ||
+    value.startsWith("your-")
+  );
+}
+
+function validateConfigInputs(
+  config: import("agent-config-manager").RootAgentConfig,
+  logger: ReturnType<typeof getLogger>,
+): void {
+  const warnings: string[] = [];
+  const infos: string[] = [];
+
+  // ── SonarQube validation ──────────────────────────────────────────────
+  const sonarQube = config.sonarQube;
+  const cveEnabled = config.scannerSettings?.cve?.enabled !== false;
+
+  if (sonarQube?.url && sonarQube?.token) {
+    if (isSonarPlaceholder(sonarQube.url)) {
+      warnings.push(
+        "SonarQube URL is still a placeholder (" + sonarQube.url + "). " +
+        "Update config.sonarQube.url for SonarQube measures and CVE scanning.",
+      );
+    } else if (isSonarPlaceholder(sonarQube.token)) {
+      warnings.push(
+        "SonarQube token is still a placeholder. " +
+        "Update config.sonarQube.token or use 'env:VAR_NAME' to reference an environment variable.",
+      );
+    } else {
+      infos.push("SonarQube: configured at " + sonarQube.url);
+    }
+  } else if (!sonarQube?.url && cveEnabled) {
+    warnings.push(
+      "CVE scanner is enabled (scannerSettings.cve.enabled) but no SonarQube URL is configured. " +
+      "Set config.sonarQube.url and config.sonarQube.token, or disable CVE scanning: " +
+      'scannerSettings.cve.enabled = false.',
+    );
+  } else if (sonarQube?.url && !sonarQube?.token) {
+    warnings.push(
+      "SonarQube URL is configured but no token is provided. " +
+      "SonarQube measures and CVE scanning will be unavailable. " +
+      "Set config.sonarQube.token or reference it via 'env:VAR_NAME'.",
+    );
+  } else {
+    infos.push("SonarQube: not configured (CVE scanning will be skipped)");
+  }
+
+  // ── ADO validation ──────────────────────────────────────────────────────
+  const ado = config.ado;
+  if (ado?.organization && ado?.project && ado?.token) {
+    infos.push("Azure DevOps: configured (" + ado.organization + "/" + ado.project + ")");
+  } else if (!ado?.token) {
+    warnings.push(
+      "ADO token is missing. " +
+      "Set config.ado.token or supply the token via 'env:VAR_NAME' (e.g. 'env:ADO_TOKEN'). " +
+      "ADO connection and PR review will be unavailable.",
+    );
+  } else {
+    warnings.push(
+      "ADO organization or project is missing. " +
+      "Ensure config.ado.organization and config.ado.project are both set.",
+    );
+  }
+
+  // ── Compliance scanner ────────────────────────────────────────────────
+  const complianceEnabled = config.scannerSettings?.compliance?.enabled === true;
+  infos.push(
+    "Compliance scanner: " + (complianceEnabled ? "enabled" : "disabled"),
+  );
+
+  // ── OpenCodeReview ────────────────────────────────────────────────────
+  const ocr = config.openCodeReview;
+  if (ocr?.llm?.url && ocr?.llm?.token && ocr?.llm?.model) {
+    const protocolInfo = ocr.llm.protocol ? ` (protocol: ${ocr.llm.protocol})` : "";
+    infos.push("OpenCodeReview: configured (" + ocr.llm.model + " at " + ocr.llm.url + protocolInfo + ")");
+  } else {
+    warnings.push(
+      "OpenCodeReview LLM config is incomplete. " +
+      "Ensure config.openCodeReview.llm.url, .token, and .model are all set.",
+    );
+  }
+
+  // ── Print results ─────────────────────────────────────────────────────
+  for (const info of infos) {
+    logger.info(info);
+  }
+  if (warnings.length > 0) {
+    for (const warning of warnings) {
+      logger.warn(warning);
+    }
+  }
+}
+
 // ─── Start Command ───────────────────────────────────────────────────────────
 
 export async function startCommand(options: StartOptions) {
@@ -309,7 +419,21 @@ export async function startCommand(options: StartOptions) {
     process.exit(1);
   }
 
-  // 4. Initialize PR queue with build pipeline check
+  // 3b. Validate key config inputs and alert on missing/placeholder values
+  logger.info("Validating configuration inputs...");
+  validateConfigInputs(rootConfig, logger);
+
+  // 4. Explicit reviews run directly so completion and failures propagate to the caller.
+  if (options.prId !== undefined) {
+    logger.info(`Reviewing single PR #${options.prId}`);
+    await startReviewPrWithProvider(provider, options.prId);
+    return;
+  }
+
+  const autoScan = getAutoScanService();
+  autoScan.setRepoPatterns(options.repoPatterns ?? []);
+
+  // 5. Initialize automatic-scan queue with build pipeline check
   const queue = getPRQueue();
   queue.setProcessor(async (item) => {
     const hasBuild = await queue.hasBuildPipeline(
@@ -324,13 +448,6 @@ export async function startCommand(options: StartOptions) {
     await startReviewPrWithProvider(provider, item.prId);
   });
 
-  // 5. Handle single PR mode
-  if (options.prId !== undefined) {
-    logger.info(`Reviewing single PR #${options.prId}`);
-    queue.enqueue({ prId: options.prId, repoName: "" });
-    return;
-  }
-
   // 6. Start the feedback daemon (ado comment sync, false-positive detection)
   // 7. Handle --watch mode: scan every 30 minutes, daemon keeps running
   if (options.watch) {
@@ -338,8 +455,10 @@ export async function startCommand(options: StartOptions) {
     const INTERVAL_MS = rootConfig.watch?.intervalMs ?? 30 * 60 * 1000;
 
     const runScan = async () => {
-      const autoScan = getAutoScanService();
-      const healthy = await autoScan.isLLMEndpointHealthy();
+      const healthy = await autoScan.isLLMEndpointHealthy(
+        rootConfig.openCodeReview.llm.url,
+        rootConfig.openCodeReview.llm.token,
+      );
       if (!healthy) {
         logger.warn("LLM endpoint not healthy — skipping scan cycle");
         return;
@@ -366,7 +485,6 @@ export async function startCommand(options: StartOptions) {
   }
 
   // 8. Default mode: scan once and exit
-  const autoScan = getAutoScanService();
   const enqueued = await autoScan.scan(provider);
   logger.info(`Scan complete: ${enqueued} PR(s) enqueued`);
 

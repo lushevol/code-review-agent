@@ -41,7 +41,7 @@ export const recordAudit = defineStep({
     const findingStore = new FindingStore(
       rootConfig.findingStorePath ?? ".ratan/data/findings.db",
     );
-    findingStore.init();
+    await findingStore.init();
 
     const auditRecordId = randomUUID();
     const now = new Date().toISOString();
@@ -49,6 +49,12 @@ export const recordAudit = defineStep({
       new Set(inputData.findings.map((finding) => finding.sourceEngine)),
     ) as EngineType[];
     const auditService = new AuditService(findingStore);
+    const duplicateSuppressionReasons = asRecord(
+      inputData.reviewMetadata.duplicateSuppressionReasons,
+    );
+    const inlineSuppressionReasons = asRecord(
+      inputData.reviewMetadata.inlineSuppressionReasons,
+    );
 
     try {
       await auditService.recordReview({
@@ -78,7 +84,52 @@ export const recordAudit = defineStep({
         supersedesReviewId: null,
         rawScannerOutputs: {
           reviewExecutionStatus: inputData.reviewExecutionStatus,
-          ocr: inputData.reviewMetadata,
+          reviewFocuses: sanitizeReviewFocuses(
+            inputData.reviewMetadata.reviewFocuses,
+          ),
+          ocrStatus: String(inputData.reviewMetadata.status ?? "failed"),
+          ocrWarningTypes: Array.isArray(
+            inputData.reviewMetadata.warningTypes,
+          )
+            ? inputData.reviewMetadata.warningTypes.filter(
+                (value): value is string => typeof value === "string",
+              )
+            : [],
+          ocrWarningMessages: Array.isArray(
+            inputData.reviewMetadata.warningMessages,
+          )
+            ? inputData.reviewMetadata.warningMessages.filter(
+                (value): value is string => typeof value === "string",
+              )
+            : [],
+          ocrDurationMs: metricNumber(inputData.reviewMetadata.durationMs),
+          reviewedFileCount: metricNumber(
+            inputData.reviewMetadata.filesReviewed,
+          ),
+          postableFindingCount: metricNumber(
+            inputData.reviewMetadata.postableFindingCount,
+          ),
+          rawOcrOutput: String(inputData.reviewMetadata.rawOutput ?? ""),
+          rawOutputPath: String(inputData.reviewMetadata.rawOutputPath ?? ""),
+          duplicateSuppressionReasons: {
+            contentHashCorrelation: metricNumber(
+              duplicateSuppressionReasons.contentHashCorrelation,
+            ),
+            inlineContentHash: metricNumber(
+              duplicateSuppressionReasons.inlineContentHash,
+            ),
+            previouslyLinkedThread: metricNumber(
+              duplicateSuppressionReasons.previouslyLinkedThread,
+            ),
+          },
+          inlineSuppressionReasons: {
+            invalidCodeLocation: metricNumber(
+              inlineSuppressionReasons.invalidCodeLocation,
+            ),
+            commentLimit: metricNumber(
+              inlineSuppressionReasons.commentLimit,
+            ),
+          },
           correlationSummary: inputData.correlationSummary,
         },
       });
@@ -92,3 +143,34 @@ export const recordAudit = defineStep({
     };
   },
 });
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function metricNumber(value: unknown): number {
+  const number = Number(value ?? 0);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function sanitizeReviewFocuses(
+  value: unknown,
+): Array<{ focus: string; reasons: string[] }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const record = asRecord(item);
+    if (typeof record.focus !== "string" || !Array.isArray(record.reasons)) {
+      return [];
+    }
+    return [
+      {
+        focus: record.focus,
+        reasons: record.reasons.filter(
+          (reason): reason is string => typeof reason === "string",
+        ),
+      },
+    ];
+  });
+}

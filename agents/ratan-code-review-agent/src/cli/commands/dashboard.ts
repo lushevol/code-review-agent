@@ -1,5 +1,6 @@
 import { FindingStore } from "finding-store";
 import { createDashboardApp } from "../dashboard";
+import { serve } from "@hono/node-server";
 import { getLogger } from "../utils/logger";
 import { loadConfig } from "../config/loader";
 
@@ -19,7 +20,7 @@ export async function startDashboard(options: DashboardOptions) {
   // Initialize FindingStore
   const findingStore = new FindingStore(dbPath);
   try {
-    findingStore.init();
+    await findingStore.init();
     logger.info(`FindingStore initialized at: ${dbPath}`);
   } catch (err) {
     logger.error(`Could not open FindingStore at ${dbPath}`, err);
@@ -28,7 +29,7 @@ export async function startDashboard(options: DashboardOptions) {
 
   const app = createDashboardApp(findingStore);
 
-  app.listen(port, () => {
+  serve({ fetch: app.fetch, port }, () => {
     logger.info(`PR Guardian Dashboard listening on http://localhost:${port}`);
     logger.info(`API: http://localhost:${port}/api/health`);
   });

@@ -1,11 +1,26 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import express from "express";
-import cors from "cors";
-import type { FindingStore } from "finding-store";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import type { FindingEngine, FindingResolution, FindingStore } from "finding-store";
 import { getPRQueue } from "../services/pr-queue";
 import { getLogger } from "../utils/logger";
+
+const FINDING_ENGINES = new Set<FindingEngine>([
+  "ai-review",
+  "open-code-review",
+  "sonarqube-cve",
+  "compliance",
+]);
+const FINDING_RESOLUTIONS = new Set<FindingResolution>([
+  "open",
+  "resolved",
+  "superseded",
+  "waived",
+  "false-positive",
+  "accepted-risk",
+]);
 
 /**
  * Resolve the dashboard SPA build directory. Works in both tsx (dev) and
@@ -20,25 +35,22 @@ function resolveDashboardDir(): string | null {
   return null;
 }
 
-export function createDashboardApp(findingStore: FindingStore) {
-  const app = express();
+export function createDashboardApp(findingStore: FindingStore): Hono {
+  const app = new Hono();
   const logger = getLogger("dashboard");
 
-  app.use(cors());
-  app.use(express.json());
+  app.use("/api/*", cors());
 
   // ── Dashboard SPA ─────────────────────────────────────────────────────
   const dashboardDist = resolveDashboardDir();
-  if (dashboardDist) {
-    app.use(express.static(dashboardDist));
-  } else {
+  if (!dashboardDist) {
     logger.warn("Dashboard SPA not found — API-only mode");
   }
 
   // ── Health ────────────────────────────────────────────────────────────
 
-  app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok" });
+  app.get("/api/health", (c) => {
+    return c.json({ status: "ok" });
   });
 
   // ── Queue Status & Management ─────────────────────────────────────────
@@ -46,28 +58,31 @@ export function createDashboardApp(findingStore: FindingStore) {
   /**
    * Get the current state of the PR review queue.
    */
-  app.get("/api/queue", (_req, res) => {
+  app.get("/api/queue", (c) => {
     try {
       const queue = getPRQueue();
-      res.json({
+      return c.json({
         currentProcessing: queue.currentProcessing,
         pendingCount: queue.pendingCount,
         pending: queue.getPending(),
       });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      c.status(500);
+      return c.json({ error: String(err) });
     }
   });
 
   /**
    * Manually add a PR to the review queue.
    */
-  app.post("/api/queue", (req, res) => {
+  app.post("/api/queue", async (c) => {
     try {
-      const { prId, repoName, repoId } = req.body;
+      const body = await c.req.json();
+      const { prId, repoName, repoId } = body;
 
       if (!prId || typeof prId !== "number") {
-        return res.status(400).json({ error: "prId is required and must be a number" });
+        c.status(400);
+        return c.json({ error: "prId is required and must be a number" });
       }
 
       const queue = getPRQueue();
@@ -81,110 +96,135 @@ export function createDashboardApp(findingStore: FindingStore) {
         `Manual queue add: PR #${prId} (${repoName ?? "unknown repo"})`,
       );
 
-      res.json({
+      return c.json({
         success: true,
         prId,
         pendingCount: queue.pendingCount,
         currentProcessing: queue.currentProcessing,
       });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      c.status(500);
+      return c.json({ error: String(err) });
     }
   });
 
   /**
    * Cancel processing of the current PR (if any).
    */
-  app.post("/api/queue/cancel", (_req, res) => {
+  app.post("/api/queue/cancel", (c) => {
     try {
       const queue = getPRQueue();
       const cleared = queue.clearPending();
-      res.json({
+      return c.json({
         success: true,
         cleared,
         message: "Queue cleared (current processing continues)",
       });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      c.status(500);
+      return c.json({ error: String(err) });
     }
   });
 
   // ── Findings ──────────────────────────────────────────────────────────
 
-  app.get("/api/findings", (req, res) => {
+  app.get("/api/findings", (c) => {
     try {
-      const prId = req.query.prId ? Number(req.query.prId) : undefined;
-      const repo = req.query.repo as string | undefined;
-      const engine = req.query.engine as string | undefined;
-      const status = req.query.status as string | undefined;
+      const prId = c.req.query("prId") ? Number(c.req.query("prId")) : undefined;
+      const repo = c.req.query("repo") ?? undefined;
+      const engine = c.req.query("engine") ?? undefined;
+      const status = c.req.query("status") ?? undefined;
 
-      if (prId && repo) {
-        const findings = findingStore.getFindingsByPr(prId, repo);
-        let filtered = findings;
-        if (engine) filtered = filtered.filter(f => f.sourceEngine === engine);
-        if (status) filtered = filtered.filter(f => f.resolution === status);
-        return res.json({ findings: filtered, total: filtered.length });
+      if (c.req.query("prId") && (!Number.isInteger(prId) || (prId ?? 0) <= 0)) {
+        c.status(400);
+        return c.json({ error: "prId must be a positive integer" });
       }
-
-      return res.json({ findings: [], total: 0 });
+      if (engine && !FINDING_ENGINES.has(engine as FindingEngine)) {
+        c.status(400);
+        return c.json({ error: "engine is invalid" });
+      }
+      if (status && !FINDING_RESOLUTIONS.has(status as FindingResolution)) {
+        c.status(400);
+        return c.json({ error: "status is invalid" });
+      }
+      const findings = findingStore.queryFindings({
+        prId,
+        repository: repo,
+        engine: engine as FindingEngine | undefined,
+        resolution: status as FindingResolution | undefined,
+      });
+      return c.json({ findings, total: findings.length });
     } catch (err) {
-      return res.status(500).json({ error: String(err) });
+      c.status(500);
+      return c.json({ error: String(err) });
     }
   });
 
-  app.patch("/api/findings/:id", (req, res) => {
+  app.get("/api/overrides", (c) => {
     try {
-      const { id } = req.params;
-      const { resolution, justification, overriddenBy, expiryDate } = req.body;
+      const findingId = c.req.query("findingId") ?? undefined;
+      const overrides = findingStore.queryOverrideLog(findingId);
+      return c.json({ overrides, total: overrides.length });
+    } catch (err) {
+      c.status(500);
+      return c.json({ error: String(err) });
+    }
+  });
+
+  app.patch("/api/findings/:id", async (c) => {
+    try {
+      const id = c.req.param("id");
+      const body = await c.req.json();
+      const { resolution, justification, overriddenBy, expiryDate } = body;
 
       if (!resolution || !overriddenBy) {
-        return res.status(400).json({ error: "resolution and overriddenBy required" });
+        c.status(400);
+        return c.json({ error: "resolution and overriddenBy required" });
+      }
+      if (!FINDING_RESOLUTIONS.has(resolution as FindingResolution)) {
+        c.status(400);
+        return c.json({ error: "resolution is invalid" });
       }
 
-      findingStore.updateResolution(id, resolution, {
+      findingStore.updateResolution(id, resolution as FindingResolution, {
         overriddenBy,
         justification,
         expiryDate,
       });
 
-      return res.json({ success: true });
+      return c.json({ success: true });
     } catch (err) {
-      return res.status(500).json({ error: String(err) });
+      c.status(500);
+      return c.json({ error: String(err) });
     }
   });
 
   // ── Audit ─────────────────────────────────────────────────────────────
 
-  app.get("/api/audit", (req, res) => {
+  app.get("/api/audit", (c) => {
     try {
-      const prId = req.query.prId ? Number(req.query.prId) : undefined;
-      const repo = req.query.repo as string | undefined;
-      const from = req.query.from as string | undefined;
-      const to = req.query.to as string | undefined;
+      const prId = c.req.query("prId") ? Number(c.req.query("prId")) : undefined;
+      const repo = c.req.query("repo") ?? undefined;
+      const from = c.req.query("from") ?? undefined;
+      const to = c.req.query("to") ?? undefined;
 
       const records = findingStore.queryAuditRecords({ prId, repository: repo, from, to });
-      return res.json({ records });
+      return c.json({ records });
     } catch (err) {
-      return res.status(500).json({ error: String(err) });
+      c.status(500);
+      return c.json({ error: String(err) });
     }
   });
 
   // ── Stats ─────────────────────────────────────────────────────────────
 
-  app.get("/api/stats", (_req, res) => {
+  app.get("/api/stats", (c) => {
     try {
-      // Gather aggregated stats from FindingStore
       const auditRecords = findingStore.queryAuditRecords({});
-
-      // Count unique PRs
-      const uniquePrs = new Set(auditRecords.map((r) => r.prId));
-
-      // Count findings by severity
-      const allFindings = auditRecords.reduce((acc, record) => {
-        // Pull findings per PR from the store
-        const findings = findingStore.getFindingsByPr(record.prId, record.repository);
-        return acc.concat(findings);
-      }, [] as Array<{ severity: string; sourceEngine: string; resolution: string }>);
+      const uniquePrs = new Set(
+        auditRecords.map((record) => `${record.repository}:${record.prId}`),
+      );
+      const allFindings = findingStore.queryFindings({});
 
       const severityCounts: Record<string, number> = {};
       const engineCounts: Record<string, number> = {};
@@ -198,11 +238,20 @@ export function createDashboardApp(findingStore: FindingStore) {
         const eng = f.sourceEngine || "unknown";
         engineCounts[eng] = (engineCounts[eng] ?? 0) + 1;
 
-        if (sev === "critical" || sev === "high") totalBlocking++;
+        if (f.blocking && f.resolution === "open") totalBlocking++;
         if (f.resolution && f.resolution !== "open") totalResolved++;
       }
 
-      return res.json({
+      const recentActivity = [...auditRecords]
+        .sort((a, b) => b.reviewStartTimestamp.localeCompare(a.reviewStartTimestamp))
+        .slice(0, 10)
+        .map((record) => ({
+          action: record.mergePolicyDecision === "blocked" ? "Review blocked" : "Review completed",
+          detail: `${record.repository} PR #${record.prId}: ${record.findingsCount} findings`,
+          timestamp: record.reviewEndTimestamp,
+        }));
+
+      return c.json({
         totalReviews: auditRecords.length,
         totalPRs: uniquePrs.size,
         totalFindings: allFindings.length,
@@ -210,24 +259,25 @@ export function createDashboardApp(findingStore: FindingStore) {
         resolvedFindings: totalResolved,
         severityCounts,
         engineCounts,
+        recentActivity,
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
-      return res.status(500).json({ error: String(err) });
+      c.status(500);
+      return c.json({ error: String(err) });
     }
   });
 
   // ── PRs ───────────────────────────────────────────────────────────────
 
-  app.get("/api/prs", (req, res) => {
+  app.get("/api/prs", (c) => {
     try {
-      const repo = req.query.repo as string | undefined;
-      const status = req.query.status as string | undefined;
+      const repo = c.req.query("repo") ?? undefined;
+      const status = c.req.query("status") ?? undefined;
 
       const auditRecords = findingStore.queryAuditRecords({ repository: repo });
 
-      // Build unique PR list with aggregated data
-      const prMap = new Map<number, {
+      const prMap = new Map<string, {
         prId: number;
         repository: string;
         status: string;
@@ -236,39 +286,69 @@ export function createDashboardApp(findingStore: FindingStore) {
         createdAt: string;
       }>();
 
-      for (const record of auditRecords) {
-        if (status && record.mergePolicyDecision !== status) continue;
-
-        const existing = prMap.get(record.prId);
-        if (existing) {
-          existing.findingCount += record.findingsCount ?? 0;
-          existing.blockingCount += record.blockingFindingsCount ?? 0;
-        } else {
-          prMap.set(record.prId, {
+      for (const record of [...auditRecords].sort(
+        (a, b) => b.reviewStartTimestamp.localeCompare(a.reviewStartTimestamp),
+      )) {
+        const key = `${record.repository}:${record.prId}`;
+        if (!prMap.has(key)) {
+          const findings = findingStore.queryFindings({
+            prId: record.prId,
+            repository: record.repository,
+          });
+          prMap.set(key, {
             prId: record.prId,
             repository: record.repository,
             status: record.mergePolicyDecision,
-            findingCount: record.findingsCount,
-            blockingCount: record.blockingFindingsCount,
+            findingCount: findings.length,
+            blockingCount: findings.filter(
+              (finding) => finding.blocking && finding.resolution === "open",
+            ).length,
             createdAt: record.reviewStartTimestamp,
           });
         }
       }
 
-      return res.json({
-        prs: Array.from(prMap.values()),
-        total: prMap.size,
+      const prs = Array.from(prMap.values()).filter(
+        (pr) => !status || pr.status === status,
+      );
+
+      return c.json({
+        prs,
+        total: prs.length,
       });
     } catch (err) {
-      return res.status(500).json({ error: String(err) });
+      c.status(500);
+      return c.json({ error: String(err) });
     }
   });
 
   // ── SPA fallback — all non-API routes serve index.html for client-side routing ─
 
   if (dashboardDist) {
-    app.get("*", (_req, res) => {
-      res.sendFile(path.join(dashboardDist, "index.html"));
+    app.get("*", (c) => {
+      const filePath = path.join(dashboardDist, c.req.path);
+      if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+        const ext = path.extname(filePath);
+        const mime: Record<string, string> = {
+          ".js": "application/javascript",
+          ".css": "text/css",
+          ".html": "text/html",
+          ".png": "image/png",
+          ".svg": "image/svg+xml",
+          ".ico": "image/x-icon",
+          ".json": "application/json",
+          ".woff2": "font/woff2",
+        };
+        return c.body(fs.readFileSync(filePath), 200, {
+          "Content-Type": mime[ext] ?? "application/octet-stream",
+        });
+      }
+      // SPA fallback
+      const indexPath = path.join(dashboardDist, "index.html");
+      if (fs.existsSync(indexPath)) {
+        return c.html(fs.readFileSync(indexPath, "utf-8"));
+      }
+      return c.notFound();
     });
   }
 

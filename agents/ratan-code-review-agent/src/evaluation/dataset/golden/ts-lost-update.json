@@ -1,0 +1,9 @@
+{
+  "id": "ts-lost-update",
+  "language": "typescript",
+  "title": "Increment account balance",
+  "description": "Reads then writes a shared balance without atomicity.",
+  "files": [{ "path": "src/balance.ts", "changeType": "added", "after": "export async function add(id: string, amount: number) {\n  const account = await accounts.find(id);\n  account.balance += amount;\n  await accounts.save(account);\n}" }],
+  "expectedFindings": [{ "id": "lost-update", "filePath": "src/balance.ts", "lineStart": 2, "lineEnd": 4, "category": "bug", "allowedSeverities": ["critical", "high"], "messageIncludes": ["concurrent", "atomic"] }],
+  "allowedExtraFindings": 0
+}

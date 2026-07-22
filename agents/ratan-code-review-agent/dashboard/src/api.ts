@@ -18,15 +18,25 @@ export async function fetchFindings(params?: {
 
 export async function fetchAudit(params?: {
   prId?: number;
+  repo?: string;
   from?: string;
   to?: string;
 }): Promise<any> {
   const searchParams = new URLSearchParams();
   if (params?.prId) searchParams.set("prId", String(params.prId));
+  if (params?.repo) searchParams.set("repo", params.repo);
   if (params?.from) searchParams.set("from", params.from);
   if (params?.to) searchParams.set("to", params.to);
   const res = await fetch(`${API_BASE}/audit?${searchParams}`);
   if (!res.ok) throw new Error(`Failed to fetch audit: ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchOverrides(findingId?: string): Promise<any> {
+  const searchParams = new URLSearchParams();
+  if (findingId) searchParams.set("findingId", findingId);
+  const res = await fetch(`${API_BASE}/overrides?${searchParams}`);
+  if (!res.ok) throw new Error(`Failed to fetch overrides: ${res.statusText}`);
   return res.json();
 }
 
@@ -87,5 +97,11 @@ export async function addPRToQueue(prId: number, repoName?: string): Promise<any
     body: JSON.stringify({ prId, repoName: repoName ?? `PR #${prId}` }),
   });
   if (!res.ok) throw new Error(`Failed to add PR to queue: ${res.statusText}`);
+  return res.json();
+}
+
+export async function clearPendingQueue(): Promise<any> {
+  const res = await fetch(`${API_BASE}/queue/cancel`, { method: "POST" });
+  if (!res.ok) throw new Error(`Failed to clear queue: ${res.statusText}`);
   return res.json();
 }

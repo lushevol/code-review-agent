@@ -34,6 +34,7 @@ function buildWorkItemPatch(
   prId: number,
   prUrl: string,
   _workItemType: "Bug" | "Task",
+  workItemTags: string,
 ): Record<string, unknown>[] {
   const title = `[PR Guardian] ${finding.title} (PR #${prId})`;
   const description = [
@@ -71,7 +72,7 @@ function buildWorkItemPatch(
     {
       op: "add",
       path: "/fields/System.Tags",
-      value: "PR Guardian; Code Review",
+      value: workItemTags,
     },
   ];
 }
@@ -102,14 +103,20 @@ export const createWorkItems = defineStep({
     const { FindingStore } = await import("finding-store");
     const findingStore = new FindingStore();
     const findingStorePath = rootConfig.findingStorePath ?? ".ratan/data/findings.db";
-    findingStore.init(findingStorePath);
+    await findingStore.init(findingStorePath);
 
     // Build PR URL for work item description
     const org = adoClient.getOrganization();
     const project = adoClient.getProjectName();
     const repoName = encodeURIComponent(prDetails.repoName);
-    const prUrl =
-      `https://dev.azure.com/${org}/${project}/_git/${repoName}/pullrequest/${prDetails.pullRequestId}`;
+    const urlTemplate = rootConfig.remediationTasks?.adoUrlTemplate
+      ?? "https://dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/{prId}";
+    const prUrl = urlTemplate
+      .replace("{org}", org)
+      .replace("{project}", project)
+      .replace("{repo}", repoName)
+      .replace("{prId}", String(prDetails.pullRequestId));
+    const workItemTags = rootConfig.remediationTasks?.workItemTags ?? "PR Guardian; Code Review";
 
     // ── Filter to actionable findings ───────────────────────────────────
     const actionableFindings = findings.filter(
@@ -142,6 +149,7 @@ export const createWorkItems = defineStep({
         prDetails.pullRequestId,
         prUrl,
         workItemType,
+        workItemTags,
       );
 
       try {
@@ -152,7 +160,7 @@ export const createWorkItems = defineStep({
           workItemType,
         );
 
-        const workItemId = workItem.id;
+        const workItemId = workItem?.id;
         if (workItemId === undefined || workItemId === null) {
           console.warn(
             `[create-workitems] Created work item returned no ID for finding ${finding.id}`,

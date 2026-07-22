@@ -1,0 +1,9 @@
+{
+  "id": "ts-sql-injection",
+  "language": "typescript",
+  "title": "Find users by request id",
+  "description": "Adds a database lookup endpoint.",
+  "files": [{ "path": "src/users.ts", "changeType": "added", "after": "type User = { id: string; name: string };\n\ndeclare const db: { query(sql: string): User[] };\n\nexport function findUsersById(id: string): User[] {\n  return db.query(`SELECT * FROM users WHERE id = ${id}`);\n}" }],
+  "expectedFindings": [{ "id": "sql-injection", "filePath": "src/users.ts", "lineStart": 6, "lineEnd": 6, "category": "security", "allowedSeverities": ["critical", "high"], "messageIncludes": ["sql", "parameter"] }],
+  "allowedExtraFindings": 0
+}

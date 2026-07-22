@@ -1,9 +1,16 @@
-import { useEffect, useState, useMemo } from "react";
+import { Fragment, useEffect, useState, useMemo } from "react";
 import { fetchFindings, overrideFinding } from "../api";
 
 const SEVERITIES = ["critical", "high", "medium", "low", "informational"];
-const ENGINES = ["code-review", "sonarqube", "dependency-check", "secret-scanning"];
-const STATUSES = ["open", "resolved", "wont-fix", "false-positive"];
+const ENGINES = ["open-code-review", "sonarqube-cve", "compliance"];
+const STATUSES = [
+  "open",
+  "resolved",
+  "superseded",
+  "waived",
+  "false-positive",
+  "accepted-risk",
+];
 
 export default function FindingsPage() {
   const [findings, setFindings] = useState<any[]>([]);
@@ -229,9 +236,8 @@ export default function FindingsPage() {
               {filtered.map((f) => {
                 const isExpanded = expandedId === f.id;
                 return (
-                  <>
+                  <Fragment key={f.id}>
                     <tr
-                      key={f.id}
                       onClick={() =>
                         setExpandedId(isExpanded ? null : f.id)
                       }
@@ -252,7 +258,7 @@ export default function FindingsPage() {
                         {badge(f.severity || "unknown", severityColor(f.severity))}
                       </td>
                       <td style={cellStyle}>{f.category || "-"}</td>
-                      <td style={cellStyle}>{f.engine || f.source || "-"}</td>
+                      <td style={cellStyle}>{f.sourceEngine || f.engine || f.source || "-"}</td>
                       <td style={cellStyle}>
                         {badge(
                           f.resolution || f.status || "open",
@@ -333,7 +339,7 @@ export default function FindingsPage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>

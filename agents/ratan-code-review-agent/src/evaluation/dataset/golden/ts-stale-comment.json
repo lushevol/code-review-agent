@@ -1,0 +1,9 @@
+{
+  "id": "ts-stale-comment",
+  "language": "typescript",
+  "title": "Change retry behavior",
+  "description": "Changes retries but leaves the exported documentation stale.",
+  "files": [{ "path": "src/retry.ts", "changeType": "modified", "before": "/** Retries twice. */\nexport const attempts = 2;", "after": "/** Retries twice. */\nexport const attempts = 5;" }],
+  "expectedFindings": [{ "id": "stale-comment", "filePath": "src/retry.ts", "lineStart": 1, "lineEnd": 2, "category": "documentation", "allowedSeverities": ["medium", "low"], "messageIncludes": ["comment", "five"] }],
+  "allowedExtraFindings": 0
+}

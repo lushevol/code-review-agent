@@ -1,9 +1,34 @@
 import { defineStep } from "../../runtime";
 import z from "zod";
+import { FindingStore } from "finding-store";
 import { extractAgentConfig } from "../../../bootstrap/session";
 import { type CommonRequestContext, PullRequestSchema } from "../../types";
 import { NormalizedFindingSchema } from "../../types/finding";
 import { CODE_REVIEW_AGENT_LATEST_REVIEW_ID } from "../../utils/const";
+import {
+  evaluatePostableFindings,
+  indexPreviouslyLinkedFindings,
+} from "../scanners/finding-eligibility";
+
+const REVIEW_SUMMARY_MARKER = "<!-- pr-guardian:review-summary -->";
+const LEGACY_REVIEW_MARKER = "Ratan Code Review Agent";
+const CLOSED_THREAD_STATUS = 4;
+const FIXED_THREAD_STATUS = 2;
+
+type Finding = z.infer<typeof NormalizedFindingSchema>;
+
+type PullRequestComment = {
+  content?: string;
+  id?: number;
+  isDeleted?: boolean;
+};
+
+type PullRequestThread = {
+  comments?: PullRequestComment[];
+  id?: number;
+  isDeleted?: boolean;
+  threadContext?: unknown;
+};
 
 const CommentInputSchema = z.object({
   prDetails: PullRequestSchema,
@@ -25,6 +50,248 @@ const CodeReviewResultSchema = z.object({
     .describe("The IDs of the code comments added"),
 });
 
+function priorityForFinding(finding: Finding): string {
+  if (finding.severity === "critical") return "P0";
+  if (finding.severity === "high") return "P1";
+  if (finding.severity === "medium") return "P2";
+  return "P3";
+}
+
+function conciseFindingTitle(title: string): string {
+  const normalized = title.replace(/\s+/g, " ").trim();
+  const sentenceEnd = normalized.search(/[.!?](?:\s|$)/);
+  if (sentenceEnd >= 40 && sentenceEnd < normalized.length - 1) {
+    return escapeHeadingMarkdown(normalized.slice(0, sentenceEnd + 1));
+  }
+  if (normalized.length <= 120) return escapeHeadingMarkdown(normalized);
+  return escapeHeadingMarkdown(`${normalized.slice(0, 117).trimEnd()}…`);
+}
+
+function escapeHeadingMarkdown(value: string): string {
+  return value.replace(/([\\`*_{}\[\]<>])/g, "\\$1");
+}
+
+export function formatInlineFinding(finding: Finding): string {
+  const heading = `### ${priorityForFinding(finding)} · ${finding.severity.toUpperCase()} — ${conciseFindingTitle(finding.title)}`;
+  const suggestion = finding.remediation
+    ? `\n\n**Suggested fix:**\n\n\`\`\`\n${finding.remediation}\n\`\`\``
+    : "";
+
+  return `${heading}\n\n${finding.description}${suggestion}\n\nUseful? Reply with 👍 or 👎.`;
+}
+
+export function formatReviewConclusion({
+  findings,
+  latestSourceCommitId,
+  measures,
+  mergeDecision,
+}: {
+  findings: Finding[];
+  latestSourceCommitId: string;
+  measures: unknown;
+  mergeDecision: "allowed" | "blocked" | "pending";
+}): string {
+  const openFindings = findings.filter((finding) => finding.resolution === "open");
+  const blockingCount = openFindings.filter((finding) => finding.blocking).length;
+  const nonBlockingCount = openFindings.length - blockingCount;
+  const reviewedCommit = latestSourceCommitId.slice(0, 10);
+
+  let conclusion: string;
+  if (mergeDecision === "blocked") {
+    conclusion = `### ❌ Changes requested\n\n${blockingCount} blocking ${blockingCount === 1 ? "finding" : "findings"}. See the inline comment${blockingCount === 1 ? "" : "s"} for details.`;
+  } else if (mergeDecision === "pending") {
+    conclusion = "### ⚠️ Review incomplete\n\nAutomated review did not finish. Manual review is required.";
+  } else if (nonBlockingCount > 0) {
+    conclusion = `### ✅ No blocking issues\n\n${nonBlockingCount} non-blocking ${nonBlockingCount === 1 ? "suggestion is" : "suggestions are"} noted inline.`;
+  } else {
+    conclusion = "### ✅ No blocking issues\n\nNo merge-blocking issues were found.";
+  }
+
+  return `${REVIEW_SUMMARY_MARKER}\n## PR Guardian Review\n\n${conclusion}\n\n${formatSonarQubeSummary(measures)}\n\n**Reviewed commit:** \`${reviewedCommit}\``;
+}
+
+function formatSonarQubeSummary(measures: unknown): string {
+  if (!measures || typeof measures !== "object") {
+    return "**SonarQube:** Not available";
+  }
+
+  const values = measures as Record<string, unknown>;
+  const metric = (name: string, suffix = "") => {
+    const value = values[name];
+    return typeof value === "number" && Number.isFinite(value)
+      ? `${value}${suffix}`
+      : "N/A";
+  };
+
+  return `**SonarQube:** Coverage ${metric("coverage", "%")} · New bugs ${metric("new_bugs")} · New vulnerabilities ${metric("new_vulnerabilities")} · New code smells ${metric("new_code_smells")}`;
+}
+
+function isReviewSummaryThread(thread: PullRequestThread): boolean {
+  if (thread.isDeleted || thread.threadContext) return false;
+  const content = thread.comments?.find((comment) => !comment.isDeleted)?.content ?? "";
+  return content.includes(REVIEW_SUMMARY_MARKER) ||
+    (content.includes(LEGACY_REVIEW_MARKER) &&
+      (content.includes("### Conclusion:") || content.includes("### PR Description:")));
+}
+
+async function upsertReviewConclusion({
+  adoClient,
+  content,
+  pullRequestId,
+  repoName,
+}: {
+  adoClient: ReturnType<ReturnType<typeof extractAgentConfig>["getAdoClient"]>;
+  content: string;
+  pullRequestId: number;
+  repoName: string;
+}): Promise<{ id?: number }> {
+  const threads = (await adoClient.getPullRequestThreads(
+    repoName,
+    pullRequestId,
+  )) as PullRequestThread[];
+  const summaries = threads
+    .filter(isReviewSummaryThread)
+    .filter((thread) => thread.id !== undefined)
+    .sort((left, right) => (left.id ?? 0) - (right.id ?? 0));
+  const webApi = adoClient.getAdoClient();
+  const gitApi = await webApi.getGitApi();
+  const projectName = adoClient.getProjectName();
+  const created = await gitApi.createThread(
+    {
+      comments: [{ content }],
+      status: CLOSED_THREAD_STATUS,
+    },
+    repoName,
+    pullRequestId,
+    projectName,
+  );
+
+  for (const duplicate of summaries) {
+    if (duplicate.id === undefined) continue;
+    for (const comment of duplicate.comments ?? []) {
+      if (comment.id === undefined || comment.isDeleted) continue;
+      await gitApi.deleteComment(
+        repoName,
+        pullRequestId,
+        duplicate.id,
+        comment.id,
+        projectName,
+      );
+    }
+  }
+
+  return { id: created.id };
+}
+
+async function refreshLinkedInlineComments({
+  adoClient,
+  findings,
+  links,
+  projectName,
+  pullRequestId,
+  repoId,
+  storedFindings,
+}: {
+  adoClient: ReturnType<ReturnType<typeof extractAgentConfig>["getAdoClient"]>;
+  findings: Finding[];
+  links: Array<{ findingId: string; threadId: number }>;
+  projectName: string;
+  pullRequestId: number;
+  repoId: string;
+  storedFindings: Array<{ id: string; contentHash: string }>;
+}): Promise<void> {
+  const gitApi = await adoClient.getAdoClient().getGitApi();
+
+  for (const finding of findings) {
+    const storedFinding = storedFindings.find((candidate) =>
+      candidate.id === finding.id || candidate.contentHash === finding.contentHash
+    );
+    const link = links.find((candidate) => candidate.findingId === storedFinding?.id);
+    if (!link) continue;
+
+    try {
+      const thread = await adoClient.getCommentThreadById(
+        repoId,
+        pullRequestId,
+        link.threadId,
+      ) as PullRequestThread;
+      const comment = thread.comments?.find(
+        (candidate) => !candidate.isDeleted && candidate.id !== undefined,
+      );
+      if (comment?.id === undefined) continue;
+      await gitApi.updateComment(
+        { content: formatInlineFinding(finding) },
+        repoId,
+        pullRequestId,
+        link.threadId,
+        comment.id,
+        projectName,
+      );
+    } catch (error) {
+      console.error(
+        `[comment-review-results] Failed to refresh linked thread ${link.threadId}: ${(error as Error).message}`,
+      );
+    }
+  }
+}
+
+async function closeResolvedInlineComments({
+  adoClient,
+  links,
+  pullRequestId,
+  repoId,
+  storedFindings,
+}: {
+  adoClient: ReturnType<ReturnType<typeof extractAgentConfig>["getAdoClient"]>;
+  links: Array<{ findingId: string; threadId: number }>;
+  pullRequestId: number;
+  repoId: string;
+  storedFindings: Array<{
+    id: string;
+    resolution: string;
+    supersedesFindingId: string | null;
+  }>;
+}): Promise<void> {
+  const hasResolvedDescendant = (findingId: string) => {
+    const pending = [findingId];
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const currentId = pending.shift()!;
+      if (visited.has(currentId)) continue;
+      visited.add(currentId);
+      const current = storedFindings.find((finding) => finding.id === currentId);
+      if (current?.resolution === "resolved") return true;
+      pending.push(
+        ...storedFindings
+          .filter((finding) => finding.supersedesFindingId === currentId)
+          .map((finding) => finding.id),
+      );
+    }
+    return false;
+  };
+  const resolvedFindingIds = new Set(
+    storedFindings
+      .filter((finding) => hasResolvedDescendant(finding.id))
+      .map((finding) => finding.id),
+  );
+
+  for (const link of links) {
+    if (!resolvedFindingIds.has(link.findingId)) continue;
+    try {
+      await adoClient.updateCommentThreadStatus(
+        repoId,
+        pullRequestId,
+        link.threadId,
+        FIXED_THREAD_STATUS,
+      );
+    } catch (error) {
+      console.error(
+        `[comment-review-results] Failed to close resolved thread ${link.threadId}: ${(error as Error).message}`,
+      );
+    }
+  }
+}
+
 export const comment = defineStep({
   id: "comment-review-results",
   description: "Reviews code changes and provides feedback",
@@ -42,21 +309,54 @@ export const comment = defineStep({
     );
 
     const adoClient = agentConfig.getAdoClient();
+    const rootConfig = await agentConfig.getRootConfig();
+    const findingStore = new FindingStore(
+      rootConfig.findingStorePath ?? ".ratan/data/findings.db",
+    );
+    await findingStore.init();
 
     const codeCommentIds: number[] = [];
 
     // Post inline comments from scanner pipeline findings
-    const findingsToComment = findings.slice(0, 30);
+    const storedFindings = findingStore.getFindingsByPr(
+      prDetails.pullRequestId,
+      prDetails.repoName,
+    );
+    const linkedThreads = findingStore.getCommentThreadsByPr(
+      prDetails.pullRequestId,
+      prDetails.repoName,
+    );
+    const previouslyLinked = indexPreviouslyLinkedFindings(
+      storedFindings,
+      linkedThreads,
+    );
+    await closeResolvedInlineComments({
+      adoClient,
+      links: linkedThreads,
+      pullRequestId: prDetails.pullRequestId,
+      repoId: prDetails.repoId,
+      storedFindings,
+    });
+    await refreshLinkedInlineComments({
+      adoClient,
+      findings,
+      links: linkedThreads,
+      projectName: adoClient.getProjectName(),
+      pullRequestId: prDetails.pullRequestId,
+      repoId: prDetails.repoId,
+      storedFindings,
+    });
+    const findingsToComment = evaluatePostableFindings(
+      findings,
+      previouslyLinked,
+    ).findings;
     for (const finding of findingsToComment) {
-      if (!finding.filePath || finding.lineStart === null) continue;
+      let commentThread: { id?: number };
       try {
-        const commentText = `**${finding.severity.toUpperCase()}** - ${finding.title}` +
-          (finding.description ? `\n\n${finding.description}` : "") +
-          (finding.remediation ? `\n\n**Suggestion:** ${finding.remediation}` : "");
-        const commentThread = await adoClient.addCommentThreadForPRCode({
+        commentThread = await adoClient.addCommentThreadForPRCode({
           repoId: prDetails.repoId,
           pullRequestId: prDetails.pullRequestId,
-          comment: `${commentText}\n\n<!-- survey: please provide feedback -->`,
+          comment: formatInlineFinding(finding),
           filePath: finding.filePath,
           filePosition: "right",
           fileStartLine: finding.lineStart,
@@ -64,31 +364,40 @@ export const comment = defineStep({
           fileStartOffset: 1,
           fileEndOffset: 1,
         });
-
-        codeCommentIds.push(commentThread.id);
       } catch (error) {
         // Silently skip per-line comment failures
+        continue;
+      }
+
+      if (commentThread.id === undefined) continue;
+      codeCommentIds.push(commentThread.id);
+
+      try {
+        findingStore.linkCommentThread({
+          repository: prDetails.repoName,
+          prId: prDetails.pullRequestId,
+          findingId: finding.id,
+          threadId: commentThread.id,
+        });
+      } catch (error) {
+        console.error(
+          `[comment-review-results] Failed to link comment thread ${commentThread.id} to finding ${finding.id}: ${(error as Error).message}`,
+        );
       }
     }
+    findingStore.close();
 
-    const incompleteNotice =
-      inputData.reviewExecutionStatus === "incomplete"
-        ? "⚠️ **OpenCodeReview did not complete. Merge status is Pending; manual review is required.**\n\n"
-        : "";
-    const mainCommentSummary = incompleteNotice +
-      (inputData.changesSinceLastReview || "") +
-      (inputData.correlationSummary || "No issues detected.");
-    const mainCommentThread = await adoClient.addCommentForPR(
-      prDetails.repoName,
-      prDetails.pullRequestId,
-      {
-        approve: findings.length === 0,
-        errors: [],
-      },
-      `${mainCommentSummary}\n\n${inputData.reviewSummary}`,
-      [],
-      inputData.measures,
-    );
+    const mainCommentThread = await upsertReviewConclusion({
+      adoClient,
+      repoName: prDetails.repoName,
+      pullRequestId: prDetails.pullRequestId,
+      content: formatReviewConclusion({
+        findings,
+        latestSourceCommitId: prDetails.latestSourceCommitId,
+        measures: inputData.measures,
+        mergeDecision: inputData.mergeDecision,
+      }),
+    });
 
     await adoClient.setPullRequestProperties(
       prDetails.repoName,

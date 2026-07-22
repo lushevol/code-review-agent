@@ -1,0 +1,9 @@
+{
+  "id": "go-resource-leak",
+  "language": "go",
+  "title": "Read upstream response",
+  "description": "Returns response bytes without closing the body.",
+  "files": [{ "path": "client/fetch.go", "changeType": "added", "after": "func Fetch(url string) ([]byte, error) {\n    response, err := http.Get(url)\n    if err != nil { return nil, err }\n    return io.ReadAll(response.Body)\n}" }],
+  "expectedFindings": [{ "id": "response-body-leak", "filePath": "client/fetch.go", "lineStart": 2, "lineEnd": 4, "category": "maintainability", "allowedSeverities": ["high", "medium"], "messageIncludes": ["close", "body"] }],
+  "allowedExtraFindings": 0
+}

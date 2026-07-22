@@ -1,0 +1,9 @@
+{
+  "id": "java-null-dereference",
+  "language": "java",
+  "title": "Print optional message",
+  "description": "Prints the length of an optional message.",
+  "files": [{ "path": "src/Example.java", "changeType": "added", "after": "public class Example {\n  public static void main(String[] args) {\n    String message = null;\n    System.out.println(message.length());\n  }\n}" }],
+  "expectedFindings": [{ "id": "null-dereference", "filePath": "src/Example.java", "lineStart": 4, "lineEnd": 4, "category": "bug", "allowedSeverities": ["high", "medium"], "messageIncludes": ["null", "check"] }],
+  "allowedExtraFindings": 0
+}

@@ -15,6 +15,60 @@ afterEach(() => {
 });
 
 describe("OpenCodeReviewScanner", () => {
+  it("adds selected review focuses to OCR context and scanner metadata", async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ocr-focus-"));
+    const ruleFile = path.join(tempDir, "rule.json");
+    fs.writeFileSync(ruleFile, JSON.stringify({ rules: [] }));
+    let background = "";
+    const runner: OcrReviewRunner = {
+      review: async (input) => {
+        background = input.background;
+        return {
+          status: "success",
+          complete: true,
+          durationMs: 12,
+          comments: [],
+          warnings: [],
+          rawOutput: "",
+        };
+      },
+    };
+    const scanner = new OpenCodeReviewScanner(runner);
+
+    const result = await scanner.scan(metadata(), {
+      workspace: {
+        repoPath: tempDir,
+        runDirectory: tempDir,
+        mergeBaseCommit: "base",
+        headCommit: "head",
+        changes: [
+          {
+            path: "src/user.ts",
+            status: "modified",
+            addedLines: [
+              { line: 1, text: "export interface User { id: string }" },
+              { line: 2, text: "} catch (error) {" },
+              { line: 3, text: "// Explain recovery" },
+            ],
+          },
+        ],
+      },
+      provider: provider(ruleFile),
+    } as never);
+
+    expect(background).toContain("## Review focus");
+    expect(background).toContain("tests");
+    expect(background).toContain("error-handling");
+    expect(background).toContain("type-design");
+    expect(background).toContain("comments");
+    expect(result.metadata.reviewFocuses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ focus: "general" }),
+        expect.objectContaining({ focus: "tests" }),
+      ]),
+    );
+  });
+
   it("preserves OCR classification and does not create a confidence score", async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ocr-scanner-"));
     fs.mkdirSync(path.join(tempDir, "src"));
@@ -54,19 +108,7 @@ describe("OpenCodeReviewScanner", () => {
     const result = await scanner.scan(metadata(), {
       workspace,
       workItemContext: "Context",
-      provider: {
-        getRootConfig: async () => ({
-          openCodeReview: {
-            rulesPath: "rule.json",
-            llm: {
-              url: "https://llm.example/v1",
-              token: "secret",
-              model: "model",
-            },
-          },
-        }),
-        resolveConfigPath: (relativePath: string) => path.join(tempDir!, relativePath),
-      },
+      provider: provider(ruleFile),
     } as never);
 
     expect(result.executionStatus).toBe("complete");
@@ -84,7 +126,56 @@ describe("OpenCodeReviewScanner", () => {
     });
     expect(result.findings[0]).not.toHaveProperty("confidence");
   });
+
+  it("preserves an incomplete OCR execution status", async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ocr-incomplete-"));
+    const ruleFile = path.join(tempDir, "rule.json");
+    fs.writeFileSync(ruleFile, JSON.stringify({ rules: [] }));
+    const runner: OcrReviewRunner = {
+      review: async () => ({
+        status: "timeout",
+        complete: false,
+        durationMs: 12,
+        comments: [],
+        warnings: [{ type: "timeout", message: "Review timed out" }],
+        rawOutput: "",
+      }),
+    };
+
+    const result = await new OpenCodeReviewScanner(runner).scan(metadata(), {
+      workspace: {
+        repoPath: tempDir,
+        runDirectory: tempDir,
+        mergeBaseCommit: "base",
+        headCommit: "head",
+        changes: [],
+      },
+      provider: provider(ruleFile),
+    } as never);
+
+    expect(result.executionStatus).toBe("incomplete");
+    expect(result.metadata).toMatchObject({
+      status: "timeout",
+      warningTypes: ["timeout"],
+    });
+  });
 });
+
+function provider(ruleFile: string) {
+  return {
+    getRootConfig: async () => ({
+      openCodeReview: {
+        rulesPath: path.basename(ruleFile),
+        llm: {
+          url: "https://llm.example/v1",
+          token: "secret",
+          model: "model",
+        },
+      },
+    }),
+    resolveConfigPath: () => ruleFile,
+  };
+}
 
 function metadata(): AdoPullRequestMetadata {
   return {

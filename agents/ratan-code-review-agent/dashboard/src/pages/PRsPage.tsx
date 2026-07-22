@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { fetchPRs, fetchFindings } from "../api";
 
 export default function PRsPage() {
   const [prs, setPrs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedPrId, setSelectedPrId] = useState<number | null>(null);
+  const [selectedPrKey, setSelectedPrKey] = useState<string | null>(null);
   const [prFindings, setPrFindings] = useState<any[]>([]);
   const [loadingFindings, setLoadingFindings] = useState(false);
 
@@ -18,16 +18,17 @@ export default function PRsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleSelectPr = async (prId: number) => {
-    if (selectedPrId === prId) {
-      setSelectedPrId(null);
+  const handleSelectPr = async (prId: number, repository: string) => {
+    const key = `${repository}:${prId}`;
+    if (selectedPrKey === key) {
+      setSelectedPrKey(null);
       setPrFindings([]);
       return;
     }
-    setSelectedPrId(prId);
+    setSelectedPrKey(key);
     setLoadingFindings(true);
     try {
-      const data = await fetchFindings({ prId });
+      const data = await fetchFindings({ prId, repo: repository });
       setPrFindings(data.findings ?? []);
     } catch {
       setPrFindings([]);
@@ -103,14 +104,14 @@ export default function PRsPage() {
           </thead>
           <tbody>
             {prs.map((pr) => {
-              const isSelected = selectedPrId === pr.prId;
+              const repository = pr.repository ?? pr.repo ?? "";
+              const isSelected = selectedPrKey === `${repository}:${pr.prId}`;
               const findingCount = pr.findingCount ?? pr.findingsCount ?? pr.totalFindings ?? 0;
               const blockingCount = pr.blockingCount ?? pr.blockingFindings ?? 0;
               return (
-                <>
+                <Fragment key={`${repository}:${pr.prId ?? pr.id}`}>
                   <tr
-                    key={pr.prId ?? pr.id}
-                    onClick={() => handleSelectPr(pr.prId ?? pr.id)}
+                    onClick={() => handleSelectPr(pr.prId ?? pr.id, repository)}
                     style={{
                       cursor: "pointer",
                       background: isSelected ? "#f0f7ff" : undefined,
@@ -145,10 +146,10 @@ export default function PRsPage() {
                     <td style={cellStyle}>
                       {badge(
                         pr.status || "active",
-                        pr.status === "completed" || pr.status === "merged"
+                        pr.status === "allowed"
                           ? "#2ecc71"
-                          : pr.status === "closed"
-                            ? "#95a5a6"
+                          : pr.status === "blocked"
+                            ? "#e94560"
                             : "#f5a623",
                       )}
                     </td>
@@ -161,7 +162,7 @@ export default function PRsPage() {
                     </td>
                   </tr>
                   {isSelected && (
-                    <tr key={`${pr.prId ?? pr.id}-findings`}>
+                    <tr key={`${repository}:${pr.prId ?? pr.id}-findings`}>
                       <td
                         colSpan={7}
                         style={{
@@ -217,7 +218,7 @@ export default function PRsPage() {
                                     color: "#999",
                                   }}
                                 >
-                                  {f.engine || f.source || ""}
+                                  {f.sourceEngine || f.engine || f.source || ""}
                                 </span>
                               </div>
                             ))}
@@ -237,7 +238,7 @@ export default function PRsPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>
