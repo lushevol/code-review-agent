@@ -54,6 +54,27 @@ Each explicit review registers the provider session, creates a small
 steps. Step boundaries validate Zod input/output schemas; workflow data is passed
 directly rather than stored in a registry or step-result context map.
 
+## Runtime Log Flow
+
+The review bootstrap emits a small lifecycle trace through the `review` component:
+
+1. `review.started` with `prId`.
+2. `review.step.completed` with `prId` and the completed `step` id.
+3. `review.pipeline.failed` with focused error context when workspace preparation or
+   the scanner pipeline degrades to an incomplete review.
+4. `review.stale` when a newer run supersedes the current PR review, or
+   `review.failed` when an error escapes the workflow.
+5. `review.finished` with `prId`, `durationMs`, and `status`; degraded scanner
+   execution finishes with `status=incomplete` instead of looking successful.
+
+Pretty console output shows timestamp, level, source component, event name, and flat
+scalar context. JSONL stores the same flat fields for filtering. The logger drops
+nested objects and full array contents instead of serializing complete workflow
+outputs. Arrays retain a count; diagnostic object arrays may also retain up to five
+types and three bounded messages. Secret-like fields are redacted, and error stacks
+appear only at debug level. Bracket-prefixed legacy console calls use their prefix as
+the source component.
+
 ## PR Scan Flow
 
 `AutoScanService.scan`:

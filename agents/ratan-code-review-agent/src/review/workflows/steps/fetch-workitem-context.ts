@@ -60,7 +60,7 @@ export const fetchWorkItemContext = defineStep({
         allWorkItemIds.add(id);
       }
     } catch (error) {
-      console.error("Error fetching commits:", error);
+      console.error("[fetch-workitem-context] Error fetching commits:", error);
       // Non-fatal — continue with linked work items only
     }
 
@@ -109,7 +109,7 @@ export const fetchWorkItemContext = defineStep({
 
       return { prDetails: inputData.prDetails, workItemContext: parts.join("\n") };
     } catch (error) {
-      console.error("Error fetching work item context:", error);
+      console.error("[fetch-workitem-context] Error fetching work item context:", error);
       return { prDetails: inputData.prDetails, workItemContext: "" };
     }
   },

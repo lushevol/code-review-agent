@@ -100,7 +100,15 @@ All operational settings live under the root `config` object. Secrets use
 and structured logging are root settings; no Sonar or retry setting is hard-coded.
 Logs are JSONL files in `.ratan/logs` by default, redact secret-like fields, and
 can be configured through `config.logging` (`level`, `format`, `console`, `file`,
-`directory`, and `retentionDays`).
+`directory`, and `retentionDays`). Console logs use focused lines with a source
+component and flat scalar context, for example
+`INFO [review] review.step.completed prId=42 step=scanner-pipeline`. JSONL uses
+the same flat fields for filtering. Nested workflow outputs are omitted; diagnostic
+arrays retain only their count plus bounded type/message summaries. Error stacks are
+emitted only at debug level. Review runs expose `review.started`,
+`review.step.completed`, `review.stale`, `review.pipeline.failed`,
+`review.failed`, and `review.finished` lifecycle events. Step and terminal events
+carry `status=incomplete` when scanner execution degrades.
 
 Global tuning values are included in the generated `config.json` with sensible
 defaults and can be adjusted by editing the file — no interactive prompts required.

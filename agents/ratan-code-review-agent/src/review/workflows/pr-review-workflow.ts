@@ -55,7 +55,7 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
   let attemptedReviewFocuses: ReviewFocusSelection[] = [];
   let reviewAttemptStartedAt: number | undefined;
 
-  const workflowLogger = getLogger("pr-review-workflow");
+  const workflowLogger = getLogger("review");
 
   try {
     current = await workspaceProvider.withWorkspace(
@@ -72,10 +72,9 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
     );
   } catch (error) {
     workflowLogger.error(
-      "OCRS workspace/scanner pipeline failed; review will be marked incomplete",
+      "review.pipeline.failed",
       {
-        error: (error as Error).message,
-        stack: (error as Error).stack,
+        error,
         prId: current.prDetails?.pullRequestId,
         repo: current.prDetails?.repoName,
       },

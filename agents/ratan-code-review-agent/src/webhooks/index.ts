@@ -88,7 +88,7 @@ export function createWebhookServer(options: {
 
       // Fire and forget — don't wait for review
       options.onPREvent({ action: eventType, prId, repository }).catch((err) => {
-        console.error("Webhook handler error:", err);
+        console.error("[webhook] Review handler failed", err);
       });
 
       return c.json({ accepted: true }, 200);

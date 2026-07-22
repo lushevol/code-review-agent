@@ -4,21 +4,30 @@ import { ReviewTracker } from "../review/workflows/utils/review-tracker";
 import { RequestContext } from "../review/runtime";
 import type { CommonRequestContext } from "../review/types";
 import { getAgentConfigSessions } from "./session";
+import { getLogger } from "ratan-logger";
+
+const logger = getLogger("review");
+
+function getReviewExecutionStatus(output: unknown): "complete" | "incomplete" | undefined {
+  if (!output || typeof output !== "object") return undefined;
+  const status = (output as Record<string, unknown>).reviewExecutionStatus;
+  return status === "complete" || status === "incomplete" ? status : undefined;
+}
 
 export const startReviewPrWithProvider = async (
   provider: ConfigProvider,
   prId: number,
 ) => {
-  console.log(`[startReviewPrWithProvider] Reviewing PR: ${prId}`);
-
   const registered = getAgentConfigSessions().registerProvider(provider);
 
   await runReviewWorkflow(registered, prId);
 };
 
 async function runReviewWorkflow(agentConfig: ConfigProvider, prId: number) {
-  console.log(`[startup] Running prReviewWorkflow for PR: ${prId}`);
+  const startedAt = Date.now();
+  logger.info("review.started", { prId });
   const reviewSignal = ReviewTracker.startReview(prId);
+  let reviewStatus: "complete" | "incomplete" = "complete";
 
   const requestContext: CommonRequestContext = new RequestContext();
   requestContext.set("configSessionId", agentConfig.id);
@@ -31,12 +40,25 @@ async function runReviewWorkflow(agentConfig: ConfigProvider, prId: number) {
       requestContext,
     })) {
       if (reviewSignal.aborted) {
-        console.log(`[startup] Stopped stale review for PR: ${prId}`);
+        logger.warn("review.stale", { prId });
         return;
       }
-      console.log("PR Review Workflow Output:", output);
+      const stepStatus = getReviewExecutionStatus(output.output);
+      if (stepStatus) reviewStatus = stepStatus;
+      logger.info("review.step.completed", {
+        prId,
+        step: output.stepId,
+        ...(stepStatus ? { status: stepStatus } : {}),
+      });
     }
-    console.log(`[startup] Finished processing PR: ${prId}`);
+    logger.info("review.finished", {
+      prId,
+      status: reviewStatus,
+      durationMs: Date.now() - startedAt,
+    });
+  } catch (error) {
+    logger.error("review.failed", { prId, error });
+    throw error;
   } finally {
     ReviewTracker.finishReview(prId, reviewSignal);
   }

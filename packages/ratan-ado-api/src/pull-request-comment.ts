@@ -301,8 +301,6 @@ export async function addCommentThreadForPRCode({
     projectName,
   );
 
-  console.log(`Comment added to PR ${pullRequestId} in repository ${repoId}.`);
-
   return thread;
 }
 
@@ -325,10 +323,6 @@ export async function updateCommentThreadStatus(
     projectName,
   );
 
-  console.log(
-    `Comment thread ${threadId} updated to status ${CommentThreadStatus[status]} in PR ${pullRequestId} in repository ${repoId}.`,
-  );
-
   return thread;
 }
 
@@ -345,10 +339,6 @@ export async function getCommentThreadById(
     prId,
     commentThreadId,
     projectName,
-  );
-
-  console.log(
-    `Fetched comment thread ${commentThreadId} in project ${projectName}.`,
   );
 
   return thread;

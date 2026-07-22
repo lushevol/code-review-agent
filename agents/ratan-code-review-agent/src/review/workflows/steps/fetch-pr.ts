@@ -39,7 +39,7 @@ export const fetchPR = defineStep({
       );
       workItemIds = linkedDetails.workItemIds;
     } catch (error) {
-      console.error("Error fetching linked work items:", error);
+      console.error("[fetch-pr-details] Error fetching linked work items:", error);
     }
 
     return {

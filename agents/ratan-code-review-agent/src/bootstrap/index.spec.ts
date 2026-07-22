@@ -2,10 +2,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   runPrReviewWorkflow: vi.fn(),
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 vi.mock("../review/workflows/pr-review-workflow", () => ({
   runPrReviewWorkflow: mocks.runPrReviewWorkflow,
+}));
+
+vi.mock("ratan-logger", () => ({
+  getLogger: () => mocks.logger,
 }));
 
 import { ReviewTracker } from "../review/workflows/utils/review-tracker";
@@ -14,6 +23,9 @@ import { getAgentConfigSessions } from "./session";
 
 afterEach(() => {
   mocks.runPrReviewWorkflow.mockReset();
+  mocks.logger.info.mockReset();
+  mocks.logger.warn.mockReset();
+  mocks.logger.error.mockReset();
   getAgentConfigSessions().clearSessions();
   ReviewTracker.cancelAll();
   vi.restoreAllMocks();
@@ -33,7 +45,6 @@ describe("continued-commit bootstrap reviews", () => {
       .mockImplementationOnce(async function* () {
         yield { stepId: "new-commit", output: "current" };
       });
-    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const provider = { id: "provider" } as never;
 
     const firstReview = startReviewPrWithProvider(provider, 7);
@@ -44,13 +55,59 @@ describe("continued-commit bootstrap reviews", () => {
     releaseFirst?.();
     await firstReview;
 
-    expect(log).toHaveBeenCalledWith(
-      "PR Review Workflow Output:",
-      { stepId: "new-commit", output: "current" },
+    expect(mocks.logger.info).toHaveBeenCalledWith(
+      "review.step.completed",
+      { prId: 7, step: "new-commit" },
     );
-    expect(log).not.toHaveBeenCalledWith(
-      "PR Review Workflow Output:",
-      { stepId: "old-commit", output: "stale" },
+    expect(mocks.logger.info).not.toHaveBeenCalledWith(
+      "review.step.completed",
+      { prId: 7, step: "old-commit" },
+    );
+    expect(mocks.logger.warn).toHaveBeenCalledWith("review.stale", { prId: 7 });
+    expect(mocks.logger.info).toHaveBeenCalledWith("review.started", { prId: 7 });
+    expect(mocks.logger.info).toHaveBeenCalledWith(
+      "review.finished",
+      expect.objectContaining({ prId: 7, status: "complete" }),
+    );
+  });
+
+  it("marks a degraded review as incomplete", async () => {
+    mocks.runPrReviewWorkflow.mockImplementation(async function* () {
+      yield {
+        stepId: "scanner-pipeline",
+        output: { reviewExecutionStatus: "incomplete" },
+      };
+    });
+
+    await startReviewPrWithProvider({ id: "provider" } as never, 8);
+
+    expect(mocks.logger.info).toHaveBeenCalledWith(
+      "review.step.completed",
+      { prId: 8, step: "scanner-pipeline", status: "incomplete" },
+    );
+    expect(mocks.logger.info).toHaveBeenCalledWith(
+      "review.finished",
+      expect.objectContaining({ prId: 8, status: "incomplete" }),
+    );
+  });
+
+  it("logs and rethrows workflow failures", async () => {
+    const failure = new Error("workflow failed");
+    mocks.runPrReviewWorkflow.mockImplementation(async function* () {
+      throw failure;
+    });
+
+    await expect(
+      startReviewPrWithProvider({ id: "provider" } as never, 9),
+    ).rejects.toThrow("workflow failed");
+
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      "review.failed",
+      { prId: 9, error: failure },
+    );
+    expect(mocks.logger.info).not.toHaveBeenCalledWith(
+      "review.finished",
+      expect.anything(),
     );
   });
 });

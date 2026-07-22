@@ -142,6 +142,24 @@ ADO webhook (git.pullrequest.created / git.pullrequest.updated)
 Fallback: polling every 30 min via `start --watch`
 	```
 
+### Runtime Logging
+
+`ratan-logger` emits concise component-scoped events. Pretty console lines contain
+timestamp, level, component, event message, and flat scalar troubleshooting fields;
+JSONL files use the same flat record shape. Nested objects and full array contents are
+not logged: arrays contribute a count, and diagnostic arrays may add up to five types
+and three bounded messages. This prevents workflow outputs and finding collections
+from being duplicated at every step while retaining failure reasons. Secret-like
+fields remain redacted, and error stacks are available only when
+`config.logging.level` is `debug`.
+
+The review bootstrap emits `review.started`, `review.step.completed`, `review.stale`,
+`review.failed`, and `review.finished`; workspace/scanner fallback emits
+`review.pipeline.failed`. Each event carries `prId`, plus `step`, `durationMs`,
+`status`, `repo`, or `error` only when relevant. Incomplete scanner execution is
+explicit on step and terminal events. Legacy bracket-prefixed console messages are
+routed through the prefix as their source component until their call sites migrate.
+
 ### CLI Commands
 
 The `ratan-code-review` CLI has two commands:

@@ -90,7 +90,6 @@ export async function getPullRequestById(
   pullRequestId = Number(pullRequestId);
 
   // Get the pull request details
-  console.log(`Fetching pull request details of ${pullRequestId}...`);
   const pr = await gitApi.getPullRequestById(pullRequestId);
 
   const {
@@ -261,10 +260,6 @@ export const isValidPullRequest = (
   const isFreshPR = latestCommitDate
     ? isDateIn2Months(latestCommitDate)
     : false;
-  console.log(
-    `PR ID: ${pr.pullRequestId}, Raised By Human: ${isRaisedByHuman}, Active: ${isActive}, Fresh PR: ${isFreshPR}`,
-  );
-
   return isRaisedByHuman && isActive && isFreshPR;
 };
 
@@ -285,9 +280,6 @@ export async function getPullRequestListByRepoName(
   status: PullRequestStatus = PullRequestStatus.Active,
   createAfter: string = "",
 ) {
-  console.log(
-    `Fetching pull requests for repo: ${repoName} with status: ${status} and created after: ${createAfter}`,
-  );
   const webApi = this.adoWebApi as AdoWebApi;
   const projectName = this.getProjectName();
   const gitApi = await webApi.getGitApi();
@@ -312,11 +304,8 @@ export async function getPullRequestsByBranchName(
   targetBranch: string = "main",
   status: PullRequestStatus = PullRequestStatus.Active,
 ) {
-  console.log(
-    `Fetching pull request for branch: ${sourceBranch} to ${targetBranch} with status: ${status}`,
-  );
   if (!repo || !sourceBranch) {
-    console.error("Repository and source branch must be provided.");
+    console.error("[ado] Repository and source branch are required");
     return [];
   }
   const webApi = this.adoWebApi as AdoWebApi;

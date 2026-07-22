@@ -129,7 +129,7 @@ export class AzureDevOps {
 
   async connect(token: string) {
     if (!token) {
-      console.error("ADO token is required for authentication.");
+      console.error("[ado] Token is required for authentication");
       throw new Error("ADO token is required for authentication.");
     }
     try {
@@ -145,11 +145,11 @@ export class AzureDevOps {
       const connData = await vsts.connect();
       const currentUserName =
         connData.authenticatedUser?.providerDisplayName || "UNKNOWN_USER";
-      console.log(`${currentUserName} ADO Login Successfully`);
+      console.log("[ado] Connected to Azure DevOps", { user: currentUserName });
       this.adoWebApi = vsts;
       return connData;
     } catch (err) {
-      console.error("Error connecting to Azure DevOps:", err);
+      console.error("[ado] Connection failed", err);
       throw err;
     }
   }
