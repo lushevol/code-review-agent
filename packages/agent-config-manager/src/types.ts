@@ -112,6 +112,10 @@ const WorkItemContextConfigSchema = z.object({
   maxStories: z.number().int().min(1).max(50).optional(),
 }).strict();
 
+const ReportConfigSchema = z.object({
+  includePrDescription: z.boolean().optional(),
+}).strict();
+
 const OpenCodeReviewLlmConfigSchema = z.object({
   url: z.string().url(),
   token: z.string().min(1),
@@ -149,6 +153,7 @@ export const RootAgentConfigSchema = z.object({
   feedbackDaemon: FeedbackDaemonConfigSchema.optional(),
   watch: WatchConfigSchema.optional(),
   workItemContext: WorkItemContextConfigSchema.optional(),
+  report: ReportConfigSchema.optional(),
   ado: z.object({
     organization: z.string().min(1),
     project: z.string().min(1),

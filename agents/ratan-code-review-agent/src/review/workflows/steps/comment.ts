@@ -96,6 +96,7 @@ export function formatReviewConclusion({
   measures,
   mergeDecision,
   blockerDetails,
+  prDescription,
 }: {
   findings: Finding[];
   latestSourceCommitId: string;
@@ -107,6 +108,7 @@ export function formatReviewConclusion({
     message: string;
     passed: boolean;
   }>;
+  prDescription?: string;
 }): string {
   const openFindings = findings.filter((finding) => finding.resolution === "open");
   const blockingCount = openFindings.filter((finding) => finding.blocking).length;
@@ -159,6 +161,16 @@ export function formatReviewConclusion({
       sections.push(`- ${icon} ${gate.message}`);
     }
     sections.push("");
+  }
+
+  // PR description section — shown only when provided and non-empty
+  if (prDescription && prDescription.trim().length > 0) {
+    sections.push(
+      "**PR Description**",
+      "",
+      prDescription.trim(),
+      "",
+    );
   }
 
   sections.push(
@@ -499,6 +511,9 @@ export const comment = defineStep({
         latestSourceCommitId: prDetails.latestSourceCommitId,
         measures: inputData.measures,
         mergeDecision: inputData.mergeDecision,
+        prDescription: rootConfig.report?.includePrDescription
+          ? prDetails.description
+          : undefined,
       }),
     });
 

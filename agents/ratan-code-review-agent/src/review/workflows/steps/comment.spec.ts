@@ -105,6 +105,30 @@ describe("comment", () => {
     expect(conclusion.match(/## PR Guardian Review/g)).toHaveLength(1);
   });
 
+  it("omits the PR description section when no description is provided", () => {
+    const conclusion = formatReviewConclusion({
+      findings: [],
+      latestSourceCommitId: "abc",
+      measures: null,
+      mergeDecision: "allowed",
+    });
+
+    expect(conclusion).not.toContain("**PR Description**");
+  });
+
+  it("includes the PR description section when provided", () => {
+    const conclusion = formatReviewConclusion({
+      findings: [],
+      latestSourceCommitId: "abc",
+      measures: null,
+      mergeDecision: "allowed",
+      prDescription: "This PR fixes the login timeout issue by adding a retry mechanism.",
+    });
+
+    expect(conclusion).toContain("**PR Description**");
+    expect(conclusion).toContain("This PR fixes the login timeout issue by adding a retry mechanism.");
+  });
+
   it("links each created inline ADO thread to its finding", async () => {
     const addCommentThreadForPRCode = vi.fn().mockResolvedValue({ id: 101 });
     const { dbPath, requestContext, gitApi } = setupCommentTest(
