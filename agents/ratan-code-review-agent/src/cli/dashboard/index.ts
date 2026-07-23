@@ -28,7 +28,14 @@ const FINDING_RESOLUTIONS = new Set<FindingResolution>([
  */
 function resolveDashboardDir(): string | null {
   const dirname = path.dirname(fileURLToPath(import.meta.url));
-  for (const rel of ["../dashboard/dist", "../../dashboard/dist"]) {
+  for (const rel of [
+    // tsx source: src/cli/dashboard/ -> ../../../dashboard/dist
+    "../../../dashboard/dist",
+    // compiled dist: dist/cli/dashboard/ -> ../dashboard/dist
+    "../dashboard/dist",
+    // compiled dist (alternate): dist/cli/dashboard/ -> ../../dashboard/dist
+    "../../dashboard/dist",
+  ]) {
     const candidate = path.resolve(dirname, rel);
     if (fs.existsSync(path.join(candidate, "index.html"))) return candidate;
   }
