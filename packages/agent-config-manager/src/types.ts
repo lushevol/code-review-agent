@@ -47,10 +47,18 @@ const OverrideAuthRulesSchema = z.object({
   criticalRequiresTwoPerson: z.boolean().optional(),
 });
 
+const QualityGateSchema = z.object({
+  coverageThreshold: z.number().min(0).max(100).optional(),
+  blockOnCriticalCve: z.boolean().optional(),
+  blockOnHighCve: z.boolean().optional(),
+  blockOnMediumCve: z.boolean().optional(),
+}).strict();
+
 const MergePolicySchema = z.object({
   defaultBlockingSeverities: z.array(z.string()).optional(),
   overrideAuthRules: OverrideAuthRulesSchema.optional(),
-});
+  qualityGates: QualityGateSchema.optional(),
+}).strict();
 
 const WebhookConfigSchema = z.object({
   enabled: z.boolean().optional(),

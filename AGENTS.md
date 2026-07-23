@@ -125,7 +125,7 @@ prReviewWorkflow(prId):
   correlation & dedup (content-hash)  — Merge all scanner findings, deduplicate by SHA-256 hash
   persist to FindingStore             — SQLite: findings, finding_comment_threads, overrides, audit
   sonarqube-measures                 — SonarQube quality gate metrics
-  merge-gate                         — Evaluate blocking findings, set ADO PR status (succeeded/failed)
+  merge-gate                         — Evaluate blocking findings, quality gates (coverage, CVEs), set ADO PR status (succeeded/failed)
   create-workitems                   — Auto-create ADO Bug (critical severity) and Task (high severity)
   comment-review-results             — Prioritized inline comments + one newest structured conclusion report
 ```
@@ -343,7 +343,7 @@ SONARQUBE_TOKEN=your_sonarqube_token
 - Workspace dependencies: `finding-store`, `agent-config-manager`, `ratan-ado-api`, `ratan-sonarqube-api` — defined in other packages in the monorepo.
 - The `start` CLI command scaffolds `.ratan/` from `templates/` on first run, then reads config via `ConfigProvider` and runs the scan loop.
 - The scanner pipeline uses `Promise.allSettled` for graceful degradation — individual scanner failures don't block the pipeline.
-- Merge gate sets ADO PR Status (`succeeded`/`failed`) based on policy. Errors are non-fatal.
+- Merge gate evaluates blocking findings AND configurable quality gates (coverage threshold, CVE severity thresholds). Quality gates are configured under `mergePolicy.qualityGates` in the config. The decision sets ADO PR Status (`succeeded`/`failed`). Errors are non-fatal.
 - Work item creation step handles errors and null/missing ADO work-item responses gracefully (non-fatal).
 - Comment step posts at most 30 valid-location findings after blocking/severity ordering and current-run deduplication. It refreshes linked inline threads, marks resolved-finding threads Fixed, renders suggested fixes in fenced code blocks, posts one structured canonical conclusion report last, deletes prior agent-generated conclusion threads, and silently skips per-line creation failures. The conclusion is rendered directly from the merge decision, so a blocked result cannot be presented as approval.
 - OpenCodeReview output does not expose a calibrated confidence score; do not restore the obsolete confidence-rescore/filter path or invent confidence values.

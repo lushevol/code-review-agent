@@ -109,13 +109,19 @@ Fallback dedup: location-based matching `(filePath, lineStart +/- 3, sourceEngin
 
 After all findings are collected and persisted:
 
-1. Read merge policy from root config (severity/category thresholds).
-2. Evaluate blocking findings against policy.
-3. Set ADO PR Status via `adoClient.createPullRequestStatus`:
-   - `succeeded` — no blocking findings
-   - `failed` — blocking findings exist
+1. Read merge policy from root config (severity/category thresholds + quality gates).
+2. Evaluate blocking findings against policy — open blocking findings produce a failed gate.
+3. Evaluate quality gates:
+   - **Coverage gate**: compares `measures.sonarQube.coverage.line.current` against `mergePolicy.qualityGates.coverageThreshold` (default 80%). Fails if below threshold.
+   - **CVE gates**: checks `measures.sonatype.componentCritical/componentSevere/componentModerate` against configurable blocking toggles. Fails if any enabled CVE severity has non-zero count.
+4. Each gate produces a `BlockerDetail` entry (`{ category, severity, message, passed }`).
+5. Merge decision is `blocked` if any error-severity gate fails; `allowed` if all pass; `pending` if the review is incomplete.
+6. Set ADO PR Status via `adoClient.createPullRequestStatus`:
+   - `succeeded` — all gates pass
+   - `failed` — one or more gates fail
    - `pending` — review in progress
-4. Errors are non-fatal; workflow continues.
+7. `blockerDetails` array is passed to the comment step for report rendering.
+8. Errors are non-fatal; workflow continues.
 
 ## Audit Observability Flow
 
@@ -148,7 +154,13 @@ fallback retains the focuses already selected for that workspace.
 4. Marks linked threads Fixed when a complete re-review persisted the linked finding, or a later superseding descendant, as resolved.
 5. Refreshes previously linked inline threads with the current compact `priority · severity`, title, explanation, and suggested-fix format.
 6. Selects new inline-postable findings with a valid file and positive line, orders by blocking status and severity, suppresses linked or repeated content hashes, then applies the 30-comment cap.
-7. Posts one canonical main conclusion after all inline work so it is the newest/top ADO thread. It contains only the merge decision, finding count, compact quality signals derived from SonarQube and Sonatype data when available, and reviewed commit, presented as a short structured Markdown report with summary, quality signals, and review metadata sections; prior agent-generated conclusion threads are then deleted. Inline titles are bounded, escaped Markdown headings and suggested fixes use plain fenced code blocks.
+7. Renders a structured conclusion report from `formatReviewConclusion()` with sections:
+   - **Status heading** (`✅ All checks passed` / `❌ Changes requested` / `⚠️ Review incomplete`)
+   - **Policy** — one-line summary of violations found
+   - **Quality gates** — per-gate pass/fail from `blockerDetails` (blocking findings, coverage threshold, CVE thresholds)
+   - **Quality signals** — compact SonarQube + Sonatype summary
+   - **Review metadata** — reviewed commit hash
+   Posts the conclusion as the newest/top ADO thread; prior agent-generated conclusions are then deleted.
 8. Stores the latest reviewed iteration id in PR properties under `CODE_REVIEW_AGENT_LATEST_REVIEW_ID`.
 9. Links each created ADO inline thread to its persisted finding in `finding_comment_threads`.
 10. Returns `mainCommentId` and `codeCommentIds`.

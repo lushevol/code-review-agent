@@ -128,6 +128,10 @@ Key areas include:
 | `sensitiveDataMask.customPatterns` | Stripe + Bearer | Regex patterns for secret redaction |
 | `remediationTasks.adoUrlTemplate` | Azure DevOps URL | Template for work item PR links |
 | `remediationTasks.workItemTags` | `"PR Guardian; Code Review"` | Tags applied to created work items |
+| `mergePolicy.qualityGates.coverageThreshold` | `80` | Minimum line coverage % (blocks merge if below) |
+| `mergePolicy.qualityGates.blockOnCriticalCve` | `true` | Block merge on any critical CVE |
+| `mergePolicy.qualityGates.blockOnHighCve` | `false` | Block merge on high-severity CVEs |
+| `mergePolicy.qualityGates.blockOnMediumCve` | `false` | Block merge on medium-severity CVEs |
 
 To run a one-shot scan:
 

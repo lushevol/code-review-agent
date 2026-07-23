@@ -22,6 +22,14 @@
     "maxDelayMs": 30000,
     "jitterMs": 1000
   },
+  "mergePolicy": {
+    "qualityGates": {
+      "coverageThreshold": 80,
+      "blockOnCriticalCve": true,
+      "blockOnHighCve": false,
+      "blockOnMediumCve": false
+    }
+  },
   "sonarQube": {
     "url": "https://your-sonarqube.example.com/api",
     "token": "set-your-sonar-token"

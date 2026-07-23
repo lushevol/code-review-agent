@@ -18,7 +18,7 @@ afterEach(() => {
 describe("comment", () => {
   it("formats inline findings like a concise prioritized review note", () => {
     expect(formatInlineFinding(finding())).toBe(
-      "### P1 · HIGH — Finding\n\nDescription\n\n**Suggested fix:**\n\n```\nFix it\n```\n\nUseful? Reply with 👍 or 👎.",
+      "### P1 · HIGH — Finding\n\nDescription\n\n**Suggested fix:**\n\n```\nFix it\n```\n\nUseful? Reply with 👍.",
     );
   });
 
@@ -58,10 +58,13 @@ describe("comment", () => {
         new_code_smells: 3,
       },
       mergeDecision: "blocked",
+      blockerDetails: [
+        { category: "blocking-findings", severity: "error", message: "1 unresolved blocking finding(s)", passed: false },
+      ],
     });
 
     expect(conclusion).toBe(
-      "<!-- pr-guardian:review-summary -->\n## PR Guardian Review\n\n### ❌ Changes requested\n\n1 blocking finding. See the inline comment for details.\n\n**SonarQube:** Coverage 87.5% · New bugs 1 · New vulnerabilities 2 · New code smells 3\n\n**Reviewed commit:** `1234567890`",
+      "<!-- pr-guardian:review-summary -->\n## PR Guardian Review\n\n### ❌ Changes requested\n\n**Policy**\n- 1 policy violation must be resolved before merge.\n\n**Quality gates**\n- ❌ 1 unresolved blocking finding(s)\n\n**Quality signals**\n- **SonarQube:** Coverage 87.5% · New bugs 1 · New vulnerabilities 2 · New code smells 3\n\n**Review metadata**\n- Reviewed commit: `1234567890`",
     );
     expect(conclusion).not.toContain("audit");
   });
@@ -71,19 +74,19 @@ describe("comment", () => {
       name: "clean follow-up",
       findings: [],
       mergeDecision: "allowed" as const,
-      expected: "### ✅ No blocking issues\n\nNo merge-blocking issues were found.",
+      expected: "### ✅ All checks passed",
     },
     {
       name: "non-blocking follow-up",
       findings: [finding()],
       mergeDecision: "allowed" as const,
-      expected: "### ✅ No blocking issues\n\n1 non-blocking suggestion is noted inline.",
+      expected: "### ✅ All checks passed",
     },
     {
       name: "incomplete follow-up",
       findings: [],
       mergeDecision: "pending" as const,
-      expected: "### ⚠️ Review incomplete\n\nAutomated review did not finish. Manual review is required.",
+      expected: "### ⚠️ Review incomplete",
     },
   ])("renders the $name conclusion without inventing SonarQube data", ({
     findings,
@@ -161,7 +164,7 @@ describe("comment", () => {
     expect(gitApi.updateComment).toHaveBeenCalledTimes(1);
     expect(gitApi.updateComment).toHaveBeenCalledWith(
       {
-        content: "### P1 · HIGH — Finding\n\nDescription\n\n**Suggested fix:**\n\n```\nFix it\n```\n\nUseful? Reply with 👍 or 👎.",
+        content: "### P1 · HIGH — Finding\n\nDescription\n\n**Suggested fix:**\n\n```\nFix it\n```\n\nUseful? Reply with 👍.",
       },
       "repo-id",
       7,
@@ -419,7 +422,7 @@ describe("comment", () => {
       expect.objectContaining({
         comments: [{
           content: expect.stringMatching(
-            /### ✅ No blocking issues[\s\S]*Coverage 92% · New bugs 0 · New vulnerabilities 0 · New code smells 0[\s\S]*`fixed12345`/,
+            /### ✅ All checks passed[\s\S]*Coverage 92% · New bugs 0 · New vulnerabilities 0 · New code smells 0[\s\S]*`fixed12345`/,
           ),
         }],
       }),
@@ -538,7 +541,7 @@ describe("comment", () => {
       expect.objectContaining({
         comments: [{
           content: expect.stringMatching(
-            /### ✅ No blocking issues[\s\S]*Coverage 96% · New bugs 0 · New vulnerabilities 0 · New code smells 0[\s\S]*`allowed123`/,
+            /### ✅ All checks passed[\s\S]*Coverage 96% · New bugs 0 · New vulnerabilities 0 · New code smells 0[\s\S]*`allowed123`/,
           ),
         }],
       }),

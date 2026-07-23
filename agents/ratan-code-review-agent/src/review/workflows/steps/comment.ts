@@ -41,6 +41,16 @@ const CommentInputSchema = z.object({
   measures: z.union([z.any(), z.null()]),
   mergeDecision: z.enum(["allowed", "blocked", "pending"]),
   createdWorkItems: z.number(),
+  blockerDetails: z
+    .array(
+      z.object({
+        category: z.string(),
+        severity: z.enum(["error", "warning"]),
+        message: z.string(),
+        passed: z.boolean(),
+      }),
+    )
+    .optional(),
 });
 
 const CodeReviewResultSchema = z.object({
@@ -85,11 +95,18 @@ export function formatReviewConclusion({
   latestSourceCommitId,
   measures,
   mergeDecision,
+  blockerDetails,
 }: {
   findings: Finding[];
   latestSourceCommitId: string;
   measures: unknown;
   mergeDecision: "allowed" | "blocked" | "pending";
+  blockerDetails?: Array<{
+    category: string;
+    severity: string;
+    message: string;
+    passed: boolean;
+  }>;
 }): string {
   const openFindings = findings.filter((finding) => finding.resolution === "open");
   const blockingCount = openFindings.filter((finding) => finding.blocking).length;
@@ -97,43 +114,62 @@ export function formatReviewConclusion({
   const reviewedCommit = latestSourceCommitId.slice(0, 10);
 
   let statusHeading: string;
+  let statusIcon: string;
   let summaryLines: string[];
   if (mergeDecision === "blocked") {
-    statusHeading = "### ❌ Changes requested";
+    const failedGates = (blockerDetails ?? []).filter((b) => !b.passed);
+    statusIcon = "❌";
+    statusHeading = "Changes requested";
     summaryLines = [
-      `- ${blockingCount} blocking ${blockingCount === 1 ? "finding requires" : "findings require"} changes before merge.`,
-      `- See the inline comment${blockingCount === 1 ? "" : "s"} for implementation details.`,
+      `${failedGates.length} policy violation${failedGates.length === 1 ? "" : "s"} must be resolved before merge.`,
     ];
   } else if (mergeDecision === "pending") {
-    statusHeading = "### ⚠️ Review incomplete";
-    summaryLines = [
-      "- Automated review did not finish. Manual review is required.",
-    ];
+    statusIcon = "⚠️";
+    statusHeading = "Review incomplete";
+    summaryLines = ["Automated review did not finish. Manual review is required."];
   } else if (nonBlockingCount > 0) {
-    statusHeading = "### ✅ No blocking issues";
+    statusIcon = "✅";
+    statusHeading = "All checks passed";
     summaryLines = [
-      `- ${nonBlockingCount} non-blocking ${nonBlockingCount === 1 ? "suggestion is" : "suggestions are"} noted inline.`,
+      `${nonBlockingCount} non-blocking suggestion${nonBlockingCount === 1 ? "" : "s"} noted inline — no blocking violations.`,
     ];
   } else {
-    statusHeading = "### ✅ No blocking issues";
-    summaryLines = ["- No merge-blocking issues were found."];
+    statusIcon = "✅";
+    statusHeading = "All checks passed";
+    summaryLines = ["No violations found."];
   }
 
-  return [
+  // Build sections — each ends with "" for spacing, trimmed at the join
+  const sections: string[] = [
     REVIEW_SUMMARY_MARKER,
     "## PR Guardian Review",
     "",
-    statusHeading,
+    `### ${statusIcon} ${statusHeading}`,
     "",
-    "**Summary**",
-    ...summaryLines,
+    "**Policy**",
+    ...summaryLines.map((l) => `- ${l}`),
     "",
+  ];
+
+  // Quality gates section — shown only when blockerDetails was provided
+  if (blockerDetails && blockerDetails.length > 0) {
+    sections.push("**Quality gates**");
+    for (const gate of blockerDetails) {
+      const icon = gate.passed ? "✅" : "❌";
+      sections.push(`- ${icon} ${gate.message}`);
+    }
+    sections.push("");
+  }
+
+  sections.push(
     "**Quality signals**",
     `- ${formatSonarQubeSummary(measures)}`,
     "",
     "**Review metadata**",
     `- Reviewed commit: \`${reviewedCommit}\``,
-  ].join("\n");
+  );
+
+  return sections.join("\n");
 }
 
 function formatSonarQubeSummary(measures: unknown): string {

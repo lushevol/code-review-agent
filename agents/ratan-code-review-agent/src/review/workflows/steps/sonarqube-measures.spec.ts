@@ -11,9 +11,22 @@ describe("sonarqubeMeasures", () => {
   });
 
   it("fetches measures with the PR and repository identity", async () => {
-    const measures = { securityRating: "1.0", bugs: "0" };
-    const getMeasures = vi.fn().mockResolvedValue(measures);
-    expect(await executeSonarqubeMeasures({ getMeasures })).toEqual({ measures });
+    const apiMeasures = { securityRating: "1.0", bugs: "0" };
+    const getMeasures = vi.fn().mockResolvedValue(apiMeasures);
+    const result = await executeSonarqubeMeasures({ getMeasures });
+    expect(result).toEqual({
+      measures: {
+        sonarQube: {
+          pullRequest: apiMeasures,
+          targetBranch: null,
+          coverage: {
+            line: { current: null, baseline: null, delta: null },
+            branch: { current: null, baseline: null, delta: null },
+          },
+        },
+        sonatype: null,
+      },
+    });
     expect(getMeasures).toHaveBeenCalledWith(7, "repo");
   });
 
@@ -23,7 +36,19 @@ describe("sonarqubeMeasures", () => {
       .mockRejectedValueOnce(new Error("transient"))
       .mockResolvedValue({ bugs: "0" });
     const result = await executeSonarqubeMeasures({ getMeasures }, { maxAttempts: 2, baseDelayMs: 0, maxDelayMs: 0, jitterMs: 0 });
-    expect(result).toEqual({ measures: { bugs: "0" } });
+    expect(result).toEqual({
+      measures: {
+        sonarQube: {
+          pullRequest: { bugs: "0" },
+          targetBranch: null,
+          coverage: {
+            line: { current: null, baseline: null, delta: null },
+            branch: { current: null, baseline: null, delta: null },
+          },
+        },
+        sonatype: null,
+      },
+    });
     expect(getMeasures).toHaveBeenCalledTimes(2);
   });
 
@@ -41,6 +66,7 @@ async function executeSonarqubeMeasures(
   const provider = {
     id: `sonar-${crypto.randomUUID()}`,
     getSonarQubeClient: () => sonarClient,
+    getAdoClient: () => null,
     getRootConfig: async () => ({ retry }),
   };
   getAgentConfigSessions().registerProvider(provider as never);

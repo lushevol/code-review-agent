@@ -111,6 +111,7 @@ async function executeMergeGate(
   const provider = {
     id: `merge-gate-${crypto.randomUUID()}`,
     getAdoClient: () => ({ createPullRequestStatus }),
+    getRootConfig: async () => ({}),
   };
   getAgentConfigSessions().registerProvider(provider as never);
   const requestContext = new RequestContext<{ configSessionId: string }>();
