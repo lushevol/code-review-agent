@@ -2,9 +2,9 @@
   "ado": {
     "organization": "your-organization",
     "project": "your-project",
-    "token": "env:ADO_TOKEN"
+    "token": "env:ADO_TOKEN",
+    "proxyUrl": ""
   },
-  "adoProxyUrl": "",
   "scanRepoNames": [],
   "scanPRCreatedDaysAgo": 7,
   "findingStorePath": ".ratan/data/findings.db",
@@ -26,6 +26,7 @@
     "url": "https://your-sonarqube.example.com/api",
     "token": "set-your-sonar-token"
   },
+  "workItemContext": { "enabled": true, "maxStories": 3 },
   "watch": { "intervalMs": 1800000 },
   "feedbackDaemon": { "enabled": true, "intervalMs": 300000 },
   "workspace": {

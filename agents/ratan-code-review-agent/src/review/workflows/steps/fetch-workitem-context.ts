@@ -3,6 +3,9 @@ import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
 import { type CommonRequestContext, PullRequestSchema } from "../../types";
 import { extractAdoWorkItemIds } from "../../utils/commit-parser";
+import { getLogger } from "ratan-logger";
+
+const workflowLogger = getLogger("fetch-workitem-context");
 
 const FetchWorkItemContextInputSchema = z.object({
   prDetails: PullRequestSchema,
@@ -36,7 +39,18 @@ export const fetchWorkItemContext = defineStep({
     const agentConfig = extractAgentConfig(
       requestContext as unknown as CommonRequestContext,
     );
+    const rootConfig = await agentConfig.getRootConfig();
     const adoClient = agentConfig.getAdoClient();
+
+    // Check if work-item context fetching is enabled (default: true)
+    const wiCtxConfig = rootConfig.workItemContext ?? {};
+    const wiCtxEnabled = wiCtxConfig.enabled !== false;
+    if (!wiCtxEnabled) {
+      workflowLogger.info("Work-item context fetching is disabled by config");
+      return { prDetails: inputData.prDetails, workItemContext: "" };
+    }
+
+    const maxStories = wiCtxConfig.maxStories ?? 3;
 
     // 1. Collect work item IDs from multiple sources
     const allWorkItemIds = new Set<number>();
@@ -60,17 +74,23 @@ export const fetchWorkItemContext = defineStep({
         allWorkItemIds.add(id);
       }
     } catch (error) {
-      console.error("[fetch-workitem-context] Error fetching commits:", error);
+      workflowLogger.error("Error fetching commits:", error);
       // Non-fatal — continue with linked work items only
     }
 
-    // 2. Fetch work item details
+    // 2. Fetch work item details (limited to maxStories)
     if (allWorkItemIds.size === 0) {
       return { prDetails: inputData.prDetails, workItemContext: "" };
     }
 
+    const workItemIdsArray = Array.from(allWorkItemIds).slice(0, maxStories);
+    if (workItemIdsArray.length < allWorkItemIds.size) {
+      workflowLogger.info(
+        `Fetching ${workItemIdsArray.length} of ${allWorkItemIds.size} work items (maxStories=${maxStories})`,
+      );
+    }
+
     try {
-      const workItemIdsArray = Array.from(allWorkItemIds);
       const workItems = await adoClient.getCommonWorkItems(
         workItemIdsArray,
         true, // include comments
@@ -109,7 +129,7 @@ export const fetchWorkItemContext = defineStep({
 
       return { prDetails: inputData.prDetails, workItemContext: parts.join("\n") };
     } catch (error) {
-      console.error("[fetch-workitem-context] Error fetching work item context:", error);
+      workflowLogger.error("Error fetching work item context:", error);
       return { prDetails: inputData.prDetails, workItemContext: "" };
     }
   },

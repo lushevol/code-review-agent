@@ -96,6 +96,19 @@ describe("createWorkItems", () => {
     warning.mockRestore();
   });
 
+  it("skips work item creation when remediationTasks is not enabled", async () => {
+    const createWorkItem = vi.fn();
+    const getWorkItemTrackingApi = vi.fn();
+    const result = await executeCreateWorkItems(
+      [finding({ severity: "critical" })],
+      { getWorkItemTrackingApi },
+      undefined,
+      false,
+    );
+    expect(result.createdWorkItems).toBe(0);
+    expect(createWorkItem).not.toHaveBeenCalled();
+  });
+
   it("counts a created item even if linking it back to the PR fails", async () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const result = await executeCreateWorkItems([finding()], {
@@ -114,6 +127,7 @@ async function executeCreateWorkItems(
   findings: NormalizedFinding[],
   webApi: Record<string, unknown>,
   suppliedDbPath?: string,
+  remediationTasksEnabled?: boolean,
 ) {
   const dbPath = suppliedDbPath ?? path.join(makeTempDirectory(), "findings.db");
   const adoClient = {
@@ -124,7 +138,10 @@ async function executeCreateWorkItems(
   const provider = {
     id: `create-work-items-${crypto.randomUUID()}`,
     getAdoClient: () => adoClient,
-    getRootConfig: async () => ({ findingStorePath: dbPath }),
+    getRootConfig: async () => ({
+      findingStorePath: dbPath,
+      remediationTasks: { enabled: remediationTasksEnabled ?? true },
+    }),
   };
   getAgentConfigSessions().registerProvider(provider as never);
   const requestContext = new RequestContext<{ configSessionId: string }>();

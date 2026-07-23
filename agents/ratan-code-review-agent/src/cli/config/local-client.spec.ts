@@ -4,8 +4,7 @@ import { LocalConfigClient } from "./local-client";
 import { SonarQubeClient } from "ratan-sonarqube-api";
 
 const config = {
-  ado: { organization: "o", project: "p" },
-  adoProxyUrl: "",
+  ado: { organization: "o", project: "p", proxyUrl: "" },
   logging: {
     level: "debug" as const,
     directory: ".ratan/logs",

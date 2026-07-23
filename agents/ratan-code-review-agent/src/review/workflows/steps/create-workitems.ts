@@ -99,6 +99,11 @@ export const createWorkItems = defineStep({
     const adoClient = agentConfig.getAdoClient();
     const rootConfig = await agentConfig.getRootConfig();
 
+    // ── Config guard: skip if remediation task creation is not enabled ──
+    if (!rootConfig.remediationTasks?.enabled) {
+      return { ...inputData, createdWorkItems: 0 };
+    }
+
     // ── Initialise FindingStore (for idempotency checks) ────────────────
     const { FindingStore } = await import("finding-store");
     const findingStore = new FindingStore();

@@ -32,7 +32,6 @@ describe("fetchWorkItemContext", () => {
   });
 
   it("continues with linked IDs when commit lookup fails", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const getCommonWorkItems = vi.fn().mockResolvedValue([{ id: 10, title: "Linked" }]);
     const result = await executeFetchWorkItemContext({
       getCommitsBatch: vi.fn().mockRejectedValue(new Error("commit failure")),
@@ -40,8 +39,6 @@ describe("fetchWorkItemContext", () => {
     });
     expect(getCommonWorkItems).toHaveBeenCalledWith([10], true);
     expect(result.workItemContext).toContain("Linked");
-    expect(error).toHaveBeenCalled();
-    error.mockRestore();
   });
 
   it("returns empty context without fetching details when no IDs exist", async () => {
@@ -55,14 +52,11 @@ describe("fetchWorkItemContext", () => {
   });
 
   it("returns empty context when work-item lookup fails", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const result = await executeFetchWorkItemContext({
       getCommitsBatch: vi.fn().mockResolvedValue([]),
       getCommonWorkItems: vi.fn().mockRejectedValue(new Error("work items offline")),
     });
     expect(result.workItemContext).toBe("");
-    expect(error).toHaveBeenCalled();
-    error.mockRestore();
   });
 });
 
@@ -70,7 +64,13 @@ async function executeFetchWorkItemContext(
   adoClient: Record<string, unknown>,
   overrides: Record<string, unknown> = {},
 ) {
-  const provider = { id: `work-items-${crypto.randomUUID()}`, getAdoClient: () => adoClient };
+  const provider = {
+    id: `work-items-${crypto.randomUUID()}`,
+    getAdoClient: () => adoClient,
+    getRootConfig: () => Promise.resolve({
+      workItemContext: { enabled: true, maxStories: 3 },
+    }),
+  };
   getAgentConfigSessions().registerProvider(provider as never);
   const requestContext = new RequestContext<{ configSessionId: string }>();
   requestContext.set("configSessionId", provider.id);
