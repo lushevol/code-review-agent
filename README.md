@@ -90,6 +90,16 @@ On first run, `start` creates `.ratan/config.json`, `.ratan/opencodereview/rule.
 `data/`, and `logs/`. Edit `config.json` with your ADO organization and project
 before scanning.
 
+Before scanning, `start` runs a **readiness check** that verifies each dependency and
+highlights which are blocking:
+- **LLM** (critical) — endpoint reachable and responding
+- **ADO** (critical) — authenticated and able to list repos
+- **Git** (critical) — installed and on the PATH (required for sensitive-data masking)
+- **SonarQube** (optional) — connected if configured; CVE scanning degrades gracefully
+  when unavailable
+
+If any critical dependency fails, the CLI exits with an error and reports what to fix.
+
 Default config and OpenCodeReview rule templates are at `templates/` in the package — they're
 copied to `.ratan/` on first `start` run. You can edit the generated files or
 customize the templates before re-running.

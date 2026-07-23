@@ -12,11 +12,20 @@ const mocks = vi.hoisted(() => ({
   scan: vi.fn(),
   setRepoPatterns: vi.fn(),
   startReviewPrWithProvider: vi.fn(),
+  checkReadiness: vi.fn().mockResolvedValue({
+    results: [],
+    criticalFailures: [],
+    allOk: true,
+  }),
 }));
 
 vi.mock("../config/loader", () => ({ loadConfig: mocks.loadConfig }));
 vi.mock("../../bootstrap", () => ({
   startReviewPrWithProvider: mocks.startReviewPrWithProvider,
+}));
+vi.mock("../readiness/readiness-check", () => ({
+  checkReadiness: mocks.checkReadiness,
+  printReadinessReport: vi.fn(),
 }));
 vi.mock("../utils/logger", () => ({
   cleanOldLogs: vi.fn(),
@@ -52,6 +61,12 @@ describe("startCommand", () => {
   afterEach(() => {
     vi.resetAllMocks();
     mocks.processor = undefined;
+    // Restore the default readiness-check mock after reset
+    mocks.checkReadiness.mockResolvedValue({
+      results: [],
+      criticalFailures: [],
+      allOk: true,
+    });
   });
 
   it("reviews an explicitly requested PR without requiring a build status", async () => {

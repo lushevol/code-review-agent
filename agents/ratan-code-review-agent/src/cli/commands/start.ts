@@ -9,6 +9,7 @@ import { getPRQueue } from "../services/pr-queue";
 import { getAutoScanService } from "../services/auto-scan";
 import { startReviewPrWithProvider } from "../../bootstrap";
 import { FeedbackService } from "../../review/workflows/services/feedback-service";
+import { checkReadiness, printReadinessReport } from "../readiness/readiness-check";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -430,16 +431,29 @@ export async function startCommand(options: StartOptions) {
   try {
     await provider.connect();
   } catch (err) {
-    logger.error(
-      `Could not connect to Azure DevOps: ${(err as Error).message}. ` +
-      `Check that ADO_TOKEN is set and your config has the correct org/project.`,
+    logger.warn(
+      `Provider connection failed: ${(err as Error).message}. ` +
+      "The readiness check will report the details below.",
     );
-    process.exit(1);
   }
 
   // 3b. Validate key config inputs and alert on missing/placeholder values
   logger.info("Validating configuration inputs...");
   validateConfigInputs(rootConfig, logger);
+
+  // 3c. Readiness check — verify all dependencies are actually reachable
+  logger.info("Checking dependencies...");
+  const readiness = await checkReadiness(provider, rootConfig);
+  printReadinessReport(readiness);
+
+  if (!readiness.allOk) {
+    logger.error(
+      `${readiness.criticalFailures.length} critical depende${readiness.criticalFailures.length === 1 ? "ncy is" : "ncies are"} unavailable. ` +
+      "Resolve the issues above before running the review.",
+    );
+    process.exit(1);
+  }
+  logger.info("All dependencies ready.");
 
   // 4. Explicit reviews run directly so completion and failures propagate to the caller.
   if (options.prId !== undefined) {

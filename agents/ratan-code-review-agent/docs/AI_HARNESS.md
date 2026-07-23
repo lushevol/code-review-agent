@@ -134,6 +134,7 @@ Then test workflow steps with mocked runtime context and mocked clients:
 - Continued-commit tests should verify fixed findings persist as resolved and close linked ADO threads, unchanged findings reuse their threads, new findings create threads, mixed commits reconcile all three outcomes, incomplete scans preserve prior state, merge decisions transition in both directions, SonarQube values refresh, and stale in-flight reviews cannot publish after a newer review starts.
 - `FeedbackService` should synchronize only threads explicitly associated with each finding.
 - `record-audit` should persist only allowlisted pilot metrics and must discard secret-like or arbitrary OCR metadata.
+- `readiness-check` should verify each dependency (Git, ADO, LLM, SonarQube) independently, report critical vs non-critical status, and surface meaningful failure messages.
 - `/api/audit` should export routed outcome metrics before any focus/status UI filters are added.
 - Dashboard HTTP tests should cover unfiltered and independently filtered findings, override history, repository-aware PR aggregation, and stats. UI builds should cover queue clearing and current scanner names.
 
@@ -221,7 +222,7 @@ credential value changed.
 
 Before allowing live PR review:
 
-- Run `ratan-code-review start --pr-id <test-pr-id>` to scaffold a valid config and verify connectivity against a dedicated test PR first. Explicit PR reviews run directly, wait for the workflow, surface failures, and bypass the automatic-scan build-status gate so repositories without CI can be used for a bounded pilot.
+- Run `ratan-code-review start --pr-id <test-pr-id>` to scaffold a valid config and verify connectivity against a dedicated test PR first. The built-in readiness check validates that all critical dependencies (LLM, ADO, Git) are reachable and configured before any scan begins. Explicit PR reviews run directly, wait for the workflow, surface failures, and bypass the automatic-scan build-status gate so repositories without CI can be used for a bounded pilot.
 - Run `pnpm verify:release -- --pr-id <test-pr-id>` for read-only npm, installed-CLI, secret-presence, ADO-authentication, and PR-access checks. Add `--expect-decision allowed|blocked` to assert the remote merge status, newest-thread placement, single canonical summary, SonarQube/commit fields, and current-format inline state. Add `--expect-fenced-suggestion` when the fixture should produce suggested code. Use `--scan-pr` only when ADO comment and status side effects are intended.
 - Confirm the target repositories and PR age window in root config.
 - Confirm `ADO_TOKEN`, the token referenced by `config.openCodeReview.llm.token`, and optional `SONARQUBE_TOKEN` are scoped correctly.
