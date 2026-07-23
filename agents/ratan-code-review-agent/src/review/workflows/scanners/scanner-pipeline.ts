@@ -1,4 +1,5 @@
 import type { FindingStore } from "finding-store";
+import { getLogger } from "ratan-logger";
 import z from "zod";
 import { extractAgentConfig } from "../../../bootstrap/session";
 import { OpenCodeReviewRunner } from "../../open-code-review/runner";
@@ -28,6 +29,8 @@ import { FINDING_SEVERITY_RANK } from "./finding-priority";
 import { OpenCodeReviewScanner } from "./open-code-review-scanner";
 import type { Scanner, ScannerResult } from "./types";
 import { configureSensitiveDataMask } from "../../utils/sensitive-data-mask";
+
+const scannerPipelineLogger = getLogger("scanner-pipeline");
 
 const ScannerPipelineInputSchema = z.object({
   prDetails: PullRequestSchema,
@@ -114,9 +117,11 @@ export function aggregateScannerResults(
     const scanner = scanners[index];
     if (result.status === "rejected") {
       const reason = result.reason;
-      console.warn(
-        `[scanner-pipeline] Scanner "${scanner.id}" (engine: ${scanner.engine}) failed: ${(reason instanceof Error ? reason.message : String(reason))}`,
-      );
+      scannerPipelineLogger.warn("Scanner failed", {
+        scannerId: scanner.id,
+        engine: scanner.engine,
+        error: reason instanceof Error ? reason.message : String(reason),
+      });
       if (scanner.engine === "open-code-review") {
         reviewExecutionStatus = "incomplete";
       }
@@ -150,7 +155,7 @@ export function loadPreviouslyLinkedFindings(
       findingStore.getCommentThreadsByPr(prId, repository),
     );
   } catch {
-    console.error("[scanner-pipeline] Failed to load linked findings");
+    scannerPipelineLogger.error("Failed to load linked findings");
     return { findingIds: new Set(), contentHashes: new Set() };
   }
 }
@@ -339,13 +344,13 @@ export const scannerPipeline = defineStep({
       }
     } catch {
       changesSinceLastReview = "";
-      console.error("[scanner-pipeline] Failed to persist findings");
+      scannerPipelineLogger.error("Failed to persist findings");
     }
     // Flush to disk so the downstream comment step sees the freshest findings
     try {
       findingStore.saveToDisk();
     } catch {
-      console.error("[scanner-pipeline] Failed to flush FindingStore to disk");
+      scannerPipelineLogger.error("Failed to flush FindingStore to disk");
     }
 
     const previouslyLinked = loadPreviouslyLinkedFindings(

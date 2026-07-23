@@ -35,12 +35,23 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
     onStepComplete,
   };
 
+  const workflowLogger = getLogger("review");
+  const startedAt = Date.now();
+
+  workflowLogger.info("review.started", {
+    prId: options.inputData.prId,
+  });
   let current = (await runSteps(
     [fetchPR, fetchWorkItemContext],
     options.inputData,
     stepOptions,
   )) as Record<string, any>;
   yield* emitEvents();
+  workflowLogger.info("review.step.completed", {
+    step: "fetch-context",
+    prId: current.prDetails?.pullRequestId,
+    repo: current.prDetails?.repoName,
+  });
 
   const agentConfig = extractAgentConfig(
     options.requestContext as unknown as CommonRequestContext,
@@ -55,14 +66,23 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
   let attemptedReviewFocuses: ReviewFocusSelection[] = [];
   let reviewAttemptStartedAt: number | undefined;
 
-  const workflowLogger = getLogger("review");
-
   try {
     current = await workspaceProvider.withWorkspace(
       current.prDetails,
       async (workspace) => {
         attemptedReviewFocuses = selectReviewFocuses(workspace.changes);
         reviewAttemptStartedAt = Date.now();
+        workflowLogger.info("review.step.completed", {
+          step: "workspace-setup",
+          prId: current.prDetails?.pullRequestId,
+          repo: current.prDetails?.repoName,
+          changedFiles: workspace.changes.length,
+          focuses: attemptedReviewFocuses.map((f) => f.focus).join(","),
+        });
+        workflowLogger.info("review.step.completed", {
+          step: "scanner-pipeline-start",
+          prId: current.prDetails?.pullRequestId,
+        });
         return (await runSteps(
           [scannerPipeline],
           { ...current, workspace },
@@ -102,7 +122,17 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
     yield { stepId: scannerPipeline.id, output: current };
   }
   yield* emitEvents();
+  workflowLogger.info("review.step.completed", {
+    step: "scanner-pipeline",
+    prId: current.prDetails?.pullRequestId,
+    findings: current.findings?.length ?? 0,
+    reviewExecutionStatus: current.reviewExecutionStatus,
+  });
 
+  workflowLogger.info("review.step.completed", {
+    step: "sonarqube-measures-start",
+    prId: current.prDetails?.pullRequestId,
+  });
   const measuresResult = await runSteps(
     [sonarqubeMeasures],
     current,
@@ -110,11 +140,27 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
   );
   yield* emitEvents();
   current = { ...current, ...(measuresResult as Record<string, unknown>) };
+  workflowLogger.info("review.step.completed", {
+    step: "sonarqube-measures",
+    prId: current.prDetails?.pullRequestId,
+  });
 
+  workflowLogger.info("review.step.completed", {
+    step: "finalize-start",
+    prId: current.prDetails?.pullRequestId,
+  });
   await runSteps(
     [mergeGate, recordAudit, createWorkItems, comment],
     current,
     stepOptions,
   );
   yield* emitEvents();
+
+  workflowLogger.info("review.finished", {
+    prId: current.prDetails?.pullRequestId,
+    repo: current.prDetails?.repoName,
+    durationMs: Math.max(1, Date.now() - startedAt),
+    findings: current.findings?.length ?? 0,
+    mergeDecision: current.mergeDecision,
+  });
 }

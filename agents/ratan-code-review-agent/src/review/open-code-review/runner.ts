@@ -4,12 +4,14 @@ import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { getLogger } from "ratan-logger";
 import { FindingCategory } from "../types/finding";
 import { maskSensitiveData } from "../utils/sensitive-data-mask";
 import type { ReviewWorkspace } from "../workspace/types";
 
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000;
+const ocrRunnerLogger = getLogger("ocr-runner");
 const OcrCommentCategorySchema = z.preprocess(
   (value) =>
     typeof value === "string" && !FindingCategory.safeParse(value).success
@@ -148,6 +150,14 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
         { mode: 0o600 },
       );
 
+      ocrRunnerLogger.info("Starting OCR review", {
+        model: input.llm.model,
+        ruleFile: input.ruleFile,
+        fromCommit: maskedRange.mergeBaseCommit.slice(0, 12),
+        toCommit: maskedRange.headCommit.slice(0, 12),
+        concurrency: this.concurrency,
+        timeoutMs: this.timeoutMs,
+      });
       const stdout = await this.execute(
         [
           "review",
@@ -179,10 +189,20 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
         throw new Error("OpenCodeReview returned invalid JSON output");
       }
       const parsed = OcrOutputSchema.parse(json);
+      const durationMs = Date.now() - startedAt;
+      ocrRunnerLogger.info("OCR review completed", {
+        status: parsed.status,
+        durationMs,
+        filesReviewed: parsed.summary?.files_reviewed,
+        totalTokens: parsed.summary?.total_tokens,
+        comments: parsed.summary?.comments,
+        warnings: parsed.warnings?.length ?? 0,
+        complete: parsed.status !== "completed_with_errors",
+      });
       return {
         ...parsed,
         complete: parsed.status !== "completed_with_errors",
-        durationMs: Date.now() - startedAt,
+        durationMs,
         rawOutput: stdout,
       };
     } finally {

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { AdoPullRequestMetadata } from "ratan-ado-api";
+import { getLogger } from "ratan-logger";
 import type {
   AddedLine,
   ChangedFile,
@@ -14,6 +15,7 @@ import type {
 
 const execFileAsync = promisify(execFile);
 const MAX_GIT_OUTPUT = 32 * 1024 * 1024;
+const workspaceLogger = getLogger("workspace");
 
 export interface LocalReviewWorkspaceOptions {
   workspaceRoot?: string;
@@ -50,12 +52,20 @@ export class LocalReviewWorkspaceProvider implements ReviewWorkspaceProvider {
     );
     const repoPath = path.join(runDirectory, "checkout");
 
+    workspaceLogger.info("Setting up workspace", {
+      prId: metadata.pullRequestId,
+      repoId: metadata.repoId,
+      targetRef: metadata.targetRefName?.slice(0, 40),
+      sourceRef: metadata.sourceRefName?.slice(0, 40),
+      useSsh: this.useSsh,
+    });
     fs.mkdirSync(path.dirname(cachePath), { recursive: true, mode: 0o700 });
     fs.mkdirSync(path.dirname(runDirectory), { recursive: true, mode: 0o700 });
     await this.pruneStaleWorktrees(cachePath);
 
     if (!fs.existsSync(cachePath)) {
       fs.mkdirSync(cachePath, { recursive: true, mode: 0o700 });
+      workspaceLogger.info("Initializing bare cache repository", { cachePath });
       await this.git(["init", "--bare", cachePath]);
     }
 
@@ -63,6 +73,7 @@ export class LocalReviewWorkspaceProvider implements ReviewWorkspaceProvider {
     const sourceRef = `refs/ratan/pr/${metadata.pullRequestId}/source`;
     const targetFetchUrl = this.useSsh && metadata.sshUrl ? metadata.sshUrl : metadata.cloneUrl;
     const sourceFetchUrl = this.useSsh && metadata.sourceSshUrl ? metadata.sourceSshUrl : metadata.sourceCloneUrl;
+    workspaceLogger.info("Fetching target branch", { targetRef });
     await this.git([
       "--git-dir",
       cachePath,
@@ -71,6 +82,7 @@ export class LocalReviewWorkspaceProvider implements ReviewWorkspaceProvider {
       targetFetchUrl,
       `+${metadata.targetRefName}:${targetRef}`,
     ]);
+    workspaceLogger.info("Fetching source branch", { sourceRef });
     await this.git([
       "--git-dir",
       cachePath,
@@ -80,6 +92,10 @@ export class LocalReviewWorkspaceProvider implements ReviewWorkspaceProvider {
       `+${metadata.sourceRefName}:${sourceRef}`,
     ]);
 
+    workspaceLogger.info("Verifying commit objects", {
+      targetCommit: metadata.latestTargetCommitId?.slice(0, 12),
+      sourceCommit: metadata.latestSourceCommitId?.slice(0, 12),
+    });
     await this.git([
       "--git-dir",
       cachePath,
@@ -107,8 +123,10 @@ export class LocalReviewWorkspaceProvider implements ReviewWorkspaceProvider {
     if (!mergeBaseCommit) {
       throw new Error(`No merge base found for pull request ${metadata.pullRequestId}`);
     }
+    workspaceLogger.info("Merge base computed", { mergeBaseCommit: mergeBaseCommit.slice(0, 12) });
 
     fs.mkdirSync(runDirectory, { recursive: true, mode: 0o700 });
+    workspaceLogger.info("Adding worktree checkout", { repoPath });
     await this.git([
       "--git-dir",
       cachePath,
@@ -125,6 +143,12 @@ export class LocalReviewWorkspaceProvider implements ReviewWorkspaceProvider {
         mergeBaseCommit,
         metadata.latestSourceCommitId,
       );
+      workspaceLogger.info("Workspace ready", {
+        prId: metadata.pullRequestId,
+        changedFiles: changes.length,
+        mergeBaseCommit: mergeBaseCommit.slice(0, 12),
+        headCommit: metadata.latestSourceCommitId?.slice(0, 12),
+      });
       return await callback({
         repoPath,
         mergeBaseCommit,
@@ -133,6 +157,7 @@ export class LocalReviewWorkspaceProvider implements ReviewWorkspaceProvider {
         runDirectory,
       });
     } finally {
+      workspaceLogger.info("Cleaning up workspace", { runDirectory });
       try {
         await this.git([
           "--git-dir",
