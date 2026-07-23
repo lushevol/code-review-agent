@@ -6,3 +6,8 @@ html, body, #root {
   height: 100%;
   margin: 0;
 }
+
+/* NextUI overlay container must fill height for flex layout */
+[data-overlay-container="true"] {
+  height: 100%;
+}
