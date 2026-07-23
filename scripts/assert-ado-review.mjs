@@ -61,7 +61,7 @@ const activeCurrentFindings = threads.filter(
     thread.status === "active" &&
     !thread.isDeleted &&
     (thread.comments ?? []).some(
-      (comment) => !comment.isDeleted && comment.content?.includes("Useful? Reply with 👍 or 👎."),
+      (comment) => !comment.isDeleted && comment.content?.includes("Useful? Reply with 👍."),
     ),
 );
 if (expectedDecision === "allowed" && activeCurrentFindings.length !== 0) {

@@ -131,7 +131,8 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
       } catch {
         throw new Error("OpenCodeReview rule file is invalid");
       }
-      const configPath = path.join(stateHome, "config.json");
+      const configDirectory = path.join(stateHome, ".opencodereview");
+      const configPath = path.join(configDirectory, "config.json");
       const llmConfig: Record<string, unknown> = {
         url: input.llm.url,
         auth_token: input.llm.token,
@@ -140,6 +141,7 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
       if (input.llm.protocol) {
         llmConfig.protocol = input.llm.protocol;
       }
+      fs.mkdirSync(configDirectory, { recursive: true, mode: 0o700 });
       fs.writeFileSync(
         configPath,
         JSON.stringify({ llm: llmConfig }),
@@ -204,6 +206,7 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
         stdio: ["ignore", "pipe", "pipe"],
       });
       const stdout: Buffer[] = [];
+      const stderr: Buffer[] = [];
       let stdoutBytes = 0;
       let settled = false;
       const finish = (error?: Error, output?: string) => {
@@ -227,12 +230,19 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
         }
         stdout.push(chunk);
       });
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderr.push(chunk);
+      });
       child.on("error", () => {
         finish(new Error("OpenCodeReview could not be started"));
       });
       child.on("close", (code) => {
         if (code !== 0) {
-          finish(new Error(`OpenCodeReview exited with code ${code ?? "unknown"}`));
+          const stderrOutput = Buffer.concat(stderr).toString("utf8").trim();
+          const message = stderrOutput
+            ? `OpenCodeReview exited with code ${code ?? "unknown"}: ${stderrOutput}`
+            : `OpenCodeReview exited with code ${code ?? "unknown"}`;
+          finish(new Error(message));
           return;
         }
         finish(undefined, Buffer.concat(stdout).toString("utf8"));
@@ -242,14 +252,13 @@ export class OpenCodeReviewRunner implements OcrReviewRunner {
 
   private buildEnvironment(
     home: string,
-    configPath: string,
+    _configPath: string,
     protocol?: string,
   ): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       ...this.environment,
       HOME: home,
-      OCR_CONFIG_PATH: configPath,
       OCR_NO_UPDATE: "1",
     };
     if (protocol) {

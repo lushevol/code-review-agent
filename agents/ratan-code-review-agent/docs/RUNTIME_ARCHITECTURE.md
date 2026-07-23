@@ -148,7 +148,7 @@ fallback retains the focuses already selected for that workspace.
 4. Marks linked threads Fixed when a complete re-review persisted the linked finding, or a later superseding descendant, as resolved.
 5. Refreshes previously linked inline threads with the current compact `priority · severity`, title, explanation, and suggested-fix format.
 6. Selects new inline-postable findings with a valid file and positive line, orders by blocking status and severity, suppresses linked or repeated content hashes, then applies the 30-comment cap.
-7. Posts one canonical main conclusion after all inline work so it is the newest/top ADO thread. It contains only the merge decision, finding count, compact SonarQube coverage/new-bug/new-vulnerability/new-code-smell results, and reviewed commit; prior agent-generated conclusion threads are then deleted. Inline titles are bounded, escaped Markdown headings and suggested fixes use plain fenced code blocks.
+7. Posts one canonical main conclusion after all inline work so it is the newest/top ADO thread. It contains only the merge decision, finding count, compact quality signals derived from SonarQube and Sonatype data when available, and reviewed commit, presented as a short structured Markdown report with summary, quality signals, and review metadata sections; prior agent-generated conclusion threads are then deleted. Inline titles are bounded, escaped Markdown headings and suggested fixes use plain fenced code blocks.
 8. Stores the latest reviewed iteration id in PR properties under `CODE_REVIEW_AGENT_LATEST_REVIEW_ID`.
 9. Links each created ADO inline thread to its persisted finding in `finding_comment_threads`.
 10. Returns `mainCommentId` and `codeCommentIds`.

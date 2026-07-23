@@ -24,10 +24,12 @@
   ],
   "scripts": {
     "dev": "tsx src/cli/index.ts start --watch",
+    "dev:dashboard": "tsx src/cli/index.ts dashboard --watch",
     "evaluate:golden": "tsx src/evaluation/run-golden-evaluation.ts",
     "test:coverage": "vitest run --coverage.enabled --coverage.provider=v8",
-    "build": "pnpm build:dashboard && cross-env NODE_OPTIONS=--max-old-space-size=4096 rslib build",
-    "build:dashboard": "cd dashboard && npx vite build",
+    "build": "pnpm build:agent",
+    "build:agent": "cross-env NODE_OPTIONS=--max-old-space-size=4096 rslib build",
+    "build:dashboard": "cd dashboard && pnpm dlx vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "node ./bin/ratan-code-review.cjs start",
     "prepublish": "pnpm build"

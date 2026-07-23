@@ -205,8 +205,9 @@ Three scanners run concurrently; individual failures are non-fatal:
 | CVE | SonarQube Issues API | Vulnerabilities, security hotspots |
 | Compliance | Static analysis + YAML rules | TODO/FIXME, console.log, large files |
 
-The main review comment contains only the merge decision, finding count, four
-compact SonarQube signals, and reviewed commit. Re-review posts that canonical
+The main review comment contains only the merge decision, finding count,
+compact SonarQube after-merge coverage and PR quality signals, Sonatype CVE
+severity counts when available, and reviewed commit. Re-review posts that canonical
 conclusion last so it is the newest/top ADO thread, then removes prior
 agent-generated conclusion threads. Inline notes use a compact
 `priority · severity` heading, concise escaped title, explanation, and plain fenced code block. They

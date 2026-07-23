@@ -75,7 +75,7 @@ without translation by PR Guardian:
 
 `OpenCodeReviewRunner` receives resolved OpenCodeReview configuration from the
 PR Guardian config provider. For each review, it writes the LLM settings to an
-isolated temporary OpenCodeReview config at `OCR_CONFIG_PATH`, passes the
+isolated temporary OpenCodeReview config at `$HOME/.opencodereview/config.json`, passes the
 configured rule file directly through `ocr review --rule`, and removes the
 temporary home after the review.
 

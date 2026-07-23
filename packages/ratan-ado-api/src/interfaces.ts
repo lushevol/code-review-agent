@@ -560,6 +560,8 @@ export const AdoPullRequestSchema = z.object({
 export type AdoPullRequest = z.infer<typeof AdoPullRequestSchema>;
 
 export const AdoPullRequestMetadataSchema = z.object({
+  projectId: z.string().optional(),
+  pipelineId: z.number().optional(),
   repoId: z.string(),
   repoName: z.string(),
   cloneUrl: z.string().url(),
@@ -588,6 +590,34 @@ export const AdoPullRequestMetadataSchema = z.object({
 export type AdoPullRequestMetadata = z.infer<
   typeof AdoPullRequestMetadataSchema
 >;
+
+export const SonatypeBuildMetricsSchema = z.object({
+  __etag: z.number().optional(),
+  appId: z.string().optional(),
+  stage: z.string().optional(),
+  iqUrl: z.string().optional(),
+  reportUrl: z.string().optional(),
+  componentCritical: z.number(),
+  componentSevere: z.number(),
+  componentModerate: z.number(),
+  legacyViolations: z.number().optional(),
+  affectedComponents: z.number().optional(),
+  totalViolations: z.number().optional(),
+  totalComponents: z.number().optional(),
+  meta: z
+    .object({
+      projectId: z.string().optional(),
+      buildId: z.number().optional(),
+      buildStatus: z.number().optional(),
+      buildNumber: z.string().optional(),
+      buildQueued: z.string().optional(),
+      buildStarted: z.string().optional(),
+    })
+    .optional(),
+  id: z.string().optional(),
+});
+
+export type SonatypeBuildMetrics = z.infer<typeof SonatypeBuildMetricsSchema>;
 
 const AdoProjectTypeSchema = z.object({
   abbreviation: z.string().optional(),

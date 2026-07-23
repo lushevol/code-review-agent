@@ -49,8 +49,22 @@ export async function getPullRequestMetadataById(
 
   const sourceRefName = pr.sourceRefName ?? "";
   const targetRefName = pr.targetRefName ?? "";
+  const properties = await gitApi.getPullRequestProperties(
+    repository.name,
+    Number(pullRequestId),
+    repository.project?.name ?? "",
+  );
+  const propertyValues = properties?.value as
+    | Record<string, { $type?: string; $value?: string }>
+    | undefined;
+  const pipelineIdValue =
+    propertyValues?.["System.DefinitionId"]?.$value ??
+    propertyValues?.["Build.DefinitionId"]?.$value;
+  const pipelineId = pipelineIdValue ? Number(pipelineIdValue) : undefined;
 
   return {
+    projectId: repository.project?.id ?? "",
+    pipelineId: Number.isFinite(pipelineId) ? pipelineId : undefined,
     repoId: repository.id,
     repoName: repository.name,
     cloneUrl,

@@ -5,6 +5,15 @@
 import type { MeasuresComponent, ParsedMeasuresComponent } from "./interfaces";
 import { getLogger } from "ratan-logger";
 
+function parseMeasureValue(rawValue: string): number | string {
+  if (rawValue.trim() === "") {
+    return rawValue;
+  }
+
+  const numericValue = Number(rawValue);
+  return Number.isFinite(numericValue) ? numericValue : rawValue;
+}
+
 export interface SonarQubeClientOptions { url?: string; }
 
 export interface SonarIssueSearchResult {
@@ -264,14 +273,7 @@ export class SonarQubeClient {
         typeof prIdOrBranch === "string" ? prIdOrBranch : undefined;
 
       if (!(prId || branch)) {
-        return {
-          coverage: "-",
-          line_coverage: "-",
-          new_bugs: "-",
-          new_vulnerabilities: "-",
-          new_code_smells: "-",
-          new_coverage: "-",
-        } as unknown as ParsedMeasuresComponent;
+        return {};
       }
 
       const url = new URL(`${this.baseUrl}/measures/component`);
@@ -299,7 +301,12 @@ export class SonarQubeClient {
 
       const result = data.component.measures.reduce(
         (acc: Record<string, unknown>, measure) => {
-          acc[measure.metric] = Number(measure.value ?? measure.period.value);
+          const value = parseMeasureValue(
+            measure.value ?? measure.period.value,
+          );
+          if (value !== "") {
+            acc[measure.metric] = value;
+          }
           return acc;
         },
         {} as ParsedMeasuresComponent,

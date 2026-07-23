@@ -91,6 +91,7 @@ import {
   queryWorkitemsByQueryId,
   queryWorkitemsByWiql,
 } from "./workitem-query";
+import { getSonatypeBuildMetrics } from "./sonatype";
 export class AzureDevOps {
   private adoWebApi: AdoWebApi;
   private API_URL = "https://dev.azure.com";
@@ -238,6 +239,7 @@ export class AzureDevOps {
   getBuildLogsByBuildId = getBuildLogsByBuildId;
   getBuildPropertiesByBuildId = getBuildPropertiesByBuildId;
   getBuildReportByBuildId = getBuildReportByBuildId;
+  getSonatypeBuildMetrics = getSonatypeBuildMetrics;
   queryWorkitemsByQueryId = queryWorkitemsByQueryId;
   queryWorkitemsByWiql = queryWorkitemsByWiql;
   createTestRun = createTestRun;

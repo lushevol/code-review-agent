@@ -77,7 +77,7 @@ export function formatInlineFinding(finding: Finding): string {
     ? `\n\n**Suggested fix:**\n\n\`\`\`\n${finding.remediation}\n\`\`\``
     : "";
 
-  return `${heading}\n\n${finding.description}${suggestion}\n\nUseful? Reply with 👍 or 👎.`;
+  return `${heading}\n\n${finding.description}${suggestion}\n\nUseful? Reply with 👍.`;
 }
 
 export function formatReviewConclusion({
@@ -96,18 +96,44 @@ export function formatReviewConclusion({
   const nonBlockingCount = openFindings.length - blockingCount;
   const reviewedCommit = latestSourceCommitId.slice(0, 10);
 
-  let conclusion: string;
+  let statusHeading: string;
+  let summaryLines: string[];
   if (mergeDecision === "blocked") {
-    conclusion = `### ❌ Changes requested\n\n${blockingCount} blocking ${blockingCount === 1 ? "finding" : "findings"}. See the inline comment${blockingCount === 1 ? "" : "s"} for details.`;
+    statusHeading = "### ❌ Changes requested";
+    summaryLines = [
+      `- ${blockingCount} blocking ${blockingCount === 1 ? "finding requires" : "findings require"} changes before merge.`,
+      `- See the inline comment${blockingCount === 1 ? "" : "s"} for implementation details.`,
+    ];
   } else if (mergeDecision === "pending") {
-    conclusion = "### ⚠️ Review incomplete\n\nAutomated review did not finish. Manual review is required.";
+    statusHeading = "### ⚠️ Review incomplete";
+    summaryLines = [
+      "- Automated review did not finish. Manual review is required.",
+    ];
   } else if (nonBlockingCount > 0) {
-    conclusion = `### ✅ No blocking issues\n\n${nonBlockingCount} non-blocking ${nonBlockingCount === 1 ? "suggestion is" : "suggestions are"} noted inline.`;
+    statusHeading = "### ✅ No blocking issues";
+    summaryLines = [
+      `- ${nonBlockingCount} non-blocking ${nonBlockingCount === 1 ? "suggestion is" : "suggestions are"} noted inline.`,
+    ];
   } else {
-    conclusion = "### ✅ No blocking issues\n\nNo merge-blocking issues were found.";
+    statusHeading = "### ✅ No blocking issues";
+    summaryLines = ["- No merge-blocking issues were found."];
   }
 
-  return `${REVIEW_SUMMARY_MARKER}\n## PR Guardian Review\n\n${conclusion}\n\n${formatSonarQubeSummary(measures)}\n\n**Reviewed commit:** \`${reviewedCommit}\``;
+  return [
+    REVIEW_SUMMARY_MARKER,
+    "## PR Guardian Review",
+    "",
+    statusHeading,
+    "",
+    "**Summary**",
+    ...summaryLines,
+    "",
+    "**Quality signals**",
+    `- ${formatSonarQubeSummary(measures)}`,
+    "",
+    "**Review metadata**",
+    `- Reviewed commit: \`${reviewedCommit}\``,
+  ].join("\n");
 }
 
 function formatSonarQubeSummary(measures: unknown): string {
@@ -116,6 +142,11 @@ function formatSonarQubeSummary(measures: unknown): string {
   }
 
   const values = measures as Record<string, unknown>;
+
+  if ("sonarQube" in values || "sonatype" in values) {
+    return formatEnhancedSonarQubeSummary(values);
+  }
+
   const metric = (name: string, suffix = "") => {
     const value = values[name];
     return typeof value === "number" && Number.isFinite(value)
@@ -124,6 +155,42 @@ function formatSonarQubeSummary(measures: unknown): string {
   };
 
   return `**SonarQube:** Coverage ${metric("coverage", "%")} · New bugs ${metric("new_bugs")} · New vulnerabilities ${metric("new_vulnerabilities")} · New code smells ${metric("new_code_smells")}`;
+}
+
+function formatEnhancedSonarQubeSummary(values: Record<string, unknown>): string {
+  const sonarQube =
+    values.sonarQube && typeof values.sonarQube === "object"
+      ? values.sonarQube as Record<string, unknown>
+      : {};
+  const pullRequest =
+    sonarQube.pullRequest && typeof sonarQube.pullRequest === "object"
+      ? sonarQube.pullRequest as Record<string, unknown>
+      : {};
+  const coverage =
+    sonarQube.coverage && typeof sonarQube.coverage === "object"
+      ? sonarQube.coverage as Record<string, unknown>
+      : {};
+  const sonatype =
+    values.sonatype && typeof values.sonatype === "object"
+      ? values.sonatype as Record<string, unknown>
+      : {};
+
+  const trend = (metric: unknown) => {
+    if (!metric || typeof metric !== "object") return "N/A";
+    const entry = metric as Record<string, unknown>;
+    const current = typeof entry.current === "number" ? entry.current : null;
+    const delta = typeof entry.delta === "number" ? entry.delta : null;
+    if (current === null) return "N/A";
+    if (delta === null || delta === 0) return `${current}%`; 
+    return `${current}% ${delta > 0 ? "↑" : "↓"}${Math.abs(delta)}%`;
+  };
+
+  const count = (source: Record<string, unknown>, name: string) => {
+    const value = source[name];
+    return typeof value === "number" && Number.isFinite(value) ? String(value) : "N/A";
+  };
+
+  return `**SonarQube:** After merge line ${trend(coverage.line)} · Branch ${trend(coverage.branch)} · New bugs ${count(pullRequest, "new_bugs")} · New vulnerabilities ${count(pullRequest, "new_vulnerabilities")} · New code smells ${count(pullRequest, "new_code_smells")} · CVE C/S/M ${count(sonatype, "componentCritical")}/${count(sonatype, "componentSevere")}/${count(sonatype, "componentModerate")}`;
 }
 
 function isReviewSummaryThread(thread: PullRequestThread): boolean {

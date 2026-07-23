@@ -193,11 +193,11 @@ git commit -m "feat: scaffold OpenCodeReview configuration"
 
 **Interfaces:**
 - Consumes: resolved openCodeReview.llm and a provider resolveConfigPath(relativePath: string): string.
-- Produces: OcrReviewInput.llm and OcrReviewInput.ruleFile, an isolated OCR_CONFIG_PATH, and --rule <ruleFile>.
+- Produces: OcrReviewInput.llm and OcrReviewInput.ruleFile, an isolated `$HOME/.opencodereview/config.json`, and --rule <ruleFile>.
 
 - [ ] **Step 1: Write failing runner tests**
 
-Make the fake OCR binary capture its argument list and the file at process.env.OCR_CONFIG_PATH. Assert:
+Make the fake OCR binary capture its argument list and the file at `$HOME/.opencodereview/config.json`. Assert:
 
 ~~~ts
 expect(capture.args).toEqual(expect.arrayContaining(["--rule", ruleFile]));
