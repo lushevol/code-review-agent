@@ -24,7 +24,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { fetchFindings, fetchStats, fetchAudit } from "../api";
+import { fetchFindings, fetchStats, fetchAudit, fetchMetrics } from "../api";
 
 const SEVERITY_COLORS: Record<string, string> = {
   critical: "#e94560",
@@ -63,6 +63,7 @@ export default function DashboardOverview() {
   const [findings, setFindings] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [auditRecords, setAuditRecords] = useState<any[]>([]);
+  const [metrics, setMetrics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,11 +72,13 @@ export default function DashboardOverview() {
       fetchFindings().then((d) => d.findings ?? []).catch(() => []),
       fetchStats().catch(() => null),
       fetchAudit().then((d) => d.records ?? []).catch(() => []),
+      fetchMetrics().then((d) => d.aggregate ?? null).catch(() => null),
     ])
-      .then(([f, s, audits]) => {
+      .then(([f, s, audits, m]) => {
         setFindings(f);
         setStats(s);
         setAuditRecords(audits);
+        setMetrics(m);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -278,6 +281,63 @@ export default function DashboardOverview() {
         </div>
       )}
 
+      {/* ── Performance Metrics ── */}
+      {metrics && metrics.totalReviews > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold mb-3 text-gray-600">Review Performance</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              title="Valid Finding Rate"
+              value={metrics.averageValidRate !== null
+                ? `${(metrics.averageValidRate * 100).toFixed(0)}%`
+                : "N/A"}
+              color="success"
+              subtitle="Across all reviews"
+              icon={
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              }
+            />
+            <StatCard
+              title="Resolution Rate"
+              value={metrics.averageResolutionRate !== null
+                ? `${(metrics.averageResolutionRate * 100).toFixed(0)}%`
+                : "N/A"}
+              color="primary"
+              subtitle="Findings resolved"
+              icon={
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                </svg>
+              }
+            />
+            <StatCard
+              title="CVEs Detected"
+              value={metrics.totalCveDetected}
+              color="danger"
+              subtitle={`Across ${metrics.reviewsWithCve} reviews`}
+              icon={
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+              }
+            />
+            <StatCard
+              title="Coverage Issues"
+              value={metrics.totalCoverageIssues}
+              color="warning"
+              subtitle="Below threshold"
+              icon={
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
+                </svg>
+              }
+            />
+          </div>
+        </div>
+      )}
+
       {/* ── Charts Grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Findings by Severity */}
@@ -470,6 +530,71 @@ export default function DashboardOverview() {
             </div>
           </CardBody>
         </Card>
+      )}
+
+      {/* ── Performance Trends ── */}
+      {metrics && metrics.totalReviews > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold mb-3 text-gray-600">Performance Trends</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card fullWidth shadow="sm">
+              <CardHeader className="pb-0">
+                <h3 className="text-sm font-semibold">Valid Finding Rate</h3>
+              </CardHeader>
+              <CardBody>
+                <p className="text-sm text-gray-500">
+                  {metrics.totalReviews} review{metrics.totalReviews !== 1 ? "s" : ""}
+                  {" "}&mdash;{" "}
+                  {metrics.averageValidRate !== null
+                    ? `${(metrics.averageValidRate * 100).toFixed(0)}%`
+                    : "N/A"}
+                  {" "}average valid rate
+                </p>
+              </CardBody>
+            </Card>
+
+            <Card fullWidth shadow="sm">
+              <CardHeader className="pb-0">
+                <h3 className="text-sm font-semibold">CVE Detection</h3>
+              </CardHeader>
+              <CardBody>
+                <p className="text-sm text-gray-500">
+                  {metrics.totalCveDetected} CVE
+                  {metrics.totalCveDetected !== 1 ? "s" : ""} detected across{" "}
+                  {metrics.reviewsWithCve} review
+                  {metrics.reviewsWithCve !== 1 ? "s" : ""}
+                </p>
+              </CardBody>
+            </Card>
+
+            <Card fullWidth shadow="sm">
+              <CardHeader className="pb-0">
+                <h3 className="text-sm font-semibold">Resolution Rate</h3>
+              </CardHeader>
+              <CardBody>
+                <p className="text-sm text-gray-500">
+                  {metrics.averageResolutionRate !== null
+                    ? `${(metrics.averageResolutionRate * 100).toFixed(0)}%`
+                    : "N/A"}
+                  {" "}average resolution rate
+                </p>
+              </CardBody>
+            </Card>
+
+            <Card fullWidth shadow="sm">
+              <CardHeader className="pb-0">
+                <h3 className="text-sm font-semibold">Coverage Issues</h3>
+              </CardHeader>
+              <CardBody>
+                <p className="text-sm text-gray-500">
+                  {metrics.totalCoverageIssues} review
+                  {metrics.totalCoverageIssues !== 1 ? "s" : ""} with coverage
+                  below threshold
+                </p>
+              </CardBody>
+            </Card>
+          </div>
+        </div>
       )}
     </div>
   );
