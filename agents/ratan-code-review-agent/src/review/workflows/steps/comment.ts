@@ -173,10 +173,24 @@ export function formatReviewConclusion({
     );
   }
 
+  const codeQualityLines = formatCodeQualityLines(measures);
+  const cveLines = formatCveLines(measures);
+
+  if (codeQualityLines.length > 0) {
+    sections.push("**Code Quality**", ...codeQualityLines, "");
+  }
+
+  if (cveLines.length > 0) {
+    sections.push("**CVEs**", ...cveLines, "");
+  }
+
+  // Security hotspots — show when available from SonarQube PR measures
+  const securityHotspots = formatSecurityHotspots(measures);
+  if (securityHotspots !== null) {
+    sections.push(securityHotspots, "");
+  }
+
   sections.push(
-    "**Quality signals**",
-    `- ${formatSonarQubeSummary(measures)}`,
-    "",
     "**Review metadata**",
     `- Reviewed commit: \`${reviewedCommit}\``,
   );
@@ -184,28 +198,36 @@ export function formatReviewConclusion({
   return sections.join("\n");
 }
 
-function formatSonarQubeSummary(measures: unknown): string {
-  if (!measures || typeof measures !== "object") {
-    return "**SonarQube:** Not available";
-  }
+/** Returns bullet-point lines for the Code Quality section, or an empty array if no data. */
+function formatCodeQualityLines(measures: unknown): string[] {
+  if (!measures || typeof measures !== "object") return [];
 
   const values = measures as Record<string, unknown>;
 
-  if ("sonarQube" in values || "sonatype" in values) {
-    return formatEnhancedSonarQubeSummary(values);
+  // Enhanced format (from sonarqube-measures step with coverage deltas + PR measures)
+  if ("sonarQube" in values) {
+    return formatEnhancedCodeQualityLines(values);
   }
 
+  // Legacy simple measures format (flat keys, no branch or delta data)
   const metric = (name: string, suffix = "") => {
     const value = values[name];
     return typeof value === "number" && Number.isFinite(value)
       ? `${value}${suffix}`
-      : "N/A";
+      : null;
   };
 
-  return `**SonarQube:** Coverage ${metric("coverage", "%")} · New bugs ${metric("new_bugs")} · New vulnerabilities ${metric("new_vulnerabilities")} · New code smells ${metric("new_code_smells")}`;
+  const cov = metric("coverage", "%");
+  const lines: string[] = [];
+  if (cov !== null) lines.push(`- **Line coverage:** ${cov}`);
+  for (const [label, key] of [["New bugs", "new_bugs"], ["New vulnerabilities", "new_vulnerabilities"], ["New code smells", "new_code_smells"]] as const) {
+    const v = metric(key);
+    lines.push(`- **${label}:** \`${v ?? "N/A"}\``);
+  }
+  return lines;
 }
 
-function formatEnhancedSonarQubeSummary(values: Record<string, unknown>): string {
+function formatEnhancedCodeQualityLines(values: Record<string, unknown>): string[] {
   const sonarQube =
     values.sonarQube && typeof values.sonarQube === "object"
       ? values.sonarQube as Record<string, unknown>
@@ -218,27 +240,78 @@ function formatEnhancedSonarQubeSummary(values: Record<string, unknown>): string
     sonarQube.coverage && typeof sonarQube.coverage === "object"
       ? sonarQube.coverage as Record<string, unknown>
       : {};
-  const sonatype =
-    values.sonatype && typeof values.sonatype === "object"
-      ? values.sonatype as Record<string, unknown>
-      : {};
 
   const trend = (metric: unknown) => {
-    if (!metric || typeof metric !== "object") return "N/A";
+    if (!metric || typeof metric !== "object") return null;
     const entry = metric as Record<string, unknown>;
     const current = typeof entry.current === "number" ? entry.current : null;
     const delta = typeof entry.delta === "number" ? entry.delta : null;
-    if (current === null) return "N/A";
-    if (delta === null || delta === 0) return `${current}%`; 
+    if (current === null) return null;
+    if (delta === null || delta === 0) return `${current}%`;
     return `${current}% ${delta > 0 ? "↑" : "↓"}${Math.abs(delta)}%`;
   };
 
   const count = (source: Record<string, unknown>, name: string) => {
     const value = source[name];
-    return typeof value === "number" && Number.isFinite(value) ? String(value) : "N/A";
+    return typeof value === "number" && Number.isFinite(value) ? String(value) : null;
   };
 
-  return `**SonarQube:** After merge line ${trend(coverage.line)} · Branch ${trend(coverage.branch)} · New bugs ${count(pullRequest, "new_bugs")} · New vulnerabilities ${count(pullRequest, "new_vulnerabilities")} · New code smells ${count(pullRequest, "new_code_smells")} · CVE C/S/M ${count(sonatype, "componentCritical")}/${count(sonatype, "componentSevere")}/${count(sonatype, "componentModerate")}`;
+  const lines: string[] = [];
+
+  const lineCov = trend(coverage.line);
+  const branchCov = trend(coverage.branch);
+  if (lineCov !== null) lines.push(`- **Line coverage:** ${lineCov}`);
+  if (branchCov !== null) lines.push(`- **Branch coverage:** ${branchCov}`);
+
+  lines.push(
+    `- **New bugs:** \`${count(pullRequest, "new_bugs") ?? "N/A"}\``,
+    `- **New vulnerabilities:** \`${count(pullRequest, "new_vulnerabilities") ?? "N/A"}\``,
+    `- **New code smells:** \`${count(pullRequest, "new_code_smells") ?? "N/A"}\``,
+  );
+
+  return lines;
+}
+
+/** Returns CVEs bullet-point section lines, or empty array if no Sonatype data. */
+function formatCveLines(measures: unknown): string[] {
+  if (!measures || typeof measures !== "object") return [];
+
+  const values = measures as Record<string, unknown>;
+  const sonatype =
+    values.sonatype && typeof values.sonatype === "object"
+      ? values.sonatype as Record<string, unknown>
+      : {};
+
+  const critical = typeof sonatype.componentCritical === "number" ? sonatype.componentCritical : null;
+  const severe = typeof sonatype.componentSevere === "number" ? sonatype.componentSevere : null;
+  const moderate = typeof sonatype.componentModerate === "number" ? sonatype.componentModerate : null;
+
+  if (critical === null && severe === null && moderate === null) return [];
+
+  const lines: string[] = [];
+  lines.push(critical !== null ? `- 🔴 **Critical:** ${critical}` : "- **Critical:** 0");
+  if (severe !== null) lines.push(`- **Severe:** ${severe}`);
+  if (moderate !== null) lines.push(`- **Moderate:** ${moderate}`);
+  return lines;
+}
+
+function formatSecurityHotspots(measures: unknown): string | null {
+  if (!measures || typeof measures !== "object") return null;
+  const values = measures as Record<string, unknown>;
+  const sonarQube =
+    values.sonarQube && typeof values.sonarQube === "object"
+      ? values.sonarQube as Record<string, unknown>
+      : {};
+  const pullRequest =
+    sonarQube.pullRequest && typeof sonarQube.pullRequest === "object"
+      ? sonarQube.pullRequest as Record<string, unknown>
+      : {};
+
+  const hotspots = pullRequest.new_security_hotspots;
+  const count = typeof hotspots === "number" && Number.isFinite(hotspots) ? hotspots : null;
+  if (count === null) return null;
+
+  return `**Security hotspots:** \`${count}\` new hotspot${count === 1 ? "" : "s"} introduced`;
 }
 
 function isReviewSummaryThread(thread: PullRequestThread): boolean {

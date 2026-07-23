@@ -64,7 +64,7 @@ describe("comment", () => {
     });
 
     expect(conclusion).toBe(
-      "<!-- pr-guardian:review-summary -->\n## PR Guardian Review\n\n### ❌ Changes requested\n\n**Policy**\n- 1 policy violation must be resolved before merge.\n\n**Quality gates**\n- ❌ 1 unresolved blocking finding(s)\n\n**Quality signals**\n- **SonarQube:** Coverage 87.5% · New bugs 1 · New vulnerabilities 2 · New code smells 3\n\n**Review metadata**\n- Reviewed commit: `1234567890`",
+      "<!-- pr-guardian:review-summary -->\n## PR Guardian Review\n\n### ❌ Changes requested\n\n**Policy**\n- 1 policy violation must be resolved before merge.\n\n**Quality gates**\n- ❌ 1 unresolved blocking finding(s)\n\n**Code Quality**\n- **Line coverage:** 87.5%\n- **New bugs:** `1`\n- **New vulnerabilities:** `2`\n- **New code smells:** `3`\n\n**Review metadata**\n- Reviewed commit: `1234567890`",
     );
     expect(conclusion).not.toContain("audit");
   });
@@ -101,7 +101,9 @@ describe("comment", () => {
     });
 
     expect(conclusion).toContain(expected);
-    expect(conclusion).toContain("**SonarQube:** Not available");
+    expect(conclusion).not.toContain("**Code Quality**");
+    expect(conclusion).not.toContain("**CVEs**");
+    expect(conclusion).not.toContain("Security hotspots");
     expect(conclusion.match(/## PR Guardian Review/g)).toHaveLength(1);
   });
 
@@ -446,7 +448,7 @@ describe("comment", () => {
       expect.objectContaining({
         comments: [{
           content: expect.stringMatching(
-            /### ✅ All checks passed[\s\S]*Coverage 92% · New bugs 0 · New vulnerabilities 0 · New code smells 0[\s\S]*`fixed12345`/,
+            /### ✅ All checks passed[\s\S]*Line coverage:[\s\S]*92%[\s\S]*New bugs:[\s\S]*`0`[\s\S]*New vulnerabilities:[\s\S]*`0`[\s\S]*New code smells:[\s\S]*`0`[\s\S]*`fixed12345`/,
           ),
         }],
       }),
@@ -565,7 +567,7 @@ describe("comment", () => {
       expect.objectContaining({
         comments: [{
           content: expect.stringMatching(
-            /### ✅ All checks passed[\s\S]*Coverage 96% · New bugs 0 · New vulnerabilities 0 · New code smells 0[\s\S]*`allowed123`/,
+            /### ✅ All checks passed[\s\S]*Line coverage:[\s\S]*96%[\s\S]*New bugs:[\s\S]*`0`[\s\S]*New vulnerabilities:[\s\S]*`0`[\s\S]*New code smells:[\s\S]*`0`[\s\S]*`allowed123`/,
           ),
         }],
       }),
