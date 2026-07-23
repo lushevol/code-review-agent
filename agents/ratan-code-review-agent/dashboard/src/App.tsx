@@ -55,7 +55,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
-    <div className="flex h-full bg-gray-50">
+    <div className="flex h-full overflow-hidden bg-gray-50">
       {/* Sidebar */}
       <aside
         className={`${
@@ -115,7 +115,7 @@ export default function App() {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-auto h-full">
+      <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
         {/* Top Bar */}
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-10">
           <div>
@@ -134,7 +134,7 @@ export default function App() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-6 overflow-auto">
+        <main className="flex-1 overflow-y-auto p-6">
           <Routes>
             <Route path="/" element={<DashboardOverview />} />
             <Route path="/findings" element={<FindingsPage />} />
