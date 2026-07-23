@@ -158,6 +158,7 @@ fallback retains the focuses already selected for that workspace.
    - **Status heading** (`✅ All checks passed` / `❌ Changes requested` / `⚠️ Review incomplete`)
    - **Policy** — one-line summary of violations found
    - **Quality gates** — per-gate pass/fail from `blockerDetails` (blocking findings, coverage threshold, CVE thresholds)
+   - **PR Description** — full PR description text (optional, controlled by `report.includePrDescription` config toggle, off by default)
    - **Quality signals** — compact SonarQube + Sonatype summary
    - **Review metadata** — reviewed commit hash
    Posts the conclusion as the newest/top ADO thread; prior agent-generated conclusions are then deleted.

@@ -34,6 +34,7 @@
     "url": "https://your-sonarqube.example.com/api",
     "token": "set-your-sonar-token"
   },
+  "report": { "includePrDescription": false },
   "workItemContext": { "enabled": true, "maxStories": 3 },
   "watch": { "intervalMs": 1800000 },
   "feedbackDaemon": { "enabled": true, "intervalMs": 300000 },

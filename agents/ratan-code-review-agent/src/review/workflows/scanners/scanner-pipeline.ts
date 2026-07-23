@@ -341,6 +341,12 @@ export const scannerPipeline = defineStep({
       changesSinceLastReview = "";
       console.error("[scanner-pipeline] Failed to persist findings");
     }
+    // Flush to disk so the downstream comment step sees the freshest findings
+    try {
+      findingStore.saveToDisk();
+    } catch {
+      console.error("[scanner-pipeline] Failed to flush FindingStore to disk");
+    }
 
     const previouslyLinked = loadPreviouslyLinkedFindings(
       findingStore,
