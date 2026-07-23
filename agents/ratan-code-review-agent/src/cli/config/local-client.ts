@@ -34,7 +34,7 @@ export class LocalConfigClient implements ConfigProvider {
       this.adoClient = new AzureDevOps({
         organization: adoConfig.organization,
         project: adoConfig.project,
-        proxy: this.options.config.adoProxyUrl,
+        proxy: adoConfig.proxyUrl,
       });
       await this.adoClient.connect(adoConfig.token);
     } else {

@@ -99,6 +99,11 @@ const WatchConfigSchema = z.object({
   intervalMs: z.number().int().min(1_000).optional(),
 }).strict();
 
+const WorkItemContextConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  maxStories: z.number().int().min(1).max(50).optional(),
+}).strict();
+
 const OpenCodeReviewLlmConfigSchema = z.object({
   url: z.string().url(),
   token: z.string().min(1),
@@ -135,12 +140,13 @@ export const RootAgentConfigSchema = z.object({
   sensitiveDataMask: SensitiveDataMaskConfigSchema.optional(),
   feedbackDaemon: FeedbackDaemonConfigSchema.optional(),
   watch: WatchConfigSchema.optional(),
+  workItemContext: WorkItemContextConfigSchema.optional(),
   ado: z.object({
     organization: z.string().min(1),
     project: z.string().min(1),
     token: z.string().optional(),
+    proxyUrl: z.string().optional(),
   }).optional(),
-  adoProxyUrl: z.string().optional(),
   databaseUrl: z.string().optional(),
 }).strict();
 

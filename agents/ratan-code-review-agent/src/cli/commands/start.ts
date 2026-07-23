@@ -96,6 +96,23 @@ export function ensureRatanFolder(ratanDirPath: string) {
   return ratanDir;
 }
 
+// ─── Timer registry for graceful shutdown ──────────────────────────────────
+
+const registeredTimers: Array<NodeJS.Timeout> = [];
+
+function clearAllTimers() {
+  for (const timer of registeredTimers) {
+    clearInterval(timer);
+    clearTimeout(timer);
+  }
+  registeredTimers.length = 0;
+}
+
+function registerTimer(timer: NodeJS.Timeout): NodeJS.Timeout {
+  registeredTimers.push(timer);
+  return timer;
+}
+
 // ─── Feedback Daemon ────────────────────────────────────────────────────────
 
 /**
@@ -166,14 +183,15 @@ async function startFeedbackDaemon(
     }
   };
 
-  // Run first cycle after a delay (give the main scan time to start)
-  setTimeout(() => {
+  // Schedule the initial run and recurring cycle, registering timers for cleanup
+  const initialTimeout = setTimeout(() => {
     runCycle();
-    setInterval(runCycle, FEEDBACK_INTERVAL_MS);
+    registerTimer(setInterval(runCycle, FEEDBACK_INTERVAL_MS));
     logger.info(
       `Feedback daemon running every ${FEEDBACK_INTERVAL_MS / 60000} minutes`,
     );
   }, 30_000);
+  registerTimer(initialTimeout);
 }
 
 // ─── Config wizard ───────────────────────────────────────────────────────────
@@ -469,15 +487,19 @@ export async function startCommand(options: StartOptions) {
     };
 
     await runScan();
-    setInterval(runScan, INTERVAL_MS);
+    registerTimer(setInterval(runScan, INTERVAL_MS));
 
     logger.info(
       `Scan running every ${INTERVAL_MS / 60000} min, feedback daemon active. Ctrl+C to stop.`,
     );
 
     await new Promise<void>((resolve) => {
-      process.on("SIGTERM", resolve);
-      process.on("SIGINT", resolve);
+      const onSignal = () => {
+        clearAllTimers();
+        resolve();
+      };
+      process.on("SIGTERM", onSignal);
+      process.on("SIGINT", onSignal);
     });
 
     logger.info("Shutting down...");
