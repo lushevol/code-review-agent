@@ -113,6 +113,7 @@ export class MemoryFindingStore {
       justification?: string;
       secondApprover?: string;
       expiryDate?: string;
+      resolvedByCommitHash?: string;
     },
   ): void {
     const finding = this.findings.get(id);
@@ -125,6 +126,7 @@ export class MemoryFindingStore {
 
     if (resolution === "resolved") {
       finding.resolvedAt = new Date().toISOString();
+      finding.resolvedByCommitHash = options?.resolvedByCommitHash ?? null;
     }
 
     // Write override log entry when overriddenBy is provided

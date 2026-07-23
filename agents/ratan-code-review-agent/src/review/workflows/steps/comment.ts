@@ -97,6 +97,7 @@ export function formatReviewConclusion({
   mergeDecision,
   blockerDetails,
   prDescription,
+  changesSinceLastReview,
 }: {
   findings: Finding[];
   latestSourceCommitId: string;
@@ -109,6 +110,7 @@ export function formatReviewConclusion({
     passed: boolean;
   }>;
   prDescription?: string;
+  changesSinceLastReview?: string;
 }): string {
   const openFindings = findings.filter((finding) => finding.resolution === "open");
   const blockingCount = openFindings.filter((finding) => finding.blocking).length;
@@ -188,6 +190,10 @@ export function formatReviewConclusion({
   const securityHotspots = formatSecurityHotspots(measures);
   if (securityHotspots !== null) {
     sections.push(securityHotspots, "");
+  }
+
+  if (changesSinceLastReview && changesSinceLastReview.trim().length > 0) {
+    sections.push(changesSinceLastReview);
   }
 
   sections.push(
@@ -438,6 +444,7 @@ async function closeResolvedInlineComments({
     id: string;
     resolution: string;
     supersedesFindingId: string | null;
+    resolvedByCommitHash: string | null;
   }>;
 }): Promise<void> {
   const hasResolvedDescendant = (findingId: string) => {
@@ -463,6 +470,17 @@ async function closeResolvedInlineComments({
       .map((finding) => finding.id),
   );
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let gitApi: any;
+  let projectName: string | undefined;
+  try {
+    const webApi = adoClient.getAdoClient();
+    gitApi = await webApi.getGitApi();
+    projectName = adoClient.getProjectName();
+  } catch {
+    // gitApi not available — gracefully skip reply comments
+  }
+
   for (const link of links) {
     if (!resolvedFindingIds.has(link.findingId)) continue;
     try {
@@ -476,6 +494,24 @@ async function closeResolvedInlineComments({
       console.error(
         `[comment-review-results] Failed to close resolved thread ${link.threadId}: ${(error as Error).message}`,
       );
+      continue;
+    }
+
+    // Add a reply comment with the resolving commit hash
+    const stored = storedFindings.find((f) => f.id === link.findingId);
+    if (stored?.resolvedByCommitHash && gitApi) {
+      const shortHash = stored.resolvedByCommitHash.slice(0, 10);
+      try {
+        await gitApi.createComment(
+          { content: `✅ Resolved in commit \`${shortHash}\`.` },
+          repoId,
+          pullRequestId,
+          link.threadId,
+          projectName,
+        );
+      } catch {
+        // Reply comment is best-effort; thread status was already updated
+      }
     }
   }
 }
@@ -587,6 +623,7 @@ export const comment = defineStep({
         prDescription: rootConfig.report?.includePrDescription
           ? prDetails.description
           : undefined,
+        changesSinceLastReview: inputData.changesSinceLastReview,
       }),
     });
 

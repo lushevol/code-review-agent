@@ -72,6 +72,7 @@ export const NormalizedFindingSchema = z.object({
   contentHash: z.string(),
   createdAt: z.string().datetime(),
   resolvedAt: z.string().datetime().nullable(),
+  resolvedByCommitHash: z.string().nullable(),
 });
 
 export type NormalizedFinding = z.infer<typeof NormalizedFindingSchema>;

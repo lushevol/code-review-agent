@@ -29,6 +29,7 @@ export interface NormalizedFinding {
   contentHash: string;
   createdAt: string;
   resolvedAt: string | null;
+  resolvedByCommitHash: string | null;
 }
 
 export type FindingEngine =
@@ -109,6 +110,7 @@ interface FindingRow {
   content_hash: string;
   created_at: string;
   resolved_at: string | null;
+  resolved_by_commit_hash: string | null;
 }
 
 interface OverrideLogRow {
@@ -279,7 +281,8 @@ export class FindingStore {
         supersedes_finding_id TEXT,
         content_hash TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        resolved_at TEXT
+        resolved_at TEXT,
+        resolved_by_commit_hash TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_findings_pr ON findings(pr_id, repository);
       CREATE INDEX IF NOT EXISTS idx_findings_hash ON findings(content_hash);
@@ -382,7 +385,7 @@ export class FindingStore {
     );
     this.sqls.set(
       STMT.UPDATE_RESOLUTION,
-      "UPDATE findings SET resolution = ?, resolved_at = ? WHERE id = ?",
+      "UPDATE findings SET resolution = ?, resolved_at = ?, resolved_by_commit_hash = ? WHERE id = ?",
     );
     this.sqls.set(
       STMT.INSERT_OVERRIDE,
@@ -591,6 +594,7 @@ export class FindingStore {
       justification?: string;
       secondApprover?: string;
       expiryDate?: string;
+      resolvedByCommitHash?: string;
     },
   ): void {
     this.assertInitialized();
@@ -606,7 +610,9 @@ export class FindingStore {
 
       const resolvedAt =
         resolution === "resolved" ? new Date().toISOString() : null;
-      exec(this.prep(STMT.UPDATE_RESOLUTION), [resolution, resolvedAt, id]);
+      const resolvedByCommitHash =
+        resolution === "resolved" ? (options?.resolvedByCommitHash ?? null) : null;
+      exec(this.prep(STMT.UPDATE_RESOLUTION), [resolution, resolvedAt, resolvedByCommitHash, id]);
 
       // If override options provided, log the override
       if (options?.overriddenBy) {
@@ -836,6 +842,7 @@ function findingToRow(f: NormalizedFinding): FindingRow {
     content_hash: f.contentHash,
     created_at: f.createdAt,
     resolved_at: f.resolvedAt,
+    resolved_by_commit_hash: f.resolvedByCommitHash ?? null,
   };
 }
 
@@ -864,6 +871,7 @@ function rowToFinding(r: FindingRow): NormalizedFinding {
     contentHash: r.content_hash,
     createdAt: r.created_at,
     resolvedAt: r.resolved_at,
+    resolvedByCommitHash: r.resolved_by_commit_hash,
   };
 }
 

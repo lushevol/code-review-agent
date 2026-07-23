@@ -327,11 +327,13 @@ export const scannerPipeline = defineStep({
           prDetails.repoName,
           prioritized,
           reviewExecutionStatus,
+          prDetails.latestSourceCommitId,
         );
         prioritized = reconciled.findings;
+        const commitAbbrev = prDetails.latestSourceCommitId.slice(0, 10);
         const lines = ["#### Changes since last review"];
         if (reconciled.findingsToResolve.length)
-          lines.push(`- **${reconciled.findingsToResolve.length}** findings resolved`);
+          lines.push(`- **${reconciled.findingsToResolve.length}** findings resolved in \`${commitAbbrev}\``);
         if (reconciled.findingsToSupersede.length)
           lines.push(`- **${reconciled.findingsToSupersede.length}** findings updated`);
         if (reconciled.findingsToCreate.length)

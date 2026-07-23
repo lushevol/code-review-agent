@@ -151,7 +151,7 @@ fallback retains the focuses already selected for that workspace.
 1. Reads normalized scanner findings and the merge-gate decision.
 2. Reads original PR details from the `fetch-pr-details` step result.
 3. Reconciles with previous review findings (content-hash matching) for re-review.
-4. Marks linked threads Fixed when a complete re-review persisted the linked finding, or a later superseding descendant, as resolved.
+4. Marks linked threads Fixed when a complete re-review persisted the linked finding, or a later superseding descendant, as resolved. Adds a `✅ Resolved in commit \`abc12345\`` reply comment on the closed thread when the resolving commit hash is recorded on the finding.
 5. Refreshes previously linked inline threads with the current compact `priority · severity`, title, explanation, and suggested-fix format.
 6. Selects new inline-postable findings with a valid file and positive line, orders by blocking status and severity, suppresses linked or repeated content hashes, then applies the 30-comment cap.
 7. Renders a structured conclusion report from `formatReviewConclusion()` with sections:
@@ -159,6 +159,7 @@ fallback retains the focuses already selected for that workspace.
    - **Policy** — one-line summary of violations found
    - **Quality gates** — per-gate pass/fail from `blockerDetails` (blocking findings, coverage threshold, CVE thresholds)
    - **PR Description** — full PR description text (optional, controlled by `report.includePrDescription` config toggle, off by default)
+   - **Changes since last review** — delta summary showing resolved/updated/new finding counts (re-review only)
    - **Quality signals** — compact SonarQube + Sonatype summary
    - **Review metadata** — reviewed commit hash
    Posts the conclusion as the newest/top ADO thread; prior agent-generated conclusions are then deleted.
@@ -177,8 +178,15 @@ The feedback daemon uses these associations to apply thread reactions or status 
 - **findingsToKeep** — active overrides preserved
 
 After a complete review, these transitions are persisted: disappeared findings
-become `resolved`, matches become `superseded`, and all current findings are
-upserted. An incomplete review may persist partial current findings but never
+become `resolved` (recording the current head commit hash in `resolvedByCommitHash`),
+matches become `superseded`, and all current findings are upserted. The commit hash
+flows from `prDetails.latestSourceCommitId` through `reconcileAndPersistFindings()`
+and `updateResolution()` into the `findings.resolved_by_commit_hash` column.
+
+The scanner pipeline builds a `changesSinceLastReview` string with resolved/updated/new
+counts, which the comment step renders in the PR summary conclusion.
+
+An incomplete review may persist partial current findings but never
 resolves or supersedes prior findings. Starting a newer review for the same PR
 aborts the prior review's output; stale workflows stop at the next workflow
 event before status, audit, work-item, or comment publication.

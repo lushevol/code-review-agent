@@ -198,6 +198,25 @@ describe("continued-commit finding reconciliation", () => {
     expect(store.getFindingById("prior")?.resolution).toBe("open");
     expect(store.getFindingById("partial")?.resolution).toBe("open");
   });
+
+  it("records the fixing commit hash on resolved findings when headCommitHash is provided", () => {
+    const old = finding({ id: "old", blocking: true });
+    store.upsertFinding(old);
+
+    reconcileAndPersistFindings(
+      store,
+      7,
+      "repo",
+      [],
+      "complete",
+      "abc123def456",
+    );
+
+    expect(store.getFindingById("old")).toMatchObject({
+      resolution: "resolved",
+      resolvedByCommitHash: "abc123def456",
+    });
+  });
 });
 
 function finding(overrides: Partial<NormalizedFinding> = {}): NormalizedFinding {
@@ -224,6 +243,7 @@ function finding(overrides: Partial<NormalizedFinding> = {}): NormalizedFinding 
     contentHash: "hash",
     createdAt: "2026-07-20T00:00:00.000Z",
     resolvedAt: null,
+    resolvedByCommitHash: null,
     ...overrides,
   };
 }

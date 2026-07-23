@@ -761,6 +761,9 @@ function setupCommentTest(
       threads.push(created);
       return created;
     }),
+    createComment: vi.fn(async (payload: { content?: string }, repoId: string, prId: number, threadId: number) => {
+      return { id: 100, content: payload.content };
+    }),
     updateComment: vi.fn(async (
       payload: { content?: string },
       _repo: string,
@@ -876,5 +879,6 @@ function finding() {
     contentHash: "hash",
     createdAt: "2026-07-15T00:00:00.000Z",
     resolvedAt: null,
+    resolvedByCommitHash: null,
   };
 }

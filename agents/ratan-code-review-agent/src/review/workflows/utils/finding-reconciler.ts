@@ -16,7 +16,7 @@ export interface ReconciliationResult {
 export interface FindingReconciliationStore {
   batchUpsert(findings: NormalizedFinding[]): NormalizedFinding[];
   getFindingsByPr(prId: number, repository: string): NormalizedFinding[];
-  updateResolution(id: string, resolution: string): void;
+  updateResolution(id: string, resolution: string, options?: { resolvedByCommitHash?: string }): void;
 }
 
 export interface PersistedReconciliationResult extends ReconciliationResult {
@@ -178,6 +178,7 @@ export function reconcileAndPersistFindings(
   repository: string,
   newFindings: NormalizedFinding[],
   reviewExecutionStatus: "complete" | "incomplete",
+  headCommitHash?: string,
 ): PersistedReconciliationResult {
   const previous = store.getFindingsByPr(prId, repository).filter(
     (finding) => finding.resolution !== "resolved" &&
@@ -196,7 +197,7 @@ export function reconcileAndPersistFindings(
 
   const reconciled = reconcileFindings(previous, newFindings);
   for (const id of reconciled.findingsToResolve) {
-    store.updateResolution(id, "resolved");
+    store.updateResolution(id, "resolved", headCommitHash ? { resolvedByCommitHash: headCommitHash } : undefined);
   }
   for (const id of reconciled.findingsToSupersede) {
     store.updateResolution(id, "superseded");
