@@ -12,10 +12,8 @@ describe("MetricsService.computeMetrics", () => {
   });
 
   it("classifies a resolved-by-commit finding as valid", () => {
-    const findings: NormalizedFinding[] = [
-      finding({ id: "f1", resolvedByCommitHash: "abc123" }),
-    ];
-    const metrics = MetricsService.computeMetrics(store, 7, "repo", findings, null);
+    store.upsertFinding(finding({ id: "f1", resolvedByCommitHash: "abc123" }));
+    const metrics = MetricsService.computeMetrics(store, 7, "repo", [], null);
     expect(metrics.validFindingCount).toBe(1);
     expect(metrics.falsePositiveCount).toBe(0);
     expect(metrics.pendingFeedbackCount).toBe(0);
@@ -23,21 +21,17 @@ describe("MetricsService.computeMetrics", () => {
   });
 
   it("classifies waived/FP/accepted-risk findings as false-positive", () => {
-    const findings: NormalizedFinding[] = [
-      finding({ id: "f1", resolution: "false-positive" }),
-      finding({ id: "f2", resolution: "waived" }),
-    ];
-    const metrics = MetricsService.computeMetrics(store, 7, "repo", findings, null);
+    store.upsertFinding(finding({ id: "f1", resolution: "false-positive" }));
+    store.upsertFinding(finding({ id: "f2", resolution: "waived" }));
+    const metrics = MetricsService.computeMetrics(store, 7, "repo", [], null);
     expect(metrics.falsePositiveCount).toBe(2);
     expect(metrics.validFindingCount).toBe(0);
     expect(metrics.validRate).toBe(0);
   });
 
   it("counts open findings as pending", () => {
-    const findings: NormalizedFinding[] = [
-      finding({ id: "f1", resolution: "open", resolvedByCommitHash: null }),
-    ];
-    const metrics = MetricsService.computeMetrics(store, 7, "repo", findings, null);
+    store.upsertFinding(finding({ id: "f1", resolution: "open", resolvedByCommitHash: null }));
+    const metrics = MetricsService.computeMetrics(store, 7, "repo", [], null);
     expect(metrics.pendingFeedbackCount).toBe(1);
     expect(metrics.validRate).toBeNull();
   });
@@ -83,12 +77,10 @@ describe("MetricsService.computeMetrics", () => {
   });
 
   it("computes valid rate correctly with mixed conclusive findings", () => {
-    const findings: NormalizedFinding[] = [
-      finding({ id: "f1", resolvedByCommitHash: "abc" }),
-      finding({ id: "f2", resolution: "false-positive" }),
-      finding({ id: "f3", resolution: "open" }), // pending — excluded from rate
-    ];
-    const metrics = MetricsService.computeMetrics(store, 7, "repo", findings, null);
+    store.upsertFinding(finding({ id: "f1", resolvedByCommitHash: "abc" }));
+    store.upsertFinding(finding({ id: "f2", resolution: "false-positive" }));
+    store.upsertFinding(finding({ id: "f3", resolution: "open" })); // pending — excluded from rate
+    const metrics = MetricsService.computeMetrics(store, 7, "repo", [], null);
     expect(metrics.validFindingCount).toBe(1);
     expect(metrics.falsePositiveCount).toBe(1);
     expect(metrics.pendingFeedbackCount).toBe(1);

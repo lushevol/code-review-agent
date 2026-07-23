@@ -24,12 +24,12 @@ export class MetricsService {
   ): ReviewMetrics {
     const allPrFindings = store.getFindingsByPr(prId, repository);
 
-    // -- Valid / false-positive classification (current batch) --
+    // -- Valid / false-positive classification (across all time for this PR) --
     let validCount = 0;
     let falsePositiveCount = 0;
     let pendingCount = 0;
 
-    for (const f of findings) {
+    for (const f of allPrFindings) {
       if (f.resolvedByCommitHash || f.resolution === "resolved") {
         validCount++;
       } else if (
