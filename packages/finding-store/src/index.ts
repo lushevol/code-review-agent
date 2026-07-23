@@ -84,6 +84,25 @@ export interface FindingCommentThread {
   createdAt: string;
 }
 
+export interface ReviewMetrics {
+  id: string;
+  prId: number;
+  repository: string;
+  auditRecordId: string | null;
+  totalFindings: number;
+  resolvedFindings: number;
+  validFindingCount: number;
+  falsePositiveCount: number;
+  pendingFeedbackCount: number;
+  cveFindings: number;
+  cveCritical: number;
+  coverageBelowThreshold: number;
+  hadCoverageData: number;
+  resolutionRate: number | null;
+  validRate: number | null;
+  computedAt: string;
+}
+
 // ─── Internal Row Types (snake_case from SQLite) ─────────────────────────────
 
 interface FindingRow {
@@ -151,6 +170,25 @@ interface FindingCommentThreadRow {
   created_at: string;
 }
 
+interface ReviewMetricsRow {
+  id: string;
+  pr_id: number;
+  repository: string;
+  audit_record_id: string | null;
+  total_findings: number;
+  resolved_findings: number;
+  valid_finding_count: number;
+  false_positive_count: number;
+  pending_feedback_count: number;
+  cve_findings: number;
+  cve_critical: number;
+  coverage_below_threshold: number;
+  had_coverage_data: number;
+  resolution_rate: number | null;
+  valid_rate: number | null;
+  computed_at: string;
+}
+
 // ─── Statement ID Constants ──────────────────────────────────────────────────
 
 const STMT = {
@@ -165,6 +203,9 @@ const STMT = {
   GET_EXPIRED_OVERRIDES: "stmt:getExpiredOverrides",
   INSERT_FINDING_COMMENT_THREAD: "stmt:insertFindingCommentThread",
   GET_FINDING_COMMENT_THREADS_BY_PR: "stmt:getFindingCommentThreadsByPr",
+  SAVE_METRICS: "stmt:saveMetrics",
+  QUERY_METRICS: "stmt:queryMetrics",
+  QUERY_AGGREGATED_METRICS: "stmt:queryAggregatedMetrics",
 } as const;
 
 // ─── sql.js Compatibility Helpers ───────────────────────────────────────────
@@ -332,6 +373,26 @@ export class FindingStore {
       );
       CREATE INDEX IF NOT EXISTS idx_finding_comment_threads_finding
         ON finding_comment_threads(finding_id);
+
+      CREATE TABLE IF NOT EXISTS review_metrics (
+        id TEXT PRIMARY KEY,
+        pr_id INTEGER NOT NULL,
+        repository TEXT NOT NULL,
+        audit_record_id TEXT,
+        total_findings INTEGER NOT NULL DEFAULT 0,
+        resolved_findings INTEGER NOT NULL DEFAULT 0,
+        valid_finding_count INTEGER NOT NULL DEFAULT 0,
+        false_positive_count INTEGER NOT NULL DEFAULT 0,
+        pending_feedback_count INTEGER NOT NULL DEFAULT 0,
+        cve_findings INTEGER NOT NULL DEFAULT 0,
+        cve_critical INTEGER NOT NULL DEFAULT 0,
+        coverage_below_threshold INTEGER NOT NULL DEFAULT 0,
+        had_coverage_data INTEGER NOT NULL DEFAULT 0,
+        resolution_rate REAL,
+        valid_rate REAL,
+        computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_review_metrics_pr ON review_metrics(pr_id, repository);
     `);
   }
 
@@ -412,6 +473,33 @@ export class FindingStore {
     this.sqls.set(
       STMT.GET_FINDING_COMMENT_THREADS_BY_PR,
       "SELECT repository, pr_id, finding_id, thread_id, created_at FROM finding_comment_threads WHERE pr_id = ? AND repository = ?",
+    );
+    this.sqls.set(
+      STMT.SAVE_METRICS,
+      `INSERT INTO review_metrics
+        (id, pr_id, repository, audit_record_id,
+         total_findings, resolved_findings,
+         valid_finding_count, false_positive_count, pending_feedback_count,
+         cve_findings, cve_critical,
+         coverage_below_threshold, had_coverage_data,
+         resolution_rate, valid_rate)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    this.sqls.set(
+      STMT.QUERY_METRICS,
+      "SELECT * FROM review_metrics WHERE pr_id = ? AND repository = ? ORDER BY computed_at DESC",
+    );
+    this.sqls.set(
+      STMT.QUERY_AGGREGATED_METRICS,
+      `SELECT
+        COUNT(*) as total_reviews,
+        AVG(valid_rate) as avg_valid_rate,
+        AVG(resolution_rate) as avg_resolution_rate,
+        SUM(cve_findings) as total_cve,
+        SUM(coverage_below_threshold) as total_coverage_issues,
+        COUNT(CASE WHEN cve_findings > 0 THEN 1 END) as reviews_with_cve
+       FROM review_metrics
+       WHERE valid_rate IS NOT NULL`,
     );
     this.sqls.set(
       STMT.GET_EXPIRED_OVERRIDES,
@@ -658,6 +746,90 @@ export class FindingStore {
   }
 
   /**
+   * Persist a computed review-metrics record.
+   */
+  saveMetrics(metrics: ReviewMetrics): void {
+    this.assertInitialized();
+    try {
+      exec(this.prep(STMT.SAVE_METRICS), [
+        metrics.id,
+        metrics.prId,
+        metrics.repository,
+        metrics.auditRecordId,
+        metrics.totalFindings,
+        metrics.resolvedFindings,
+        metrics.validFindingCount,
+        metrics.falsePositiveCount,
+        metrics.pendingFeedbackCount,
+        metrics.cveFindings,
+        metrics.cveCritical,
+        metrics.coverageBelowThreshold,
+        metrics.hadCoverageData,
+        metrics.resolutionRate,
+        metrics.validRate,
+      ]);
+    } catch (err) {
+      throw new Error(
+        `Failed to save metrics: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Get review metrics for a specific PR, ordered by computedAt descending.
+   */
+  queryMetrics(prId: number, repository: string): ReviewMetrics[] {
+    this.assertInitialized();
+    try {
+      const resultRows = rows<ReviewMetricsRow>(
+        this.prep(STMT.QUERY_METRICS),
+        [prId, repository],
+      );
+      return resultRows.map(rowToReviewMetrics);
+    } catch (err) {
+      throw new Error(
+        `Failed to query metrics for PR ${prId}: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /**
+   * Get aggregate metrics across all review metrics records.
+   */
+  queryAggregatedMetrics(): {
+    totalReviews: number;
+    averageValidRate: number | null;
+    averageResolutionRate: number | null;
+    totalCveDetected: number;
+    totalCoverageIssues: number;
+    reviewsWithCve: number;
+  } {
+    this.assertInitialized();
+    try {
+      const result = row<{
+        total_reviews: number;
+        avg_valid_rate: number | null;
+        avg_resolution_rate: number | null;
+        total_cve: number;
+        total_coverage_issues: number;
+        reviews_with_cve: number;
+      }>(this.prep(STMT.QUERY_AGGREGATED_METRICS));
+      return {
+        totalReviews: result?.total_reviews ?? 0,
+        averageValidRate: result?.avg_valid_rate ?? null,
+        averageResolutionRate: result?.avg_resolution_rate ?? null,
+        totalCveDetected: result?.total_cve ?? 0,
+        totalCoverageIssues: result?.total_coverage_issues ?? 0,
+        reviewsWithCve: result?.reviews_with_cve ?? 0,
+      };
+    } catch (err) {
+      throw new Error(
+        `Failed to query aggregated metrics: ${(err as Error).message}`,
+      );
+    }
+  }
+
+  /**
    * Find findings by content hash within a specific PR.
    * Used by the FindingReconciler for re-review matching.
    */
@@ -894,5 +1066,26 @@ function rowToAuditRecord(r: AuditRecordRow): AuditRecord {
       ? JSON.parse(r.raw_scanner_outputs)
       : undefined,
     createdAt: r.created_at,
+  };
+}
+
+function rowToReviewMetrics(r: ReviewMetricsRow): ReviewMetrics {
+  return {
+    id: r.id,
+    prId: r.pr_id,
+    repository: r.repository,
+    auditRecordId: r.audit_record_id,
+    totalFindings: r.total_findings,
+    resolvedFindings: r.resolved_findings,
+    validFindingCount: r.valid_finding_count,
+    falsePositiveCount: r.false_positive_count,
+    pendingFeedbackCount: r.pending_feedback_count,
+    cveFindings: r.cve_findings,
+    cveCritical: r.cve_critical,
+    coverageBelowThreshold: r.coverage_below_threshold,
+    hadCoverageData: r.had_coverage_data,
+    resolutionRate: r.resolution_rate,
+    validRate: r.valid_rate,
+    computedAt: r.computed_at,
   };
 }

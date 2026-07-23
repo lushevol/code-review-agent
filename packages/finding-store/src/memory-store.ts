@@ -4,6 +4,7 @@ import type {
   FindingCommentThread,
   FindingResolution,
   NormalizedFinding,
+  ReviewMetrics,
 } from "./index";
 
 /**
@@ -20,6 +21,7 @@ export class MemoryFindingStore {
   private findings: Map<string, NormalizedFinding> = new Map();
   private auditRecords: AuditRecord[] = [];
   private commentThreads: FindingCommentThread[] = [];
+  private metricsRecords: ReviewMetrics[] = [];
 
   async init(_dbPath?: string): Promise<void> {
     // No-op; in-memory store is ready immediately.
@@ -205,6 +207,46 @@ export class MemoryFindingStore {
     return [];
   }
 
+  saveMetrics(metrics: ReviewMetrics): void {
+    this.metricsRecords.push(metrics);
+  }
+
+  queryMetrics(prId: number, repository: string): ReviewMetrics[] {
+    return this.metricsRecords
+      .filter((m) => m.prId === prId && m.repository === repository)
+      .sort((a, b) => b.computedAt.localeCompare(a.computedAt));
+  }
+
+  queryAggregatedMetrics(): {
+    totalReviews: number;
+    averageValidRate: number | null;
+    averageResolutionRate: number | null;
+    totalCveDetected: number;
+    totalCoverageIssues: number;
+    reviewsWithCve: number;
+  } {
+    const withValidRate = this.metricsRecords.filter((m) => m.validRate !== null);
+    const totalReviews = withValidRate.length;
+    if (totalReviews === 0) {
+      return {
+        totalReviews: 0,
+        averageValidRate: null,
+        averageResolutionRate: null,
+        totalCveDetected: 0,
+        totalCoverageIssues: 0,
+        reviewsWithCve: 0,
+      };
+    }
+    return {
+      totalReviews,
+      averageValidRate: withValidRate.reduce((s, m) => s + (m.validRate ?? 0), 0) / totalReviews,
+      averageResolutionRate: withValidRate.reduce((s, m) => s + (m.resolutionRate ?? 0), 0) / totalReviews,
+      totalCveDetected: this.metricsRecords.reduce((s, m) => s + m.cveFindings, 0),
+      totalCoverageIssues: this.metricsRecords.reduce((s, m) => s + m.coverageBelowThreshold, 0),
+      reviewsWithCve: this.metricsRecords.filter((m) => m.cveFindings > 0).length,
+    };
+  }
+
   /**
    * Clear all stored data. Intended for test teardown.
    */
@@ -212,6 +254,7 @@ export class MemoryFindingStore {
     this.findings.clear();
     this.auditRecords = [];
     this.commentThreads = [];
+    this.metricsRecords = [];
     this.overrideLog = [];
   }
 
