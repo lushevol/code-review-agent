@@ -105,3 +105,23 @@ export async function clearPendingQueue(): Promise<any> {
   if (!res.ok) throw new Error(`Failed to clear queue: ${res.statusText}`);
   return res.json();
 }
+
+// ── Metrics API ────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch review performance metrics.
+ * Without params: returns aggregate across all PRs.
+ * With prId + repo: returns per-review metric history for that PR.
+ */
+export async function fetchMetrics(params?: {
+  prId?: number;
+  repo?: string;
+}): Promise<any> {
+  const searchParams = new URLSearchParams();
+  if (params?.prId) searchParams.set("prId", String(params.prId));
+  if (params?.repo) searchParams.set("repo", params.repo);
+  const qs = searchParams.toString();
+  const res = await fetch(`${API_BASE}/metrics${qs ? `?${qs}` : ""}`);
+  if (!res.ok) throw new Error(`Failed to fetch metrics: ${res.statusText}`);
+  return res.json();
+}
