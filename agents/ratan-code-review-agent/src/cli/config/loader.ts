@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   type ConfigProvider,
@@ -7,6 +7,7 @@ import {
 } from "agent-config-manager";
 import { configureLogging } from "ratan-logger";
 import { LocalConfigClient } from "./local-client";
+import { repairConfig, repairConfigInteractive } from "./migration";
 
 const DEFAULT_CONFIG_DIR = ".ratan";
 
@@ -52,7 +53,21 @@ export async function loadConfig(
   try {
     const content = await readFile(configFile, "utf-8");
     const raw = JSON.parse(content) as Record<string, unknown>;
-    const resolved = resolveSecrets(raw);
+
+    // ── Config integrity check & repair ────────────────────────────────
+    const isInteractive = process.stdin.isTTY ?? false;
+    const repairResult = isInteractive
+      ? await repairConfigInteractive(raw, configFile)
+      : repairConfig(raw);
+
+    if (repairResult.modified && !isInteractive) {
+      await writeFile(configFile, JSON.stringify(repairResult.config, null, 2) + "\n", "utf-8");
+    }
+    for (const w of repairResult.warnings) {
+      console.warn(`  ⚙ ${w}`);
+    }
+
+    const resolved = resolveSecrets(repairResult.config);
     let config: RootAgentConfig;
     try {
       config = RootAgentConfigSchema.parse(resolved);
