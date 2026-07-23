@@ -124,6 +124,23 @@ After all findings are collected and persisted:
 7. `blockerDetails` array is passed to the comment step for report rendering.
 8. Errors are non-fatal; workflow continues.
 
+## Review Performance Metrics Flow
+
+`record-metrics` runs after `sonarqube-measures` and before `merge-gate`:
+
+1. Opens a `FindingStore` connection.
+2. Calls `MetricsService.computeMetrics()` which:
+   - Loads all findings for the PR across all time from the store.
+   - Classifies each finding as **valid** (resolved-by-commit or manually resolved), **false-positive** (waived/FP/accepted-risk), or **pending** (open — no conclusive feedback yet).
+   - Computes `validRate = validCount / (validCount + falsePositiveCount)`, or `null` when no classified findings exist.
+   - Counts CVE findings (`source_engine = 'sonarqube-cve'`) from the current review batch, with a separate sub-count for critical severity.
+   - Checks whether SonarQube line coverage fell below the 50% threshold from the `measures` data.
+   - Computes `resolutionRate = resolvedFindings / totalFindings` across all time for the PR.
+3. Persists the computed `ReviewMetrics` record to the `review_metrics` SQLite table.
+4. Flushes the store to disk and closes.
+
+The `review_metrics` table stores one row per review run, keyed by a UUID `id`, linked to the corresponding `audit_records` row via `audit_record_id`. The dashboard's `/api/metrics` endpoint exposes both aggregate stats (averages across all reviews) and per-PR history via `queryAggregatedMetrics()` and `queryMetrics()` on the FindingStore.
+
 ## Audit Observability Flow
 
 `record-audit` persists an allowlisted pilot payload in
