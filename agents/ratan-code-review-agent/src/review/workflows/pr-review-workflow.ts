@@ -14,6 +14,7 @@ import { fetchPR } from "./steps/fetch-pr";
 import { fetchWorkItemContext } from "./steps/fetch-workitem-context";
 import { mergeGate } from "./steps/merge-gate";
 import { recordAudit } from "./steps/record-audit";
+import { recordMetrics } from "./steps/record-metrics";
 import { sonarqubeMeasures } from "./steps/sonarqube-measures";
 import { getLogger } from "ratan-logger";
 
@@ -150,7 +151,7 @@ export async function* runPrReviewWorkflow(options: PrReviewWorkflowOptions) {
     prId: current.prDetails?.pullRequestId,
   });
   await runSteps(
-    [mergeGate, recordAudit, createWorkItems, comment],
+    [recordMetrics, mergeGate, recordAudit, createWorkItems, comment],
     current,
     stepOptions,
   );

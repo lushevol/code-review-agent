@@ -125,6 +125,7 @@ prReviewWorkflow(prId):
   correlation & dedup (content-hash)  — Merge all scanner findings, deduplicate by SHA-256 hash
   persist to FindingStore             — SQLite: findings, finding_comment_threads, overrides, audit
   sonarqube-measures                 — SonarQube quality gate metrics
+  record-metrics                     — Compute and persist review performance metrics
   merge-gate                         — Evaluate blocking findings, quality gates (coverage, CVEs), set ADO PR status (succeeded/failed)
   create-workitems                   — Auto-create ADO Bug (critical severity) and Task (high severity)
   comment-review-results             — Prioritized inline comments + one newest structured conclusion report

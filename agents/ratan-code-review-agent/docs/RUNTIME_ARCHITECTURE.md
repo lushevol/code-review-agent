@@ -27,7 +27,8 @@ flowchart TD
     Correlate --> Persist["Persist to FindingStore<br/>(SQLite)"]
     Persist --> Sonar["sonarqube-measures<br/>quality gate metrics"]
 
-    Sonar --> MergeGate["merge-gate"]
+    Sonar --> RecordMetrics["record-metrics<br/>compute and persist<br/>review performance metrics"]
+    RecordMetrics --> MergeGate["merge-gate"]
     MergeGate --> ADOStatus["ADO: set PR status<br/>(succeeded/failed/pending)"]
 
     MergeGate --> WorkItems["create-workitems"]

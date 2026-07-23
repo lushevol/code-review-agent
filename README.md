@@ -204,6 +204,7 @@ PR Event (webhook/poll) → Eligibility Gate → fetchPR → fetchWorkItemContex
   → scannerPipeline (OpenCodeReview + optional CVE/Compliance, parallel)
   → correlation/dedup → persist to FindingStore
   → sonarqubeMeasures
+  → recordMetrics (compute and persist review performance metrics)
   → mergeGate (set ADO PR status)
   → createWorkItems (Bug/Task for critical/high)
   → comment (prioritized inline comments + one newest conclusion)
