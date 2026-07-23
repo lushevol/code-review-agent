@@ -1,11 +1,14 @@
 import { execFile } from "node:child_process";
+import { createRequire } from "node:module";
+import fs from "node:fs";
+import path from "node:path";
 import { promisify } from "node:util";
 import type { ConfigProvider, RootAgentConfig } from "agent-config-manager";
 import { getLogger } from "ratan-logger";
 
 const execFileAsync = promisify(execFile);
 
-const LLM_HEALTH_CHECK_TIMEOUT_MS = 5_000;
+const LLM_TEST_TIMEOUT_MS = 30_000;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -84,6 +87,78 @@ async function checkAdo(
   }
 }
 
+// ─── OCR Binary resolution ──────────────────────────────────────────────────
+
+function resolveOcrBinary(): string | null {
+  if (process.env.OCR_BINARY_PATH) return process.env.OCR_BINARY_PATH;
+  try {
+    const _require = createRequire(import.meta.url);
+    const platformModule = _require(
+      _require.resolve("@alibaba-group/open-code-review/scripts/platform.js"),
+    ) as { resolveNativeBinary(): { path: string } | null };
+    const resolved = platformModule.resolveNativeBinary();
+    return resolved?.path ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── LLM test via OCR binary ────────────────────────────────────────────────
+
+interface OcrTestResult {
+  success: boolean;
+  error?: string;
+}
+
+async function runOcrLlmTest(
+  llm: { url: string; token: string; model: string; protocol?: string },
+  logger: ReturnType<typeof getLogger>,
+): Promise<OcrTestResult> {
+  const binaryPath = resolveOcrBinary();
+  if (!binaryPath) {
+    logger.warn("OCR binary not found — cannot run LLM test");
+    return { success: false, error: "OCR binary not available" };
+  }
+
+  const tmpDir = fs.mkdtempSync("ocr-llm-test-");
+  try {
+    const configDir = path.join(tmpDir, ".opencodereview");
+    fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+    const llmConfig: Record<string, string> = {
+      url: llm.url,
+      auth_token: llm.token,
+      model: llm.model,
+    };
+    if (llm.protocol) {
+      llmConfig.protocol = llm.protocol;
+    }
+    fs.writeFileSync(
+      path.join(configDir, "config.json"),
+      JSON.stringify({ llm: llmConfig }),
+      { mode: 0o600 },
+    );
+
+    const { stdout, stderr } = await execFileAsync(binaryPath, ["llm", "test"], {
+      timeout: LLM_TEST_TIMEOUT_MS,
+      env: {
+        ...process.env,
+        HOME: tmpDir,
+        OCR_NO_UPDATE: "1",
+      },
+    });
+
+    const output = (stdout + stderr).trim();
+    logger.info(`OCR llm test succeeded`, { output: output.slice(0, 200) });
+    return { success: true };
+  } catch (err) {
+    const message = (err as Error).message;
+    logger.warn(`OCR llm test failed: ${message}`);
+    return { success: false, error: message };
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
 async function checkLlm(
   rootConfig: RootAgentConfig,
   logger: ReturnType<typeof getLogger>,
@@ -99,49 +174,28 @@ async function checkLlm(
     };
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), LLM_HEALTH_CHECK_TIMEOUT_MS);
+  const result = await runOcrLlmTest(llmConfig, logger);
 
-  try {
-    const response = await fetch(llmConfig.url, {
-      signal: controller.signal,
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${llmConfig.token}`,
-        "x-api-key": llmConfig.token,
-      },
-    });
-
-    if (response.ok) {
-      logger.info(`LLM: reachable (${llmConfig.url})`);
-      return {
-        name: "LLM",
-        status: "ok",
-        critical: true,
-        message: `Reachable at ${llmConfig.url} (model: ${llmConfig.model})`,
-      };
-    }
-
-    logger.warn(`LLM endpoint returned: ${response.status} ${response.statusText}`);
+  if (result.success) {
+    logger.info(`LLM: connected via OCR test (${llmConfig.url})`);
     return {
       name: "LLM",
-      status: "fail",
+      status: "ok",
       critical: true,
-      message: `Endpoint returned ${response.status} ${response.statusText} at ${llmConfig.url}`,
+      message: `Connected via OCR test (model: ${llmConfig.model})`,
     };
-  } catch (err) {
-    logger.warn(`LLM endpoint not reachable: ${(err as Error).message}`);
-    return {
-      name: "LLM",
-      status: "fail",
-      critical: true,
-      message:
-        `Cannot connect to ${llmConfig.url}: ${(err as Error).message}. ` +
-        "Check the URL, network connectivity, and firewall rules.",
-    };
-  } finally {
-    clearTimeout(timeout);
   }
+
+  return {
+    name: "LLM",
+    status: "fail",
+    critical: true,
+    message:
+      `OCR LLM test failed: ${result.error}. ` +
+      "Check config.openCodeReview.llm.url, .token, and .model values. " +
+      "The URL must point to an OpenAI-compatible chat completions endpoint. " +
+      "Ensure the OCR binary and LLM endpoint are reachable.",
+  };
 }
 
 async function checkSonarQube(
