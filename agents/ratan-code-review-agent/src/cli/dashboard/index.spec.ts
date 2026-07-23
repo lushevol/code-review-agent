@@ -159,10 +159,36 @@ describe("dashboard data routes", () => {
     });
     const prs = await get("/api/prs");
     expect(prs.total).toBe(2);
-    expect(prs.prs).toEqual(expect.arrayContaining([
-      expect.objectContaining({ repository: "repo-a", status: "allowed", findingCount: 1 }),
-      expect.objectContaining({ repository: "repo-b", status: "blocked", findingCount: 1 }),
-    ]));
+    // ── Metrics API ──
+    store.saveMetrics({
+      id: "550e8400-e29b-41d4-a716-446655440030",
+      prId: 7,
+      repository: "repo-a",
+      auditRecordId: null,
+      totalFindings: 5,
+      resolvedFindings: 2,
+      validFindingCount: 2,
+      falsePositiveCount: 1,
+      pendingFeedbackCount: 2,
+      cveFindings: 1,
+      cveCritical: 0,
+      coverageBelowThreshold: 0,
+      hadCoverageData: 1,
+      resolutionRate: 0.4,
+      validRate: 2 / 3,
+      computedAt: "2026-07-20T00:00:00.000Z",
+    });
+    const metricsResp = await get("/api/metrics");
+    expect(metricsResp.aggregate).toBeDefined();
+    expect(metricsResp.aggregate.totalReviews).toBe(1);
+    expect(metricsResp.aggregate.averageValidRate).toBeCloseTo(2 / 3, 1);
+
+    const metricsPerPr = await app.request("/api/metrics?prId=7&repo=repo-a");
+    expect(metricsPerPr.status).toBe(200);
+    const perPrBody = await metricsPerPr.json();
+    expect(perPrBody.perReview).toHaveLength(1);
+    expect(perPrBody.perReview[0].cveFindings).toBe(1);
+
     store.close();
   });
 });

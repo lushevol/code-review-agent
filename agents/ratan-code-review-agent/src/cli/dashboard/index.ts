@@ -329,6 +329,34 @@ export function createDashboardApp(findingStore: FindingStore): Hono {
     }
   });
 
+  // ── Review Performance Metrics ──────────────────────────────────────────
+
+  app.get("/api/metrics", (c) => {
+    try {
+      const prId = c.req.query("prId") ? Number(c.req.query("prId")) : undefined;
+
+      if (prId !== undefined) {
+        if (!Number.isInteger(prId) || prId <= 0) {
+          c.status(400);
+          return c.json({ error: "prId must be a positive integer" });
+        }
+        const repo = c.req.query("repo");
+        if (!repo) {
+          c.status(400);
+          return c.json({ error: "repo is required when prId is specified" });
+        }
+        const perReview = findingStore.queryMetrics(prId, repo);
+        return c.json({ perReview, total: perReview.length });
+      }
+
+      const aggregate = findingStore.queryAggregatedMetrics();
+      return c.json({ aggregate });
+    } catch (err) {
+      c.status(500);
+      return c.json({ error: String(err) });
+    }
+  });
+
   // ── SPA fallback — all non-API routes serve index.html for client-side routing ─
 
   if (dashboardDist) {
