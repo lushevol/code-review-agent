@@ -482,8 +482,8 @@ export class FindingStore {
          valid_finding_count, false_positive_count, pending_feedback_count,
          cve_findings, cve_critical,
          coverage_below_threshold, had_coverage_data,
-         resolution_rate, valid_rate)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         resolution_rate, valid_rate, computed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     this.sqls.set(
       STMT.QUERY_METRICS,
@@ -767,6 +767,7 @@ export class FindingStore {
         metrics.hadCoverageData,
         metrics.resolutionRate,
         metrics.validRate,
+        metrics.computedAt,
       ]);
     } catch (err) {
       throw new Error(

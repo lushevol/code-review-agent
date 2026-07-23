@@ -239,8 +239,13 @@ export class MemoryFindingStore {
     }
     return {
       totalReviews,
-      averageValidRate: withValidRate.reduce((s, m) => s + (m.validRate ?? 0), 0) / totalReviews,
-      averageResolutionRate: withValidRate.reduce((s, m) => s + (m.resolutionRate ?? 0), 0) / totalReviews,
+      averageValidRate: withValidRate.reduce((s, m) => s + m.validRate!, 0) / totalReviews,
+      averageResolutionRate: (() => {
+        const withRate = withValidRate.filter((m) => m.resolutionRate !== null);
+        return withRate.length > 0
+          ? withRate.reduce((s, m) => s + m.resolutionRate!, 0) / withRate.length
+          : null;
+      })(),
       totalCveDetected: this.metricsRecords.reduce((s, m) => s + m.cveFindings, 0),
       totalCoverageIssues: this.metricsRecords.reduce((s, m) => s + m.coverageBelowThreshold, 0),
       reviewsWithCve: this.metricsRecords.filter((m) => m.cveFindings > 0).length,
