@@ -163,7 +163,7 @@ export default function AdminPage() {
         <CardHeader><p className="text-sm font-semibold">System Health</p></CardHeader>
         <Divider />
         <CardBody>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card shadow="none" className="bg-gray-50 border border-gray-200" fullWidth>
               <CardBody className="p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -298,7 +298,7 @@ export default function AdminPage() {
           <CardHeader><p className="text-sm font-semibold">Data Growth (Last 7 Days)</p></CardHeader>
           <Divider />
           <CardBody>
-            <div className="grid grid-cols-7 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
               {dataGrowth.map(([day, data]) => (
                 <Card key={day} shadow="none" className="bg-gray-50 border border-gray-200" fullWidth>
                   <CardBody className="p-2 text-center">

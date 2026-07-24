@@ -191,7 +191,7 @@ export default function FindingsPage() {
             <Select
               label="Severity"
               size="sm"
-              className="w-36"
+              className="w-full sm:w-36"
               selectedKeys={severity}
               onSelectionChange={(keys) => setSeverity(new Set(Array.from(keys).map(String)))}
             >
@@ -203,7 +203,7 @@ export default function FindingsPage() {
             <Select
               label="Engine"
               size="sm"
-              className="w-44"
+              className="w-full sm:w-44"
               selectedKeys={engine}
               onSelectionChange={(keys) => setEngine(new Set(Array.from(keys).map(String)))}
             >
@@ -215,7 +215,7 @@ export default function FindingsPage() {
             <Select
               label="Status"
               size="sm"
-              className="w-36"
+              className="w-full sm:w-36"
               selectedKeys={status}
               onSelectionChange={(keys) => setStatus(new Set(Array.from(keys).map(String)))}
             >

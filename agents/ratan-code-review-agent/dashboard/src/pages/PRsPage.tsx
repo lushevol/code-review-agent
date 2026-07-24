@@ -130,7 +130,7 @@ export default function PRsPage() {
             <Select
               label="Repository"
               size="sm"
-              className="w-44"
+              className="w-full sm:w-44"
               selectedKeys={repoFilter}
               onSelectionChange={(keys) => setRepoFilter(new Set(Array.from(keys).map(String)))}
             >
@@ -141,7 +141,7 @@ export default function PRsPage() {
             <Select
               label="Status"
               size="sm"
-              className="w-32"
+              className="w-full sm:w-32"
               selectedKeys={statusFilter}
               onSelectionChange={(keys) => setStatusFilter(new Set(Array.from(keys).map(String)))}
             >

@@ -60,7 +60,7 @@ export default function App() {
       <aside
         className={`${
           sidebarOpen ? "w-64" : "w-16"
-        } transition-all duration-300 bg-gray-900 text-white flex flex-col flex-shrink-0`}
+        } flex flex-shrink-0 flex-col bg-gray-900 text-white transition-all duration-300 max-md:w-16`}
       >
         {/* Brand */}
         <div className="flex items-center gap-3 px-4 h-16 border-b border-gray-700">
@@ -68,7 +68,7 @@ export default function App() {
             PG
           </div>
           {sidebarOpen && (
-            <div className="flex flex-col">
+            <div className="flex flex-col max-md:hidden">
               <span className="font-semibold text-sm text-white">PR Guardian</span>
               <span className="text-[10px] text-gray-400">Review Dashboard</span>
             </div>
@@ -80,8 +80,8 @@ export default function App() {
           {NAV_ITEMS.map((item) => {
             const isActive = location.pathname === item.path;
             return (
-              <NavLink key={item.path} to={item.path} className="block">
-                <Tooltip content={item.label} placement="right" isDisabled={sidebarOpen}>
+              <NavLink key={item.path} to={item.path} className="block" aria-label={item.label}>
+                <Tooltip content={item.label} placement="right">
                   <div
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
                       isActive
@@ -90,7 +90,7 @@ export default function App() {
                     }`}
                   >
                     {item.icon}
-                    {sidebarOpen && <span className="text-sm">{item.label}</span>}
+                    {sidebarOpen && <span className="text-sm max-md:hidden">{item.label}</span>}
                   </div>
                 </Tooltip>
               </NavLink>
@@ -99,10 +99,11 @@ export default function App() {
         </nav>
 
         {/* Sidebar Toggle */}
-        <div className="p-2 border-t border-gray-700">
+        <div className="border-t border-gray-700 p-2 max-md:hidden">
           <Tooltip content={sidebarOpen ? "Collapse" : "Expand"} placement="right">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
               className="w-full flex items-center justify-center gap-2 px-3 py-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -117,12 +118,12 @@ export default function App() {
       {/* Main Content */}
       <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
         {/* Top Bar */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-10">
-          <div>
+        <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 sm:px-6">
+          <div className="min-w-0">
             <h1 className="text-lg font-semibold text-gray-900">
               {NAV_ITEMS.find((i) => i.path === location.pathname)?.label || "Dashboard"}
             </h1>
-            <p className="text-xs text-gray-500">
+            <p className="hidden text-xs text-gray-500 sm:block">
               PR Guardian Copilot — AI-powered code review analytics
             </p>
           </div>
@@ -134,7 +135,7 @@ export default function App() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           <Routes>
             <Route path="/" element={<DashboardOverview />} />
             <Route path="/findings" element={<FindingsPage />} />
