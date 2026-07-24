@@ -1,6 +1,9 @@
 import { defineStep } from "../../runtime";
 import z from "zod";
-import { FindingStore } from "finding-store";
+import {
+  FindingStore,
+  type NormalizedFinding as StoredFinding,
+} from "finding-store";
 import { extractAgentConfig } from "../../../bootstrap/session";
 import { type CommonRequestContext, PullRequestSchema } from "../../types";
 import { NormalizedFindingSchema } from "../../types/finding";
@@ -16,7 +19,6 @@ const RecordMetricsInputSchema = z.object({
   reviewExecutionStatus: z.enum(["complete", "incomplete"]),
   reviewMetadata: z.record(z.string(), z.unknown()),
   measures: z.union([z.any(), z.null()]),
-  mergeDecision: z.enum(["allowed", "blocked", "pending"]),
 });
 
 const RecordMetricsOutputSchema = RecordMetricsInputSchema.extend({
@@ -43,11 +45,14 @@ export const recordMetrics = defineStep({
     await findingStore.init();
 
     try {
+      const findings = z
+        .array(NormalizedFindingSchema)
+        .parse(inputData.findings) as unknown as StoredFinding[];
       const metrics = MetricsService.computeMetrics(
         findingStore,
         inputData.prDetails.pullRequestId,
         inputData.prDetails.repoName,
-        inputData.findings,
+        findings,
         inputData.measures,
       );
 

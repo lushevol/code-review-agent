@@ -336,6 +336,7 @@ describe("complianceEngine", () => {
     expect(result.engine).toBe("compliance");
     if (result.findings.length > 0) {
       expect(result.findings[0].sourceEngine).toBe("compliance");
+      expect(result.findings[0].resolvedByCommitHash).toBeNull();
     }
   });
 

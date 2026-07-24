@@ -125,6 +125,7 @@ describe("OpenCodeReviewScanner", () => {
       remediation: "safeAccess()",
     });
     expect(result.findings[0]).not.toHaveProperty("confidence");
+    expect(result.findings[0].resolvedByCommitHash).toBeNull();
   });
 
   it("preserves an incomplete OCR execution status", async () => {

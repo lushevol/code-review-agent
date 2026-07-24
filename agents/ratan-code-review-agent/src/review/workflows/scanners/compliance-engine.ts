@@ -254,6 +254,7 @@ export const complianceEngine: Scanner = {
             ),
             createdAt: now,
             resolvedAt: null,
+            resolvedByCommitHash: null,
           });
       }
       }
@@ -289,6 +290,7 @@ export const complianceEngine: Scanner = {
           ),
           createdAt: now,
           resolvedAt: null,
+          resolvedByCommitHash: null,
         });
       }
 
@@ -334,6 +336,7 @@ export const complianceEngine: Scanner = {
               contentHash: computeContentHash(targetFilePath, [lineText]),
               createdAt: now,
               resolvedAt: null,
+              resolvedByCommitHash: null,
             });
         }
       }
@@ -381,6 +384,7 @@ export const complianceEngine: Scanner = {
                 contentHash: computeContentHash(targetFilePath, [lineText]),
                 createdAt: now,
                 resolvedAt: null,
+                resolvedByCommitHash: null,
               });
           }
         }

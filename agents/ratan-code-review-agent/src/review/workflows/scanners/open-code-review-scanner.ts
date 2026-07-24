@@ -138,6 +138,7 @@ export class OpenCodeReviewScanner implements Scanner {
       contentHash: computeContentHash(filePath, context),
       createdAt: now,
       resolvedAt: null,
+      resolvedByCommitHash: null,
     };
   }
 }
