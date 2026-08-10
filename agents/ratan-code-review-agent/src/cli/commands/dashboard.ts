@@ -15,7 +15,15 @@ export async function startDashboard(options: DashboardOptions) {
   const rootConfig = await provider.getRootConfig();
   const logger = getLogger("dashboard");
   const port = options.port ?? rootConfig.dashboard?.port ?? 3099;
+  const host = rootConfig.dashboard?.host ?? "127.0.0.1";
+  const auth = rootConfig.dashboard?.auth;
   const dbPath = options.findingStorePath ?? rootConfig.findingStorePath ?? ".ratan/data/findings.db";
+
+  if (!["127.0.0.1", "localhost", "::1"].includes(host) && !auth) {
+    throw new Error(
+      "Dashboard authentication is required when dashboard.host is not loopback",
+    );
+  }
 
   // Initialize FindingStore
   const findingStore = new FindingStore(dbPath);
@@ -27,11 +35,11 @@ export async function startDashboard(options: DashboardOptions) {
     logger.warn("Starting dashboard without persistence — findings API will return empty.");
   }
 
-  const app = createDashboardApp(findingStore);
+  const app = createDashboardApp(findingStore, { auth });
 
-  serve({ fetch: app.fetch, port }, () => {
-    logger.info(`PR Guardian Dashboard listening on http://localhost:${port}`);
-    logger.info(`API: http://localhost:${port}/api/health`);
+  serve({ fetch: app.fetch, hostname: host, port }, () => {
+    logger.info(`PR Guardian Dashboard listening on http://${host}:${port}`);
+    logger.info(`API: http://${host}:${port}/api/health`);
   });
 
   // Keep running until SIGTERM

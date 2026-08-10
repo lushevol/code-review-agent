@@ -490,6 +490,7 @@ export async function startCommand(options: StartOptions) {
       const healthy = await autoScan.isLLMEndpointHealthy(
         rootConfig.openCodeReview.llm.url,
         rootConfig.openCodeReview.llm.token,
+        rootConfig.openCodeReview.llm.protocol,
       );
       if (!healthy) {
         logger.warn("LLM endpoint not healthy — skipping scan cycle");

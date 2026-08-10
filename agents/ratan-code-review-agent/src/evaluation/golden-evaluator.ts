@@ -3,9 +3,18 @@ import { FindingCategory, FindingSeverity } from "../review/types/finding";
 
 const goldenFileSchema = z.object({
   path: z.string().min(1),
-  changeType: z.enum(["added", "modified"]),
+  previousPath: z.string().min(1).optional(),
+  changeType: z.enum(["added", "modified", "deleted", "renamed"]),
   before: z.string().default(""),
-  after: z.string(),
+  after: z.string().default(""),
+}).superRefine((file, context) => {
+  if (file.changeType === "renamed" && !file.previousPath) {
+    context.addIssue({
+      code: "custom",
+      message: "previousPath is required for renamed files",
+      path: ["previousPath"],
+    });
+  }
 });
 
 const goldenExpectedFindingSchema = z.object({

@@ -218,6 +218,14 @@ event before status, audit, work-item, or comment publication.
 5. Check eligibility gate — pilot repo, draft status, min size.
 6. Trigger `runPrReviewWorkflow`.
 
+The Hono webhook host installs `SIGTERM` and `SIGINT` handlers. Shutdown is
+idempotent: it first closes the HTTP listener, then flushes and closes the
+FindingStore. The same `shutdown()` handle is returned to an embedding process
+for controlled restarts and tests. Production hosts should place the receiver
+behind TLS, require HMAC-signed ADO requests, persist `.ratan/data`, set
+`WEBHOOK_PUBLIC_URL` for subscription registration, and retain polling as a
+fallback.
+
 ## Data Privacy Flow
 
 Diff text passes through `maskSensitiveData`, which uses `redact-pii` credential redaction plus custom patterns for Stripe-style keys, bearer tokens, and assignments to `password`, `token`, or `secret`.
@@ -234,10 +242,23 @@ names, phone numbers, IP addresses, URLs, generic digits, or street addresses.
 
 ## Dashboard Data Flow
 
-The Express API reads SQLite through `FindingStore` query methods. `/api/findings`
+The Hono API reads SQLite through `FindingStore` query methods. `/api/findings`
 supports global and independent PR/repository/engine/resolution filters;
 `/api/overrides` exposes override history; stats count unique
 `repository + pullRequestId` pairs; and `/api/prs` selects the latest review per
 repository-aware PR before computing status and finding counts. The SPA uses
 these APIs for findings, PR details, overview charts, override administration,
 and pending-queue clearing.
+
+Dashboard pages are loaded as separate route chunks. The dashboard remains a
+loopback-only tool by default. A non-loopback host requires configured HTTP
+Basic credentials and should be protected by TLS at a reverse proxy.
+
+## FindingStore Schema Lifecycle
+
+FindingStore reads SQLite `PRAGMA user_version` before preparing statements.
+Unversioned databases migrate transactionally to schema version 1, preserving
+existing records while creating any missing current tables and indexes. A
+database whose version is newer than the running package is rejected before
+workflow access, preventing an older binary from silently corrupting newer
+state.

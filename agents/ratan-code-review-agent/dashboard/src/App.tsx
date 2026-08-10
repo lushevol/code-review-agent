@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Routes, Route, NavLink, useLocation } from "react-router-dom";
 import {
   Button,
   Chip,
   Tooltip,
 } from "@nextui-org/react";
-import DashboardOverview from "./pages/DashboardOverview";
-import FindingsPage from "./pages/FindingsPage";
-import PRsPage from "./pages/PRsPage";
-import AdminPage from "./pages/AdminPage";
+
+const DashboardOverview = lazy(() => import("./pages/DashboardOverview"));
+const FindingsPage = lazy(() => import("./pages/FindingsPage"));
+const PRsPage = lazy(() => import("./pages/PRsPage"));
+const AdminPage = lazy(() => import("./pages/AdminPage"));
 
 const NAV_ITEMS = [
   {
@@ -136,12 +137,14 @@ export default function App() {
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
-          <Routes>
-            <Route path="/" element={<DashboardOverview />} />
-            <Route path="/findings" element={<FindingsPage />} />
-            <Route path="/prs" element={<PRsPage />} />
-            <Route path="/admin" element={<AdminPage />} />
-          </Routes>
+          <Suspense fallback={<p className="text-sm text-gray-500">Loading dashboard…</p>}>
+            <Routes>
+              <Route path="/" element={<DashboardOverview />} />
+              <Route path="/findings" element={<FindingsPage />} />
+              <Route path="/prs" element={<PRsPage />} />
+              <Route path="/admin" element={<AdminPage />} />
+            </Routes>
+          </Suspense>
         </main>
       </div>
     </div>

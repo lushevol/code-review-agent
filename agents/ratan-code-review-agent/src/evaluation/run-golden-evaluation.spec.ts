@@ -37,7 +37,7 @@ describe("golden evaluation command", () => {
 
   it("loads the corpus and selects only requested IDs", () => {
     const cases = loadCases();
-    expect(selectCases(cases, new Set())).toHaveLength(25);
+    expect(selectCases(cases, new Set())).toHaveLength(27);
     expect(selectCases(cases, new Set(["ts-sql-injection"]))).toEqual([
       expect.objectContaining({ id: "ts-sql-injection" }),
     ]);
@@ -112,6 +112,74 @@ describe("golden evaluation command", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
     expect(fs.existsSync(root)).toBe(false);
+  });
+
+  it("materializes a deleted file in the synthetic PR", () => {
+    const testCase = goldenTestCaseSchema.parse({
+      id: "deleted-file",
+      language: "typescript",
+      title: "Delete obsolete code",
+      description: "Exercise deletion materialization",
+      files: [
+        {
+          path: "src/obsolete.ts",
+          changeType: "deleted",
+          before: "export const obsolete = true;",
+        },
+      ],
+      expectedFindings: [],
+    });
+    const workspace = materializeCase(testCase);
+    const root = path.dirname(workspace.repoPath);
+
+    try {
+      expect(git(workspace.repoPath, "show", `${workspace.mergeBaseCommit}:src/obsolete.ts`))
+        .toBe("export const obsolete = true;");
+      expect(() => git(workspace.repoPath, "show", `${workspace.headCommit}:src/obsolete.ts`))
+        .toThrow();
+      expect(workspace.changes).toEqual([
+        { path: "src/obsolete.ts", status: "deleted", addedLines: [] },
+      ]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("materializes a renamed file with its previous path", () => {
+    const testCase = goldenTestCaseSchema.parse({
+      id: "renamed-file",
+      language: "typescript",
+      title: "Rename a module",
+      description: "Exercise rename materialization",
+      files: [
+        {
+          path: "src/current.ts",
+          previousPath: "src/legacy.ts",
+          changeType: "renamed",
+          before: "export const value = 1;",
+          after: "export const value = 1;",
+        },
+      ],
+      expectedFindings: [],
+    });
+    const workspace = materializeCase(testCase);
+    const root = path.dirname(workspace.repoPath);
+
+    try {
+      expect(git(workspace.repoPath, "show", `${workspace.mergeBaseCommit}:src/legacy.ts`))
+        .toBe("export const value = 1;");
+      expect(() => git(workspace.repoPath, "show", `${workspace.headCommit}:src/legacy.ts`))
+        .toThrow();
+      expect(git(workspace.repoPath, "show", `${workspace.headCommit}:src/current.ts`))
+        .toBe("export const value = 1;");
+      expect(workspace.changes[0]).toMatchObject({
+        path: "src/current.ts",
+        previousPath: "src/legacy.ts",
+        status: "renamed",
+      });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

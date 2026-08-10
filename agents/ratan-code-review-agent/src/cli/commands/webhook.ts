@@ -19,9 +19,35 @@ export async function startWebhookService(options: {
     },
   });
 
-  serve({ fetch: app.fetch, port: options.port }, () => {
+  const server = serve({ fetch: app.fetch, port: options.port }, () => {
     console.log(`Webhook receiver listening on port ${options.port}`);
   });
+
+  let shutdownPromise: Promise<void> | undefined;
+  const shutdown = () => {
+    shutdownPromise ??= new Promise<void>((resolve, reject) => {
+      process.off("SIGTERM", handleSignal);
+      process.off("SIGINT", handleSignal);
+      server.close((error) => {
+        try {
+          options.findingStore.close();
+        } catch (closeError) {
+          reject(closeError);
+          return;
+        }
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+    return shutdownPromise;
+  };
+  const handleSignal = () => {
+    void shutdown().catch((error) => {
+      console.error("Webhook shutdown failed", error);
+    });
+  };
+  process.once("SIGTERM", handleSignal);
+  process.once("SIGINT", handleSignal);
 
   // Attempt auto-registration
   try {
@@ -40,4 +66,6 @@ export async function startWebhookService(options: {
   } catch (err) {
     console.warn("Webhook auto-registration failed, using polling fallback:", err);
   }
+
+  return { server, shutdown };
 }

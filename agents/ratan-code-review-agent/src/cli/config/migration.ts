@@ -37,7 +37,7 @@ function applyKnownFixes(config: Record<string, unknown>): { config: Record<stri
     const llm = ocr.llm as Record<string, unknown> | undefined;
     if (llm && typeof llm === "object" && !Array.isArray(llm)) {
       if (llm.protocol === undefined) {
-        llm.protocol = "openai-responses";
+        llm.protocol = "openai";
         fixed = true;
       }
     }

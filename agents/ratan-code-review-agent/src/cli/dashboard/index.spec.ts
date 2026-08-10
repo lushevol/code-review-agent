@@ -74,6 +74,30 @@ describe("GET /api/audit", () => {
   });
 });
 
+describe("dashboard authentication", () => {
+  it("requires valid HTTP Basic credentials when authentication is configured", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "dashboard-auth-"));
+    tempDirs.push(dir);
+    const store = new FindingStore(path.join(dir, "findings.db"));
+    await store.init();
+    const app = createDashboardApp(store, {
+      auth: { username: "operator", password: "secret" },
+    });
+
+    const unauthorized = await app.request("/api/health");
+    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.headers.get("www-authenticate")).toContain("Basic");
+
+    const authorized = await app.request("/api/health", {
+      headers: {
+        authorization: `Basic ${Buffer.from("operator:secret").toString("base64")}`,
+      },
+    });
+    expect(authorized.status).toBe(200);
+    store.close();
+  });
+});
+
 describe("dashboard data routes", () => {
   it("returns global findings, overrides, stable stats, and repository-scoped PRs", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "dashboard-data-"));
