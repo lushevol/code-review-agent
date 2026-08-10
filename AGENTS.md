@@ -135,7 +135,7 @@ prReviewWorkflow(prId):
 
 ```
 ADO webhook (git.pullrequest.created / git.pullrequest.updated)
-  → Express webhook receiver (HMAC-SHA256 validation)
+  → Hono webhook receiver (HMAC-SHA256 validation)
   → Eligibility gate (pilot repo check, draft status, min size)
   → Dedup window (5 min)
   → Trigger prReviewWorkflow
@@ -166,7 +166,7 @@ routed through the prefix as their source component until their call sites migra
 The `ratan-code-review` CLI has two commands:
 
 - **`start`** — Unified entry point. On first run, scaffolds `.ratan/` with default config and native OpenCodeReview rules. Reads config, initializes the PR queue, and starts the scan loop. Runs a background feedback daemon (ADO comment sync) automatically in `--watch` mode. Options: `--config <path>`, `--pr-id <id>` (runs the explicit review directly, waits for completion, surfaces failures, and bypasses the automatic-scan build-status gate), `--watch` (30-min interval + feedback daemon), `--repo-pattern <patterns...>`.
-- **`dashboard`** — Starts the PR Guardian dashboard (Express REST API + React SPA). Serves `/api/health`, `/api/queue`, `/api/findings`, `/api/overrides`, `/api/audit`, `/api/stats`, `/api/prs`.
+- **`dashboard`** — Starts the PR Guardian dashboard (Hono API + React SPA). Serves `/api/health`, `/api/queue`, `/api/findings`, `/api/overrides`, `/api/audit`, `/api/stats`, `/api/prs`. It binds to `127.0.0.1` by default; non-loopback hosts require `dashboard.auth` HTTP Basic credentials and should sit behind TLS. Pages are split into lazy-loaded route chunks.
 - **Root help** — `ratan-code-review --help` ends with a concise cheatsheet for first-run scanning, direct PR review, watch mode, and dashboard startup.
 
 ### Scanner Pipeline
@@ -201,7 +201,7 @@ The wrapper config at `.ratan/config.json` declares the mode (`"local"` or `"ado
 
 ### Services
 
-- **FindingStore** — SQLite persistence via `packages/finding-store`. Tables include `findings`, `finding_comment_threads`, `override_log`, and `audit_records`. Content-addressable finding identity uses SHA-256 hashes; ADO thread associations support finding-specific feedback. `MemoryFindingStore` is used in tests.
+- **FindingStore** — SQLite persistence via `packages/finding-store`. Tables include `findings`, `finding_comment_threads`, `override_log`, `audit_records`, and `review_metrics`. SQLite `user_version` migrations transactionally upgrade unversioned databases to schema version 1 and reject newer unsupported versions. Content-addressable finding identity uses SHA-256 hashes; ADO thread associations support finding-specific feedback. `MemoryFindingStore` is used in tests.
 - **OverrideService** — Finding resolution override management. Workflows: waive, false-positive, risk-accept. Two-person approval for critical findings. Expiry management. Full audit trail.
 - **FeedbackService** — Collects ADO comment reactions (👍/👎), aggregates false-positive patterns, generates prompt optimization recommendations (semi-automated, human review required).
 - **AuditService** — Append-only audit records. Every review result captured with commit hash, engine versions, model version, and timestamp. Retention policy.
@@ -209,15 +209,16 @@ The wrapper config at `.ratan/config.json` declares the mode (`"local"` or `"ado
 
 ### Webhooks
 
-An Express webhook receiver runs as part of the webhook service (separate from the `start` command):
+An Hono webhook receiver runs as part of the webhook service (separate from the `start` command):
 - HMAC-SHA256 signature validation against configured webhook secret
 - Dedup window (5 min) prevents duplicate processing
 - Auto-registration of `git.pullrequest.created` and `git.pullrequest.updated` subscriptions via ADO notification API
 - PR eligibility gate: pilot repo check, draft status check, minimum size check
+- Idempotent `SIGTERM`/`SIGINT` shutdown closes the listener, then flushes and closes FindingStore; the embedding process also receives a `shutdown()` handle
 
 ### Dashboard
 
-A React SPA (Vite + Recharts + React Router) served by an Express backend:
+A React SPA (Vite + Recharts + React Router) served by a Hono backend:
 - **Dashboard Overview** — Charts: findings by severity, category, trend over time
 - **Findings Explorer** — Filterable/sortable table of all findings (severity, category, engine, status)
 - **PR Listing** — All reviewed PRs with status and summary
@@ -225,7 +226,7 @@ A React SPA (Vite + Recharts + React Router) served by an Express backend:
 
 ### LLM Configuration
 
-OpenCodeReview model configuration is read from `config.openCodeReview.llm` (`url`, `token`, `model`, and optional `protocol`). Values may use `env:VAR_NAME`; there is no production fallback to `OPENAI_BASE_URL` or `OPENAI_API_KEY`.
+OpenCodeReview model configuration is read from `config.openCodeReview.llm` (`url`, `token`, `model`, and optional `protocol`). Missing protocol values in older configs are repaired to `openai`, preserving the legacy OpenAI-compatible request contract. Values may use `env:VAR_NAME`; there is no production fallback to `OPENAI_BASE_URL` or `OPENAI_API_KEY`.
 
 ### Data Privacy
 Before OpenCodeReview sees Git content, the runner creates a temporary two-commit repository and masks changed text via `maskSensitiveData()`. Credential replacements use per-run keyed markers so the LLM can still detect whether a secret changed without receiving the original value or a reusable hash. The source checkout is never modified.
@@ -244,7 +245,7 @@ OpenCodeReview owns review semantics through its native rule JSON. Default confi
 - `agents/ratan-code-review-agent/src/cli/commands/` — start, dashboard command implementations
 - `agents/ratan-code-review-agent/src/cli/config/loader.ts` — config file reader with `"env:VAR_NAME"` token resolution
 - `agents/ratan-code-review-agent/src/cli/config/local-client.ts` — `LocalConfigClient` implementation
-- `agents/ratan-code-review-agent/src/cli/dashboard/` — Express dashboard backend (health, findings, audit, stats APIs)
+- `agents/ratan-code-review-agent/src/cli/dashboard/` — Hono dashboard backend (health, findings, audit, stats APIs)
 - `agents/ratan-code-review-agent/bin/ratan-code-review.cjs` — npm bin shim (CJS entry)
 - `agents/ratan-code-review-agent/bin/ratan-code-review.js` — npm bin shim (ESM entry)
 - `agents/ratan-code-review-agent/src/review/index.ts` — review type exports; production review uses OpenCodeReview directly
@@ -257,8 +258,8 @@ OpenCodeReview owns review semantics through its native rule JSON. Default confi
 - `agents/ratan-code-review-agent/src/review/types/index.ts` — shared Zod schemas and TypeScript types
 - `agents/ratan-code-review-agent/src/review/types/finding.ts` — NormalizedFinding schema, FindingCategory, FindingSeverity, EngineType, content hash computation
 - `agents/ratan-code-review-agent/src/bootstrap/` — provider session registration and explicit PR review startup
-- `agents/ratan-code-review-agent/src/webhooks/` — Express webhook receiver, HMAC validation, eligibility gate
-- `agents/ratan-code-review-agent/src/evaluation/` — 25-case synthetic golden PR corpus, deterministic evaluator, opt-in live OCR runner, and optional qualitative LLM judge
+- `agents/ratan-code-review-agent/src/webhooks/` — Hono webhook receiver, HMAC validation, eligibility gate
+- `agents/ratan-code-review-agent/src/evaluation/` — 27-case synthetic golden PR corpus (including renamed and deleted files), deterministic evaluator, opt-in live OCR runner, and optional qualitative LLM judge
 - `agents/ratan-code-review-agent/templates/` — default config and native OCR rule templates (published to npm)
 
 ### Dashboard (React SPA)
@@ -341,6 +342,9 @@ SONARQUBE_TOKEN=your_sonarqube_token
 - `pnpm dev` / `pnpm agent:dev` create real external side effects (ADO calls, PR comments). Do not run without user confirmation.
 - `ADO_TOKEN` env var is required for Azure DevOps access.
 - Production LLM endpoint, token, model, and provider mode are owned by `config.openCodeReview.llm`; `env:` references are resolved recursively.
+- Readiness uses OCR's native LLM test; each watch scan additionally probes the
+  provider `/models` endpoint with Bearer auth for OpenAI-compatible protocols
+  or `x-api-key` plus `anthropic-version` for Anthropic.
 - Workspace dependencies: `finding-store`, `agent-config-manager`, `ratan-ado-api`, `ratan-sonarqube-api` — defined in other packages in the monorepo.
 - The `start` CLI command scaffolds `.ratan/` from `templates/` on first run, then reads config via `ConfigProvider` and runs the scan loop.
 - The scanner pipeline uses `Promise.allSettled` for graceful degradation — individual scanner failures don't block the pipeline.
@@ -348,9 +352,9 @@ SONARQUBE_TOKEN=your_sonarqube_token
 - Work item creation step handles errors and null/missing ADO work-item responses gracefully (non-fatal).
 - Comment step posts at most 30 valid-location findings after blocking/severity ordering and current-run deduplication. It refreshes linked inline threads, marks resolved-finding threads Fixed, renders suggested fixes in fenced code blocks, posts one structured canonical conclusion report last, deletes prior agent-generated conclusion threads, and silently skips per-line creation failures. The conclusion is rendered directly from the merge decision, so a blocked result cannot be presented as approval.
 - OpenCodeReview output does not expose a calibrated confidence score; do not restore the obsolete confidence-rescore/filter path or invent confidence values.
-- The test suite covers CLI config/scaffolding and repository overrides, configured LLM health checks, OpenCodeReview configuration and focus routing, a 25-case multilingual synthetic PR finding corpus plus optional judge parsing, merge-gate decisions, work-item creation/context, SonarQube degradation, finding/thread persistence, feedback synchronization, scanners, dashboard APIs, workflow integration, pre-Git-diff sensitive-data masking, retry logic, and eligibility gates.
+- The test suite covers CLI config/scaffolding and repository overrides, protocol-aware configured LLM health checks, dashboard binding/authentication and webhook shutdown lifecycle, OpenCodeReview configuration and focus routing, a 27-case multilingual synthetic PR finding corpus plus optional judge parsing, versioned FindingStore migration/reopen behavior, merge-gate decisions, work-item creation/context, SonarQube degradation, finding/thread persistence, feedback synchronization, scanners, authenticated dashboard APIs, workflow integration, pre-Git-diff sensitive-data masking, retry logic, and eligibility gates.
 - `evaluate:golden --dry-run` is offline. Running it without `--dry-run` requires at least one explicit `--case` and sends only selected synthetic fixtures to `config.openCodeReview.llm`; it does not fetch ADO data or post PR comments. Require explicit authorization before evaluating non-synthetic or private code against an external endpoint.
-- Golden fixtures currently model only added and modified files. Treat skipped or errored OCR execution as evaluation failure; do not count an empty clean-case result as a successful review unless OCR completed.
+- Golden fixtures model added, modified, renamed, and deleted files. Treat skipped or errored OCR execution as evaluation failure; do not count an empty clean-case result as a successful review unless OCR completed.
 - A live pilot can post ADO comments and statuses. Do not run the Phase 3 pilot without explicit user authorization, a target cohort, and scoped credentials; do not change merge policy before the pilot report is reviewed.
 - The 2026-07-15 `example-repo` PR `#4` attempt is incomplete, not a successful pilot: it exposed an OCR category-contract mismatch, and the corrected live retry was blocked by the environment's external-data policy.
 - The 2026-07-20 published `ratan-code-review@0.1.8` package completed a two-iteration synthetic `example-repo` PR `#5` pilot: the vulnerable commit produced a critical linked inline finding, failed status, and canonical `Changes requested` summary; the parameterized-query follow-up marked the linked thread Fixed, posted succeeded status, and updated the same summary to `No blocking issues`. SonarQube result and reviewed commit remained visible. A pre-`0.1.8` unlinked inline thread required one-time manual cleanup.
@@ -359,7 +363,7 @@ SONARQUBE_TOKEN=your_sonarqube_token
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **code-review-agent** (2398 symbols, 4823 relationships, 159 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **code-review-agent** (2646 symbols, 5079 relationships, 171 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 

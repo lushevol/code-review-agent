@@ -1,0 +1,9 @@
+{
+  "id": "ts-renamed-missing-authorization",
+  "language": "typescript",
+  "title": "Rename project administration route",
+  "description": "Renames a route module while removing its project-level authorization guard.",
+  "files": [{ "path": "src/routes/project-admin.ts", "previousPath": "src/routes/legacy-project-admin.ts", "changeType": "renamed", "before": "router.delete(\"/:id\", requireLogin, requireProjectAdmin, async (req, res) => {\n  await projects.delete(req.params.id);\n  res.sendStatus(204);\n});", "after": "router.delete(\"/:id\", requireLogin, async (req, res) => {\n  await projects.delete(req.params.id);\n  res.sendStatus(204);\n});" }],
+  "expectedFindings": [{ "id": "renamed-missing-authorization", "filePath": "src/routes/project-admin.ts", "lineStart": 1, "lineEnd": 2, "category": "security", "allowedSeverities": ["critical", "high"], "messageIncludes": ["authorization", "project"] }],
+  "allowedExtraFindings": 0
+}

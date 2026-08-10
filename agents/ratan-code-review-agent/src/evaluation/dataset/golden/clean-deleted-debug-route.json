@@ -1,0 +1,9 @@
+{
+  "id": "clean-deleted-debug-route",
+  "language": "typescript",
+  "title": "Remove obsolete debug route",
+  "description": "Deletes a development-only endpoint without adding executable code.",
+  "files": [{ "path": "src/routes/debug.ts", "changeType": "deleted", "before": "router.get(\"/debug\", requireAdmin, (_req, res) => {\n  res.json({ status: \"ok\" });\n});" }],
+  "expectedFindings": [],
+  "allowedExtraFindings": 0
+}

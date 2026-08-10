@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
+import { basicAuth } from "hono/basic-auth";
 import { cors } from "hono/cors";
 import type { FindingEngine, FindingResolution, FindingStore } from "finding-store";
 import { getPRQueue } from "../services/pr-queue";
@@ -42,10 +43,18 @@ function resolveDashboardDir(): string | null {
   return null;
 }
 
-export function createDashboardApp(findingStore: FindingStore): Hono {
+export function createDashboardApp(
+  findingStore: FindingStore,
+  options: {
+    auth?: { username: string; password: string };
+  } = {},
+): Hono {
   const app = new Hono();
   const logger = getLogger("dashboard");
 
+  if (options.auth) {
+    app.use("*", basicAuth(options.auth));
+  }
   app.use("/api/*", cors());
 
   // ── Dashboard SPA ─────────────────────────────────────────────────────

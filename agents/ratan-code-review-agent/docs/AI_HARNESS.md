@@ -136,7 +136,7 @@ Then test workflow steps with mocked runtime context and mocked clients:
 - `record-audit` should persist only allowlisted pilot metrics and must discard secret-like or arbitrary OCR metadata.
 - `readiness-check` should verify each dependency (Git, ADO, LLM, SonarQube) independently, report critical vs non-critical status, and surface meaningful failure messages.
 - `/api/audit` should export routed outcome metrics before any focus/status UI filters are added.
-- Dashboard HTTP tests should cover unfiltered and independently filtered findings, override history, repository-aware PR aggregation, and stats. UI builds should cover queue clearing and current scanner names.
+- Dashboard HTTP tests should cover unfiltered and independently filtered findings, override history, repository-aware PR aggregation, and stats. Command tests should verify the dashboard's non-loopback authentication guard, webhook listener-before-store shutdown, and idempotent webhook shutdown. UI builds should cover queue clearing and current scanner names.
 
 Do not use real ADO or SonarQube clients in automated tests.
 
@@ -227,11 +227,13 @@ Before allowing live PR review:
 - Confirm the target repositories and PR age window in root config.
 - Confirm `ADO_TOKEN`, the token referenced by `config.openCodeReview.llm.token`, and optional `SONARQUBE_TOKEN` are scoped correctly.
 - Confirm the configured OpenCodeReview model endpoint is running and compatible with the selected provider mode.
+- Confirm the provider exposes its `/models` endpoint; watch mode probes it with
+  the configured protocol's authentication before each scan cycle.
 - Confirm `.ratan/opencodereview/rule.json` is valid native OCR rule JSON.
 - Confirm OCR rule scope and merge-policy configuration.
 - Run against a dedicated test PR before enabling broad scanning.
 
-Current status: the complete suite has 38 test files and 259 passing tests,
+Current status: the complete suite has 44 test files and 307 passing tests,
 the loopback dashboard integration test passes separately. Package coverage from
 the prior full coverage run is 62.35% statements,
 51.1% branches, 67.55% functions, and 63.37% lines. The scanner pipeline,
@@ -268,5 +270,7 @@ the pilot report has been reviewed.
 - [DONE] Replace the legacy ADO formatter with a concise decision-derived conclusion posted as the newest thread, remove duplicate agent conclusions, fence suggested fixes, and refresh linked inline notes.
 - Log inline comment failures with enough context to debug without exposing secrets.
 - Add dry-run mode so the full workflow can execute without writing PR comments.
-- Add webhook server graceful shutdown and restart recovery.
-- Add dashboard authentication/authorization.
+- [DONE] Add idempotent webhook shutdown for `SIGTERM`, `SIGINT`, and controlled
+  embedding-process restarts.
+- [DONE] Bind the dashboard to loopback by default and require HTTP Basic
+  credentials for configured non-loopback hosts.

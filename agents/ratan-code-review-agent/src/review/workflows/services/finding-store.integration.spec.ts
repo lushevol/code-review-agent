@@ -1,6 +1,7 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import initSqlJs from "sql.js";
 import { describe, expect, it } from "vitest";
 import { FindingStore } from "finding-store";
 
@@ -33,6 +34,89 @@ function createFinding(linkedTaskId: number | null) {
 }
 
 describe("FindingStore integration", () => {
+  it("rejects a database created by a newer schema version", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "finding-store-"));
+    const dbPath = path.join(dir, "findings.db");
+    const SQL = await initSqlJs();
+    const futureDatabase = new SQL.Database();
+    futureDatabase.run("PRAGMA user_version=999");
+    await writeFile(dbPath, Buffer.from(futureDatabase.export()));
+    futureDatabase.close();
+
+    const store = new FindingStore(dbPath);
+    try {
+      await expect(store.init()).rejects.toThrow(
+        "schema version 999 is newer than supported version 1",
+      );
+    } finally {
+      store.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("upgrades an unversioned database without losing existing findings", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "finding-store-"));
+    const dbPath = path.join(dir, "findings.db");
+    const legacyStore = new FindingStore(dbPath);
+    await legacyStore.init();
+    legacyStore.upsertFinding(createFinding(null));
+    legacyStore.close();
+
+    const SQL = await initSqlJs();
+    const legacyDatabase = new SQL.Database(await readFile(dbPath));
+    legacyDatabase.run("DROP TABLE review_metrics");
+    legacyDatabase.run("PRAGMA user_version=0");
+    await writeFile(dbPath, Buffer.from(legacyDatabase.export()));
+    legacyDatabase.close();
+
+    const store = new FindingStore(dbPath);
+    try {
+      await store.init();
+      expect(store.getFindingsByPr(7, "repo")).toEqual([
+        expect.objectContaining({ id: createFinding(null).id }),
+      ]);
+      store.saveMetrics({
+        id: "550e8400-e29b-41d4-a716-446655440099",
+        prId: 7,
+        repository: "repo",
+        auditRecordId: null,
+        totalFindings: 1,
+        resolvedFindings: 0,
+        validFindingCount: 0,
+        falsePositiveCount: 0,
+        pendingFeedbackCount: 1,
+        cveFindings: 0,
+        cveCritical: 0,
+        coverageBelowThreshold: 0,
+        hadCoverageData: 0,
+        resolutionRate: 0,
+        validRate: null,
+        computedAt: "2026-08-10T00:00:00.000Z",
+      });
+      expect(store.queryMetrics(7, "repo")).toHaveLength(1);
+      store.close();
+
+      const reopenedStore = new FindingStore(dbPath);
+      try {
+        await reopenedStore.init();
+        expect(reopenedStore.getFindingsByPr(7, "repo")).toEqual([
+          expect.objectContaining({ id: createFinding(null).id }),
+        ]);
+        expect(reopenedStore.queryMetrics(7, "repo")).toHaveLength(1);
+
+        const reopenedDatabase = new SQL.Database(await readFile(dbPath));
+        const versionResult = reopenedDatabase.exec("PRAGMA user_version");
+        expect(versionResult[0]?.values[0]?.[0]).toBe(1);
+        reopenedDatabase.close();
+      } finally {
+        reopenedStore.close();
+      }
+    } finally {
+      store.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("stores OCR findings without a confidence score", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "finding-store-"));
     const store = new FindingStore(path.join(dir, "findings.db"));

@@ -142,14 +142,29 @@ export function materializeCase(testCase: GoldenTestCase): ReviewWorkspace {
   git(repoPath, "config", "user.name", "Golden Tests");
 
   for (const file of testCase.files) {
-    if (file.changeType !== "added") writeFile(repoPath, file.path, file.before);
+    if (file.changeType !== "added") {
+      writeFile(
+        repoPath,
+        file.changeType === "renamed" ? file.previousPath! : file.path,
+        file.before,
+      );
+    }
   }
   git(repoPath, "add", ".");
   git(repoPath, "commit", "--quiet", "--allow-empty", "-m", "base");
   const mergeBaseCommit = git(repoPath, "rev-parse", "HEAD");
 
   for (const file of testCase.files) {
-    writeFile(repoPath, file.path, file.after);
+    if (file.changeType === "deleted") {
+      fs.rmSync(path.join(repoPath, file.path));
+    } else if (file.changeType === "renamed") {
+      const destination = path.join(repoPath, file.path);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.renameSync(path.join(repoPath, file.previousPath!), destination);
+      fs.writeFileSync(destination, file.after);
+    } else {
+      writeFile(repoPath, file.path, file.after);
+    }
   }
   git(repoPath, "add", "--all");
   git(repoPath, "commit", "--quiet", "--allow-empty", "-m", "synthetic PR");
@@ -162,11 +177,17 @@ export function materializeCase(testCase: GoldenTestCase): ReviewWorkspace {
     headCommit,
     changes: testCase.files.map((file) => ({
       path: file.path,
+      ...(file.changeType === "renamed"
+        ? { previousPath: file.previousPath }
+        : {}),
       status: file.changeType,
-      addedLines: file.after.split("\n").map((text, index) => ({
-        line: index + 1,
-        text,
-      })),
+      addedLines:
+        file.changeType === "deleted"
+          ? []
+          : file.after.split("\n").map((text, index) => ({
+              line: index + 1,
+              text,
+            })),
     })),
   };
 }

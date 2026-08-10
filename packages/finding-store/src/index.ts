@@ -3,6 +3,8 @@ import type { Database as SqlJsDatabase, SqlJsStatic } from "sql.js";
 import path from "node:path";
 import fs from "node:fs";
 
+const CURRENT_SCHEMA_VERSION = 1;
+
 // ─── Public Type Interfaces ──────────────────────────────────────────────────
 
 export interface NormalizedFinding {
@@ -291,11 +293,37 @@ export class FindingStore {
     this.db = new this.sql.Database(buffer);
     this.db.run("PRAGMA journal_mode=MEMORY");
     this.db.run("PRAGMA foreign_keys=ON");
-    this.runDDL();
+    this.runMigrations();
     this.storeSQLs();
   }
 
   // ─── Private: DDL ────────────────────────────────────────────────────────
+
+  private runMigrations(): void {
+    const versionRow = row<{ user_version: number }>(
+      this.db!.prepare("PRAGMA user_version"),
+    );
+    const version = Number(versionRow?.user_version ?? 0);
+    if (version > CURRENT_SCHEMA_VERSION) {
+      throw new Error(
+        `FindingStore schema version ${version} is newer than supported version ${CURRENT_SCHEMA_VERSION}`,
+      );
+    }
+
+    for (let nextVersion = version + 1; nextVersion <= CURRENT_SCHEMA_VERSION; nextVersion += 1) {
+      this.db!.run("BEGIN");
+      try {
+        if (nextVersion === 1) this.runDDL();
+        this.db!.run(`PRAGMA user_version=${nextVersion}`);
+        this.db!.run("COMMIT");
+      } catch (error) {
+        this.db!.run("ROLLBACK");
+        throw new Error(
+          `Failed to migrate FindingStore schema from version ${nextVersion - 1} to ${nextVersion}: ${(error as Error).message}`,
+        );
+      }
+    }
+  }
 
   private runDDL(): void {
     this.db!.run(`

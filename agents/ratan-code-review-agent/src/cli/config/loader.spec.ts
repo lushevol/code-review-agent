@@ -54,4 +54,31 @@ describe("loadConfig", () => {
     expect(config.retry?.maxAttempts).toBe(2);
     expect(config.logging?.retentionDays).toBe(7);
   });
+
+  it("loads dashboard host and HTTP Basic credentials from environment references", async () => {
+    vi.stubEnv("DASHBOARD_PASSWORD", "dashboard-secret");
+    const directory = await writeConfig({
+      dashboard: {
+        host: "0.0.0.0",
+        auth: {
+          username: "operator",
+          password: "env:DASHBOARD_PASSWORD",
+        },
+      },
+      openCodeReview: {
+        rulesPath: "opencodereview/rule.json",
+        llm: {
+          url: "https://llm.example/v1",
+          token: "token",
+          model: "model",
+        },
+      },
+    });
+
+    const { provider } = await loadConfig(directory);
+    expect((await provider.getRootConfig()).dashboard).toEqual({
+      host: "0.0.0.0",
+      auth: { username: "operator", password: "dashboard-secret" },
+    });
+  });
 });

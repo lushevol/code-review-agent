@@ -47,7 +47,9 @@ describe("golden PR review dataset", () => {
     }
     expect(
       cases.filter(({ expectedFindings }) => expectedFindings.length === 0),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
+    expect(new Set(cases.flatMap(({ files }) => files.map(({ changeType }) => changeType))))
+      .toEqual(new Set(["added", "modified", "deleted", "renamed"]));
   });
 
   it("keeps every expected location inside its changed file", () => {

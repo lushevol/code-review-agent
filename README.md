@@ -84,7 +84,7 @@ Commands:
 | Command | Description |
 |---------|-------------|
 | `start` | Scaffold `.ratan/` config on first run, scan repos, process PR queue. `--watch` for configurable polling with background feedback daemon. `--repo-pattern <patterns...>` overrides configured repository globs. `--pr-id <id>` runs that review directly, waits for completion, and surfaces failures without requiring a detected build status; automatic scans still require a build pipeline. |
-| `dashboard` | Start PR Guardian dashboard (Express REST API + React SPA) |
+| `dashboard` | Start PR Guardian dashboard (Hono API + React SPA) |
 
 On first run, `start` creates `.ratan/config.json`, `.ratan/opencodereview/rule.json`,
 `data/`, and `logs/`. Edit `config.json` with your ADO organization and project
@@ -92,13 +92,17 @@ before scanning.
 
 Before scanning, `start` runs a **readiness check** that verifies each dependency and
 highlights which are blocking:
-- **LLM** (critical) — endpoint reachable and responding
+- **LLM** (critical) — an OCR-native LLM test completes with the configured
+  endpoint, model, protocol, and credential
 - **ADO** (critical) — authenticated and able to list repos
 - **Git** (critical) — installed and on the PATH (required for sensitive-data masking)
 - **SonarQube** (optional) — connected if configured; CVE scanning degrades gracefully
   when unavailable
 
 If any critical dependency fails, the CLI exits with an error and reports what to fix.
+Before each watch-mode scan cycle, the configured provider's `/models` endpoint
+is also probed with protocol-appropriate authentication; an unhealthy result
+skips that cycle without posting review output.
 
 Default config and OpenCodeReview rule templates are at `templates/` in the package — they're
 copied to `.ratan/` on first `start` run. You can edit the generated files or
@@ -108,6 +112,8 @@ All operational settings live under the root `config` object. Secrets use
 `env:NAME` references and are resolved only at runtime. `sonarQube.url` and
 `sonarQube.token`, retry backoff, polling/feedback intervals, ports, merge policy,
 and structured logging are root settings; no Sonar or retry setting is hard-coded.
+Older configs that omit `openCodeReview.llm.protocol` are repaired as `openai`,
+matching the legacy OpenAI-compatible request contract.
 Logs are JSONL files in `.ratan/logs` by default, redact secret-like fields, and
 can be configured through `config.logging` (`level`, `format`, `console`, `file`,
 `directory`, and `retentionDays`). Console logs use focused lines with a source
@@ -134,6 +140,10 @@ Key areas include:
 | `scannerSettings.compliance.consoleDetectionEnabled` | `true` | Flag `console.log`/`console.error` in source |
 | `scannerSettings.compliance.todoDetectionEnabled` | `true` | Flag TODO/FIXME/HACK markers |
 | `workspace.maxGitOutputBytes` | `33554432` | Max git output buffer (32 MiB) |
+| `dashboard.host` | `127.0.0.1` | Dashboard listen address; non-loopback hosts require authentication |
+| `dashboard.port` | `3099` | Dashboard HTTP port |
+| `dashboard.auth.username` | unset | HTTP Basic username for non-loopback deployment |
+| `dashboard.auth.password` | unset | HTTP Basic password; use an `env:NAME` reference |
 | `sensitiveDataMask.enabled` | `true` | Enable PII masking before LLM review |
 | `sensitiveDataMask.customPatterns` | Stripe + Bearer | Regex patterns for secret redaction |
 | `remediationTasks.adoUrlTemplate` | Azure DevOps URL | Template for work item PR links |
@@ -195,6 +205,44 @@ To start the dashboard:
 ratan-code-review dashboard
 ```
 
+The dashboard binds to `127.0.0.1` by default. A non-loopback
+`dashboard.host` is rejected unless HTTP Basic credentials are configured:
+
+```json
+{
+  "dashboard": {
+    "host": "0.0.0.0",
+    "port": 3099,
+    "auth": {
+      "username": "operator",
+      "password": "env:DASHBOARD_PASSWORD"
+    }
+  }
+}
+```
+
+Use TLS at the reverse proxy so Basic credentials are never sent over cleartext
+HTTP. The SPA is split by route so production builds stay below Vite's
+large-chunk warning threshold.
+
+### Production webhook deployment
+
+The webhook receiver is an internal service component rather than a public CLI
+command. A production host that embeds it should:
+
+- terminate TLS at a reverse proxy and forward only the ADO webhook path;
+- configure an HMAC secret and reject unsigned events;
+- set `WEBHOOK_PUBLIC_URL` to the externally reachable HTTPS origin before
+  enabling ADO subscription registration;
+- keep `.ratan/data` on persistent storage and back it up before upgrades;
+- forward `SIGTERM` or `SIGINT` and allow the service to stop accepting
+  requests and flush the FindingStore before the process exits;
+- monitor the webhook health endpoint and retain polling as the fallback.
+
+Keep the dashboard private unless its HTTP Basic credentials and a TLS reverse
+proxy are both configured. Reverse-proxy authorization may add a stricter
+production boundary.
+
 ## Architecture
 
 ### Workflow
@@ -219,6 +267,10 @@ Three scanners run concurrently; individual failures are non-fatal:
 | OpenCodeReview | Native OCR rules + configured LLM | Code quality issues, bugs, and anti-patterns; one run receives deterministic focuses for tests, error handling, type design, and comments when relevant |
 | CVE | SonarQube Issues API | Vulnerabilities, security hotspots |
 | Compliance | Static analysis + YAML rules | TODO/FIXME, console.log, large files |
+
+FindingStore uses SQLite `user_version` migrations. Existing unversioned files
+upgrade transactionally to schema version 1 without losing findings; databases
+created by a newer package version are rejected rather than opened unsafely.
 
 The main review comment contains only the merge decision, finding count,
 compact SonarQube after-merge coverage and PR quality signals, Sonatype CVE
@@ -246,7 +298,7 @@ Failure audit records retain any focuses selected before the failure.
 
 ### Webhooks
 
-- Express receiver with HMAC-SHA256 validation
+- Hono receiver with HMAC-SHA256 validation
 - Auto-registers ADO `git.pullrequest.created`/`.updated` subscriptions
 - Dedup window (5 min)
 - Polling fallback (30 min)
@@ -255,7 +307,7 @@ Failure audit records retain any focuses selected before the failure.
 
 - React SPA (Vite + Recharts + React Router)
 - 4 pages: Overview (charts), Findings Explorer, PR Listing, Admin
-- Express backend: `/api/health`, `/api/queue`, `/api/findings`, `/api/overrides`, `/api/audit`, `/api/stats`, `/api/prs`
+- Hono backend: `/api/health`, `/api/queue`, `/api/findings`, `/api/overrides`, `/api/audit`, `/api/stats`, `/api/prs`
 - Findings support global or PR/repository/engine/resolution filtering; Admin reads the override log and can clear pending queue items; PR aggregation is repository-aware.
 
 ## Azure DevOps MCP
@@ -287,7 +339,7 @@ OpenCodeReview configuration is scaffolded locally under `.ratan/`:
 
 As of the latest local verification:
 
-- The complete suite passes — 38 files and 259 tests, including the loopback dashboard integration and installed-package CLI coverage.
+- The complete suite passes — 44 files and 307 tests, including webhook lifecycle, dashboard binding/authentication, loopback dashboard integration, and installed-package CLI coverage.
 - Package coverage is 62.35% statements, 51.1% branches, 67.55% functions,
   and 63.37% lines.
 - The offline suite includes golden finding-quality controls plus mocked merge

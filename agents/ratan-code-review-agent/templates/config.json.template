@@ -8,6 +8,10 @@
   "scanRepoNames": [],
   "scanPRCreatedDaysAgo": 7,
   "findingStorePath": ".ratan/data/findings.db",
+  "dashboard": {
+    "host": "127.0.0.1",
+    "port": 3099
+  },
   "logging": {
     "level": "info",
     "directory": "logs",

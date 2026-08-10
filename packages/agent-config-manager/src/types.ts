@@ -68,7 +68,12 @@ const WebhookConfigSchema = z.object({
 const DashboardConfigSchema = z.object({
   enabled: z.boolean().optional(),
   port: z.number().optional(),
-});
+  host: z.string().min(1).optional(),
+  auth: z.object({
+    username: z.string().min(1),
+    password: z.string().min(1),
+  }).strict().optional(),
+}).strict();
 
 const RemediationTasksConfigSchema = z.object({
   enabled: z.boolean().optional(),

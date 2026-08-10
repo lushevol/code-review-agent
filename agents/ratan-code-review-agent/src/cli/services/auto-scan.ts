@@ -37,20 +37,32 @@ export class AutoScanService {
   /**
    * Check if the LLM endpoint is reachable before scanning.
    */
-  async isLLMEndpointHealthy(url: string, token: string): Promise<boolean> {
+  async isLLMEndpointHealthy(
+    url: string,
+    token: string,
+    protocol: "anthropic" | "openai" | "openai-responses" = "openai",
+  ): Promise<boolean> {
     const controller = new AbortController();
     const timeout = setTimeout(
       () => controller.abort(),
       LLM_HEALTH_CHECK_TIMEOUT_MS,
     );
 
+    const baseUrl = url.replace(/\/+$/, "");
+    const healthUrl = baseUrl.endsWith("/models")
+      ? baseUrl
+      : `${baseUrl}/models`;
+
     try {
-      const response = await fetch(url, {
+      const response = await fetch(healthUrl, {
         signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "x-api-key": token,
-        },
+        headers:
+          protocol === "anthropic"
+            ? {
+                "anthropic-version": "2023-06-01",
+                "x-api-key": token,
+              }
+            : { Authorization: `Bearer ${token}` },
       });
 
       if (response.ok) {
@@ -62,7 +74,7 @@ export class AutoScanService {
       return false;
     } catch (err) {
       this.logger.warn(
-        `LLM endpoint not reachable (${url}): ${(err as Error).message}`,
+        `LLM endpoint not reachable (${healthUrl}): ${(err as Error).message}`,
       );
       return false;
     } finally {
