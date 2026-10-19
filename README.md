@@ -174,8 +174,8 @@ pnpm verify:release -- --pr-id 5
 ```
 
 The defaults are ADO organization `lushe`, project `project1`,
-`ratan-code-review@0.2.0`, `finding-store@0.2.0`,
-`agent-config-manager@0.1.0`, and `ratan-markdown-tool@0.1.0`. Override them
+`ratan-code-review@0.2.18`, `finding-store@0.2.1`,
+`agent-config-manager@0.1.1`, and `ratan-markdown-tool@0.1.0`. Override them
 with the corresponding `EXPECTED_*_VERSION` variable. A normal verification is
 read-only. To deliberately run a real review that can update PR comments and
 status, use:

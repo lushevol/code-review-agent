@@ -1,6 +1,6 @@
 {
   "name": "agent-config-manager",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "exports": {
     ".": {
@@ -22,7 +22,7 @@
   "author": "Shuai,Lu(shuai.lu@sc.com)",
   "dependencies": {
     "ratan-ado-api": "workspace:0.0.4",
-    "ratan-sonarqube-api": "workspace:0.0.4"
+    "ratan-sonarqube-api": "workspace:0.0.5"
   },
   "devDependencies": {
     "@rslib/core": "^0.18.6",

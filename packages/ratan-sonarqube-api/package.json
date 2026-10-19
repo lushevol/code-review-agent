@@ -1,6 +1,6 @@
 {
   "name": "ratan-sonarqube-api",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "type": "module",
   "author": "Shuai,Lu(shuai.lu@sc.com)",
   "exports": {
@@ -21,7 +21,7 @@
     "clear": "rimraf node_modules"
   },
   "dependencies": {
-    "ratan-logger": "0.1.0",
+    "ratan-logger": "workspace:0.1.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

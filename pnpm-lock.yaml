@@ -21,13 +21,13 @@ importers:
         specifier: ^2.0.10
         version: 2.0.10(hono@4.12.31)
       agent-config-manager:
-        specifier: workspace:0.1.0
+        specifier: workspace:0.1.1
         version: link:../../packages/agent-config-manager
       azure-devops-node-api:
         specifier: ^15.1.2
         version: 15.1.2
       finding-store:
-        specifier: workspace:0.2.0
+        specifier: workspace:0.2.1
         version: link:../../packages/finding-store
       hono:
         specifier: ^4.0.0
@@ -42,10 +42,10 @@ importers:
         specifier: workspace:0.0.4
         version: link:../../packages/ratan-ado-api
       ratan-logger:
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: workspace:0.1.1
+        version: link:../../packages/ratan-logger
       ratan-sonarqube-api:
-        specifier: workspace:0.0.4
+        specifier: workspace:0.0.5
         version: link:../../packages/ratan-sonarqube-api
       redact-pii:
         specifier: ^3.4.0
@@ -97,7 +97,7 @@ importers:
         specifier: workspace:0.0.4
         version: link:../ratan-ado-api
       ratan-sonarqube-api:
-        specifier: workspace:0.0.4
+        specifier: workspace:0.0.5
         version: link:../ratan-sonarqube-api
       zod:
         specifier: ^4.1.12
@@ -203,8 +203,8 @@ importers:
   packages/ratan-sonarqube-api:
     dependencies:
       ratan-logger:
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: workspace:0.1.1
+        version: link:../ratan-logger
       zod:
         specifier: ^4.4.3
         version: 4.4.3
